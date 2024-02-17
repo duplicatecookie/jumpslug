@@ -1,7 +1,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography.X509Certificates;
 using RWCustom;
 using UnityEngine;
 
@@ -24,14 +23,16 @@ class Pathfinder
             connections = new();
         }
     }
-
-    public enum NodeType
+    // stupid hack because C# doesn't have tagged unions
+    public record NodeType
     {
-        Air,
-        Floor,
-        Slope,
-        Corridor,
-        ShortcutEntrance,
+        public record Air() : NodeType();
+        public record Floor() : NodeType();
+        public record Slope() : NodeType();
+        public record Corridor() : NodeType();
+        public record ShortcutEntrance(int Index) : NodeType();
+
+        private NodeType() { }
     }
 
     public class NodeConnection
@@ -168,7 +169,7 @@ class Pathfinder
                 {
                     if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid)
                     {
-                        graph[x, y] = new Node(NodeType.Corridor, x, y)
+                        graph[x, y] = new Node(new NodeType.Corridor(), x, y)
                         {
                             hasPlatform = true,
                         };
@@ -189,7 +190,7 @@ class Pathfinder
                             && room.Tiles[x + 1, y - 1].Terrain == Room.Tile.TerrainType.Air
                             && room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Air))
                     {
-                        graph[x, y] = new Node(NodeType.Corridor, x, y);
+                        graph[x, y] = new Node(new NodeType.Corridor(), x, y);
                     }
                     else if (
                         room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Solid
@@ -200,7 +201,7 @@ class Pathfinder
                         && room.Tiles[x - 1, y - 1].Terrain == Room.Tile.TerrainType.Solid
                         && room.Tiles[x + 1, y - 1].Terrain == Room.Tile.TerrainType.Solid)
                     {
-                        graph[x, y] = new Node(NodeType.Floor, x, y);
+                        graph[x, y] = new Node(new NodeType.Floor(), x, y);
                     }
                 }
                 else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope
@@ -208,18 +209,22 @@ class Pathfinder
                     && !(room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
                         && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid))
                 {
-                    graph[x, y] = new Node(NodeType.Slope, x, y);
+                    graph[x, y] = new Node(new NodeType.Slope(), x, y);
                 }
                 else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.ShortcutEntrance)
                 {
-                    graph[x, y] = new Node(NodeType.ShortcutEntrance, x, y);
+                    int index = Array.IndexOf(room.shortcutsIndex, new IntVector2(x, y));
+                    if (index > -1 && room.shortcuts[index].shortCutType == ShortcutData.Type.Normal)
+                    {
+                        graph[x, y] = new Node(new NodeType.ShortcutEntrance(index), x, y);
+                    }
                 }
 
                 if (room.Tiles[x, y].AnyBeam)
                 {
                     if (graph[x, y] is null)
                     {
-                        graph[x, y] = new Node(NodeType.Air, x, y);
+                        graph[x, y] = new Node(new NodeType.Air(), x, y);
                     }
                     graph[x, y].hasBeam = true;
                 }
@@ -233,21 +238,16 @@ class Pathfinder
                 {
                     continue;
                 }
-                if (graph[x, y].type == NodeType.Floor)
+                if (graph[x, y].type is NodeType.Floor)
                 {
                     if (x + 1 < width)
                     {
-                        if (graph[x + 1, y]?.type == NodeType.Floor
-                            || graph[x + 1, y]?.type == NodeType.Slope
-                            || graph[x + 1, y]?.type == NodeType.Corridor)
+                        if (graph[x + 1, y]?.type is NodeType.Floor or NodeType.Slope or NodeType.Corridor)
                         {
                             graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
                             graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                         }
-                        if (
-                            y - 1 > 0
-                            && graph[x + 1, y - 1]?.type == NodeType.Slope
-                            || graph[x + 1, y - 1]?.type == NodeType.Corridor)
+                        if (y - 1 > 0 && graph[x + 1, y - 1]?.type is NodeType.Slope or NodeType.Corridor)
                         {
                             graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y - 1]));
                             graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
@@ -255,19 +255,19 @@ class Pathfinder
                     }
                 }
 
-                if (graph[x, y].type == NodeType.Slope && x + 1 < width)
+                if (graph[x, y].type is NodeType.Slope && x + 1 < width)
                 {
-                    if (graph[x + 1, y]?.type == NodeType.Floor || graph[x + 1, y]?.type == NodeType.Slope)
+                    if (graph[x + 1, y]?.type is NodeType.Floor or NodeType.Slope)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
                         graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                     }
-                    else if (y - 1 > 0 && graph[x + 1, y - 1]?.type == NodeType.Slope)
+                    else if (y - 1 > 0 && graph[x + 1, y - 1]?.type is NodeType.Slope)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y - 1]));
                         graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                     }
-                    else if (y + 1 < height && graph[x + 1, y + 1]?.type == NodeType.Slope || graph[x + 1, y + 1]?.type == NodeType.Floor)
+                    else if (y + 1 < height && graph[x + 1, y + 1]?.type is NodeType.Slope or NodeType.Floor)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1]));
                         graph[x + 1, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
@@ -275,38 +275,55 @@ class Pathfinder
                 }
 
                 // TODO: climbing is slower than walking, the connection weights should be adjusted accordingly
-                if (room.Tiles[x, y].horizontalBeam
-                    && x + 1 < width && room.Tiles[x + 1, y].horizontalBeam)
+                if (room.Tiles[x, y].horizontalBeam && x + 1 < width && room.Tiles[x + 1, y].horizontalBeam)
                 {
                     graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
                     graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                 }
-                if (room.Tiles[x, y].verticalBeam
-                    && y + 1 < height && room.Tiles[x, y + 1].verticalBeam)
+                if (room.Tiles[x, y].verticalBeam && y + 1 < height && room.Tiles[x, y + 1].verticalBeam)
                 {
                     graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y + 1]));
                     graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                 }
                 // TODO: weights, again
-                if (graph[x, y].type == NodeType.Corridor)
+                if (graph[x, y].type is NodeType.Corridor)
                 {
                     if (x + 1 < width)
                     {
-                        if (graph[x + 1, y]?.type == NodeType.Corridor
-                            || graph[x + 1, y]?.type == NodeType.Floor)
+                        if (graph[x + 1, y]?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance)
                         {
                             graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
                             graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                         }
-                        if (y + 1 < height && graph[x + 1, y + 1]?.type == NodeType.Floor)
+                        if (y + 1 < height && graph[x + 1, y + 1]?.type is NodeType.Floor)
                         {
                             graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1]));
                             graph[x + 1, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                         }
                     }
-                    if (y + 1 < height
-                        && graph[x, y + 1]?.type == NodeType.Corridor
-                        || graph[x, y + 1]?.type == NodeType.Floor)
+                    if (y + 1 < height && graph[x, y + 1]?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance)
+                    {
+                        graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y + 1]));
+                        graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                    }
+                }
+                if (graph[x, y].type is NodeType.ShortcutEntrance)
+                {
+                    var entrance = graph[x, y].type as NodeType.ShortcutEntrance;
+                    var shortcutData = room.shortcuts[entrance.Index];
+                    var destNode = graph[shortcutData.destinationCoord.x, shortcutData.destinationCoord.y];
+                    if (destNode is null || destNode.type is not NodeType.ShortcutEntrance)
+                    {
+                        Plugin.Logger.LogError($"Shortcut entrance has no valid exit, pos: ({x}, {y}), index: {entrance.Index}");
+                        return;
+                    }
+                    graph[x, y].connections.Add(new NodeConnection(ConnectionType.Shortcut, destNode, shortcutData.length));
+                    if (x + 1 < width && graph[x + 1, y]?.type is NodeType.Corridor)
+                    {
+                        graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
+                        graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                    }
+                    if (y + 1 < height && graph[x, y + 1]?.type is NodeType.Corridor)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y + 1]));
                         graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
