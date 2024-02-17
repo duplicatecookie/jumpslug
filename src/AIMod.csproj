@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    
+    <PropertyGroup>
+        <TargetFramework>net48</TargetFramework>
+        <LangVersion>11</LangVersion>
+        <DebugSymbols>true</DebugSymbols>
+        <DebugType>full</DebugType>
+    </PropertyGroup>
+    
+    <ItemGroup>
+        <Reference Include="../lib/*.dll">
+            <Private>false</Private>
+        </Reference>
+    </ItemGroup>
+    
+    <Target Name="GenerateMod" AfterTargets="PostBuildEvent">
+		<ItemGroup>
+			<RemovePlugins Include="../aimod/plugins/*.dll" />
+            <RemovePlugins Include="../aimod/plugins/*.pdb" />
+		</ItemGroup>
+		<ItemGroup>
+			<CopyPlugins Include="$(TargetPath)" />
+            <CopyPlugins Include="$(TargetPath)/../AIMod.pdb" />
+		</ItemGroup>
+		
+        <Delete Files="@(RemovePlugins)" />
+        <Copy SourceFiles="@(CopyPlugins)" DestinationFolder="../aimod/plugins/" />
+    </Target>
+    
+</Project>
