@@ -8,6 +8,29 @@ namespace AIMod;
 
 class Pathfinder
 {
+    public class PathNode
+    {
+        public IntVector2 gridPos;
+        public PathConnection invertedConnection;
+        public float pathCost;
+        public float heuristic;
+        public PathNode(IntVector2 gridPos, IntVector2 goalPos, float cost)
+        {
+            this.gridPos = gridPos;
+            pathCost = cost;
+            heuristic = Mathf.Sqrt((gridPos.x - goalPos.x) * (gridPos.x - goalPos.x) + (gridPos.y - goalPos.y) * (gridPos.y - goalPos.y));
+        }
+    }
+    public class PathConnection
+    {
+        public ConnectionType type;
+        public PathNode previous;
+        public PathConnection(ConnectionType type, PathNode previous)
+        {
+            this.type = type;
+            this.previous = previous;
+        }
+    }
     public class Node
     {
         public NodeType type;
@@ -23,7 +46,6 @@ class Pathfinder
             connections = new();
         }
     }
-    // stupid hack because C# doesn't have tagged unions
     public record NodeType
     {
         public record Air() : NodeType();
@@ -59,66 +81,127 @@ class Pathfinder
     }
     public Creature creature;
     public WorldCoordinate destination;
-    public List<NodeConnection> path;
+    public List<PathNode> path;
     public JumpTracer jumpTracer;
     public Node[,] graph;
-    private bool justPressed;
-    public bool visualize;
-    private List<DebugSprite> visualizationSprites;
+    private bool justPressedG;
+    private bool justPressedN;
+    private bool justPressedC;
+    private bool justPressedLeft;
+    private bool visualizingNodes;
+    private bool visualizingConnections;
+    private List<DebugSprite> nodeSprites;
+    private List<DebugSprite> connectionSprites;
+    private List<DebugSprite> pathSprites;
     public Pathfinder(Creature creature)
     {
         this.creature = creature;
-        visualizationSprites = new();
+        path = new();
+        nodeSprites = new();
+        connectionSprites = new();
+        pathSprites = new();
     }
 
     public void Update()
     {
-        switch ((Input.GetKey(KeyCode.V), justPressed))
+        switch ((Input.GetKey(KeyCode.G), justPressedG))
         {
             case (true, false):
-                justPressed = true;
-                if (visualize)
+                justPressedG = true;
+                if (graph is null)
                 {
-                    foreach (var sprite in visualizationSprites)
-                    {
-                        sprite.Destroy();
-                    }
-                    visualizationSprites.Clear();
-                    visualize = false;
-                    graph = null;
+                    NewRoom();
                 }
                 else
                 {
-                    NewRoom();
-                    Visualize();
-                    visualize = true;
+                    graph = null;
                 }
                 break;
             case (false, true):
-                justPressed = false;
+                justPressedG = false;
                 break;
             default:
                 break;
         }
+        switch ((Input.GetKey(KeyCode.N), justPressedN))
+        {
+            case (true, false):
+                justPressedN = true;
+                if (visualizingNodes)
+                {
+                    foreach (var sprite in nodeSprites)
+                    {
+                        sprite.Destroy();
+                    }
+                    nodeSprites.Clear();
+                    visualizingNodes = false;
+                }
+                else
+                {
+                    VisualizeNodes();
+                    visualizingNodes = true;
+                }
+                break;
+            case (false, true):
+                justPressedN = false;
+                break;
+            default:
+                break;
+        }
+        switch ((Input.GetKey(KeyCode.C), justPressedC))
+        {
+            case (true, false):
+                justPressedC = true;
+                if (visualizingConnections)
+                {
+                    foreach (var sprite in connectionSprites)
+                    {
+                        sprite.Destroy();
+                    }
+                    connectionSprites.Clear();
+                    visualizingConnections = false;
+                }
+                else
+                {
+                    VisualizeConnections();
+                    visualizingConnections = true;
+                }
+                break;
+            case (false, true):
+                justPressedC = false;
+                break;
+            default:
+                break;
+        }
+        switch ((Input.GetMouseButton(0), justPressedLeft))
+        {
+            case (true, false):
+                justPressedLeft = true;
+                FindPath();
+                foreach (var sprite in pathSprites)
+                {
+                    sprite.Destroy();
+                }
+                pathSprites.Clear();
+                VisualizePath();
+                break;
+            case (false, true):
+                justPressedLeft = false;
+                break;
+            default:
+                break;
+        }
+        var mousePos = (Vector2)Input.mousePosition + creature.room.game.cameras[0].pos;
+        destination = creature.room.ToWorldCoordinate(mousePos);
     }
 
-    private void Visualize()
+    private void VisualizeNodes()
     {
         foreach (var node in graph)
         {
             if (node is null)
             {
                 continue;
-            }
-
-            var start = creature.room.MiddleOfTile(node.gridPos);
-            foreach (var connection in node.connections)
-            {
-                var end = creature.room.MiddleOfTile(connection.next.gridPos);
-                var mesh = Visualizer.MakeLine(start, end);
-                var line = new DebugSprite(start, mesh, creature.room);
-                creature.room.AddObject(line);
-                visualizationSprites.Add(line);
             }
 
             var color = node.type switch
@@ -139,7 +222,41 @@ class Pathfinder
             };
             var sprite = new DebugSprite(pos, fs, creature.room);
             creature.room.AddObject(sprite);
-            visualizationSprites.Add(sprite);
+            nodeSprites.Add(sprite);
+        }
+    }
+
+    private void VisualizeConnections()
+    {
+        foreach (var node in graph)
+        {
+            if (node is null)
+            {
+                continue;
+            }
+
+            var start = creature.room.MiddleOfTile(node.gridPos);
+            foreach (var connection in node.connections)
+            {
+                var end = creature.room.MiddleOfTile(connection.next.gridPos);
+                var mesh = Visualizer.MakeLine(start, end);
+                var line = new DebugSprite(start, mesh, creature.room);
+                creature.room.AddObject(line);
+                connectionSprites.Add(line);
+            }
+        }
+    }
+
+    private void VisualizePath()
+    {
+        foreach (var node in path)
+        {
+            var start = creature.room.MiddleOfTile(node.gridPos);
+            var end = creature.room.MiddleOfTile(node.invertedConnection.previous.gridPos);
+            var mesh = Visualizer.MakeLine(start, end);
+            var line = new DebugSprite(start, mesh, creature.room);
+            creature.room.AddObject(line);
+            pathSprites.Add(line);
         }
     }
 
@@ -249,8 +366,9 @@ class Pathfinder
                         }
                         if (y - 1 > 0 && graph[x + 1, y - 1]?.type is NodeType.Slope or NodeType.Corridor)
                         {
-                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y - 1]));
-                            graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                            // these need to have higher weights than normal movement so the pathfinding algorithm doesn't prefer them
+                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y - 1], 2));
+                            graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y], 2));
                         }
                     }
                 }
@@ -297,8 +415,9 @@ class Pathfinder
                         }
                         if (y + 1 < height && graph[x + 1, y + 1]?.type is NodeType.Floor)
                         {
-                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1]));
-                            graph[x + 1, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                            // these need to have higher weights than normal movement so the pathfinding algorithm doesn't prefer them
+                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1], 2));
+                            graph[x + 1, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y], 2));
                         }
                     }
                     if (y + 1 < height && graph[x, y + 1]?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance)
@@ -335,8 +454,97 @@ class Pathfinder
 
     public void FindPath()
     {
+        // TODO: optimize this entire function, it's probably really inefficient
+        var startPos = creature.room.GetTilePosition(creature.mainBodyChunk.pos);
+        if (graph[startPos.x, startPos.y] is null)
+        {
+            Plugin.Logger.LogDebug($"no node at start ({startPos.x}, {startPos.y})");
+            return;
+        }
         path.Clear();
-        // do thing
+        var goalPos = new IntVector2(destination.x, destination.y);
+        if (graph[goalPos.x, goalPos.y] is null)
+        {
+            Plugin.Logger.LogDebug($"no node at destination ({goalPos.x}, {goalPos.y})");
+            return;
+        }
+        var openNodes = new List<PathNode>()
+        {
+            new(startPos, goalPos, 0),
+        };
+        var closedNodes = new List<PathNode>();
+        while (openNodes.Count > 0)
+        {
+            var currentF = float.MaxValue;
+            PathNode currentNode = null;
+            int currentIndex = 0;
+            for (int i = 0; i < openNodes.Count; i++)
+            {
+                if (openNodes[i].pathCost + openNodes[i].heuristic < currentF)
+                {
+                    currentNode = openNodes[i];
+                    currentIndex = i;
+                    currentF = openNodes[i].pathCost + openNodes[i].heuristic;
+                }
+            }
+
+            // might be redundant
+            if (currentNode is null)
+            {
+                Plugin.Logger.LogError($"current node was null");
+                return;
+            }
+
+            if (currentNode.gridPos == goalPos)
+            {
+                while (currentNode.gridPos != startPos)
+                {
+                    path.Add(currentNode);
+                    if (currentNode.invertedConnection.previous is null)
+                    {
+                        break;
+                    }
+                    currentNode = currentNode.invertedConnection.previous;
+                }
+                return;
+            }
+
+            openNodes.RemoveAt(currentIndex);
+            closedNodes.Add(currentNode);
+            foreach (var connection in graph[currentNode.gridPos.x, currentNode.gridPos.y].connections)
+            {
+                PathNode currentNeighbour = null;
+                foreach (var node in openNodes)
+                {
+                    if (connection.next.gridPos == node.gridPos)
+                    {
+                        currentNeighbour = node;
+                    }
+                }
+
+                if (currentNeighbour is null)
+                {
+                    foreach (var node in closedNodes)
+                    {
+                        if (connection.next.gridPos == node.gridPos)
+                        {
+                            goto next_connection;
+                        }
+                    }
+                    var newNode = new PathNode(connection.next.gridPos, goalPos, currentNode.pathCost + connection.weight)
+                    {
+                        invertedConnection = new PathConnection(connection.type, currentNode),
+                    };
+                    openNodes.Add(newNode);
+                }
+                else if (currentNode.pathCost + connection.weight < currentNeighbour.invertedConnection.previous.pathCost)
+                {
+                    currentNeighbour.pathCost = currentNode.pathCost + connection.weight;
+                    currentNeighbour.invertedConnection = new PathConnection(connection.type, currentNode);
+                }
+            next_connection:;
+            }
+        }
     }
 }
 
