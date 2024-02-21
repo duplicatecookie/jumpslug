@@ -347,6 +347,7 @@ class Pathfinder
                 }
             }
         }
+
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
@@ -371,6 +372,10 @@ class Pathfinder
                             graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y], 2));
                         }
                     }
+                    if (y - 1 > 0 && room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Floor)
+                    {
+                        TraceDrop(x,y);
+                    }
                 }
 
                 if (graph[x, y].type is NodeType.Slope && x + 1 < width)
@@ -393,15 +398,23 @@ class Pathfinder
                 }
 
                 // TODO: climbing is slower than walking, the connection weights should be adjusted accordingly
-                if (room.Tiles[x, y].horizontalBeam && x + 1 < width && room.Tiles[x + 1, y].horizontalBeam)
+                if (room.Tiles[x, y].horizontalBeam)
                 {
-                    graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
-                    graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                    if (x + 1 < width && room.Tiles[x + 1, y].horizontalBeam)
+                    {
+                        graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
+                        graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                    }
+                    TraceDrop(x, y);
                 }
-                if (room.Tiles[x, y].verticalBeam && y + 1 < height && room.Tiles[x, y + 1].verticalBeam)
+                if (room.Tiles[x, y].verticalBeam)
                 {
-                    graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y + 1]));
-                    graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                    if (y + 1 < height && room.Tiles[x, y + 1].verticalBeam)
+                    {
+                        graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y + 1]));
+                        graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                    }
+                    TraceDrop(x, y);
                 }
                 // TODO: weights, again
                 if (graph[x, y].type is NodeType.Corridor)
@@ -424,6 +437,10 @@ class Pathfinder
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y + 1]));
                         graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                    }
+                    if (y - 1 > 0 && graph[x, y - 1]?.type is not NodeType.Corridor)
+                    {
+                        TraceDrop(x, y);
                     }
                 }
                 if (graph[x, y].type is NodeType.ShortcutEntrance)
@@ -448,6 +465,25 @@ class Pathfinder
                         graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                     }
                 }
+            }
+        }
+    }
+
+    private void TraceDrop(int x, int y)
+    {
+        for (int i = y - 1; i >= 0; i--)
+        {
+
+            if (graph[x, i] is not null)
+            {
+                // t = sqrt(2 * d / g)
+                // weight might have inaccurate units
+                graph[x, y].connections.Add(new NodeConnection(ConnectionType.Drop, graph[x, i], Mathf.Sqrt(2 * 20 * (y - i) / creature.room.gravity)));
+            }
+            if (creature.room.Tiles[x, i].Terrain == Room.Tile.TerrainType.Solid
+                || creature.room.Tiles[x, i].Terrain == Room.Tile.TerrainType.Slope)
+            {
+                break;
             }
         }
     }
