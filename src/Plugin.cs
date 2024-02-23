@@ -22,8 +22,8 @@ partial class Plugin : BaseUnityPlugin
 
         On.StaticWorld.InitCustomTemplates += InitCustomTemplates;
 
-        VisualizerHooks.RegisterHooks();
-        //JumpTracerHooks.RegisterHooks();
+        //VisualizerHooks.RegisterHooks();
+        JumpTracerHooks.RegisterHooks();
         PathfinderHooks.RegisterHooks();
     }
 

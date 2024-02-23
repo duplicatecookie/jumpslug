@@ -1,7 +1,4 @@
-using System;
 using System.Collections.Generic;
-using System.Drawing.Drawing2D;
-using System.Runtime.CompilerServices;
 using RWCustom;
 using UnityEngine;
 
@@ -9,10 +6,6 @@ namespace AIMod;
 
 class JumpTracer
 {
-    // y distance from stating poing to max height
-    const float jumpHeight = 1.5f;
-    // x distance from starting point where height is max
-    const float jumpWidth = 3f;
     private IntVector2 lastStart;
     private int lastDirection;
     private DebugSprite sprite;
@@ -31,26 +24,72 @@ class JumpTracer
 
     public void Update()
     {
-        var start = player.room.GetTilePosition(player.bodyChunks[1].pos);
-        int xDirection = player.flipDirection;
-        if (start == lastStart && xDirection == lastDirection)
+        var start = player.room.GetTilePosition(player.bodyChunks[0].pos);
+        if (start == lastStart && player.flipDirection == lastDirection)
         {
             return;
         }
         lastStart = start;
-        lastDirection = xDirection;
-        CullUpdate();
-
-        int x_offset = xDirection < 0 ? 0 : 1;
+        lastDirection = player.flipDirection;
+        int x_offset = (player.flipDirection + 1) / 2;
         if (player.room is null)
         {
             return;
         }
         var tiles = player.room.Tiles;
+
+        var pathOffset = player.room.MiddleOfTile(start);
+        float JumpBoost(float boost)
+        {
+            float t = Mathf.Ceil(boost / 1.5f);
+            float result = 0.3f * ((boost - 0.5f) * t - 0.75f * t * t);
+            float forResult = 0f;
+            for (float x = boost; x > 0; x--)
+            {
+                forResult += 0.3f * (boost + 1 - 1.5f * x);
+            }
+            return result;
+        }
+        Vector2 v0;
+        if (player.room.GetTile(start).verticalBeam)
+        {
+            if (player.isRivulet)
+            {
+                v0 = new Vector2(9f * player.flipDirection, 9f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
+            }
+            else if (player.isSlugpup)
+            {
+                v0 = new Vector2(5f * player.flipDirection, 7f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
+            }
+            else
+            {
+                v0 = new Vector2(6f * player.flipDirection, 8f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
+            }
+        }
+        else if (tiles[start.x, start.y - 1].horizontalBeam
+            || player.GetCWT().pathfinder.graph?[start.x, start.y - 1]?.type is Pathfinder.NodeType.Floor)
+        {
+            v0 = new Vector2(
+                4.2f * player.flipDirection * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
+                (player.isRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, player.Adrenaline) + JumpBoost(player.isSlugpup ? 7 : 8));
+        }
+        else
+        {
+            return;
+        }
+        CullUpdate();
+        float Parabola(float t) => v0.y * t - 0.5f * player.gravity * t * t + pathOffset.y;
+        Vector2 lastPos = pathOffset;
+        for (float t = 0; t < 100; t += 5)
+        {
+            var nextPos = new Vector2(pathOffset.x + v0.x * t, Parabola(t));
+            var sprite = new DebugSprite(lastPos, Visualizer.MakeLine(lastPos, nextPos), player.room);
+            connectionSprites.Add(sprite);
+            player.room.AddObject(sprite);
+            lastPos = nextPos;
+        }
         var currentTile = start;
-        float m = jumpHeight / (jumpWidth * jumpWidth);
-        float Parabola(float x) => -m * (float)Math.Pow(x - xDirection * jumpWidth - start.x - 0.5, 2) + jumpHeight + start.y;
-        while (true)
+        /*while (true)
         {
             if (start.x < 0 || start.y < 0 || start.x >= tiles.GetLength(0) || start.y >= tiles.GetLength(1))
             {
@@ -58,7 +97,7 @@ class JumpTracer
                 break;
             }
             AddConnection(currentTile.x, currentTile.y);
-            float result = Parabola(currentTile.x + x_offset);
+            float result = Parabola(20 * (currentTile.x + x_offset) - pathOffset.x);
             // passes through bottom
             if (result < currentTile.y)
             {
@@ -99,12 +138,12 @@ class JumpTracer
             // passes through side
             else
             {
-                if (currentTile.x + xDirection < 0 || currentTile.x + xDirection >= tiles.GetLength(0))
+                if (currentTile.x + player.flipDirection < 0 || currentTile.x + player.flipDirection >= tiles.GetLength(0))
                 {
                     sprite?.Destroy();
                     break;
                 }
-                if (tiles[currentTile.x + xDirection, currentTile.y].Solid)
+                if (tiles[currentTile.x + player.flipDirection, currentTile.y].Solid)
                 {
                     if (sprite is null || currentTile != player.room.GetTilePosition(sprite.pos))
                     {
@@ -112,9 +151,9 @@ class JumpTracer
                     }
                     break;
                 }
-                currentTile.x += xDirection;
+                currentTile.x += player.flipDirection;
             }
-        }
+        }*/
     }
 
     private void ReplaceSprite(int x, int y)
@@ -135,8 +174,9 @@ class JumpTracer
         var pos = player.room.MiddleOfTile(x, y);
         var fs = new FSprite("pixel")
         {
+            alpha = 0.4f,
             color = Color.white,
-            scale = 5f,
+            scale = 20f,
         };
         var connection = new DebugSprite(pos, fs, player.room);
         connectionSprites.Add(connection);
