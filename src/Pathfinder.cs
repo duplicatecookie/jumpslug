@@ -224,6 +224,7 @@ class Pathfinder
                 NodeType.Slope => Color.green,
                 NodeType.Corridor => Color.blue,
                 NodeType.ShortcutEntrance => Color.cyan,
+                NodeType.Wall => Color.grey,
                 _ => throw new ArgumentOutOfRangeException("unsupported NodeType variant"),
             };
 
@@ -298,7 +299,7 @@ class Pathfinder
                     {
                         v0 = new Vector2(6f * direction, 8f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
                     }
-                    VisualizeJump(v0, startTile, endTile, Color.white);
+                    VisualizeJump(v0, startTile, endTile);
                 }
                 else if (graphNode.horizontalBeam || graphNode.type is NodeType.Floor)
                 {
@@ -306,9 +307,13 @@ class Pathfinder
                     var v0 = new Vector2(
                         4.2f * direction * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
                         (player.isRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, player.Adrenaline) + JumpBoost(player.isSlugpup ? 7 : 8));
-                    VisualizeJump(v0, headPos, endTile, Color.white);
+                    VisualizeJump(v0, headPos, endTile);
+                    var preLine = Visualizer.MakeLine(start, player.room.MiddleOfTile(headPos), Color.white);
+                    var preSprite = new DebugSprite(start, preLine, player.room);
+                    pathSprites.Add(preSprite);
+                    player.room.AddObject(preSprite);
                 }
-                
+
             }
             else if (node.invertedConnection.type is ConnectionType.WalkOffEdge or ConnectionType.WalkOffEdgePullUp)
             {
@@ -316,7 +321,11 @@ class Pathfinder
                 var v0 = new Vector2(
                     4.2f * direction * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
                     0);
-                VisualizeJump(v0, headPos, endTile, Color.white);
+                VisualizeJump(v0, headPos, endTile);
+                var preLine = Visualizer.MakeLine(start, player.room.MiddleOfTile(headPos), Color.white);
+                var preSprite = new DebugSprite(start, preLine, player.room);
+                pathSprites.Add(preSprite);
+                player.room.AddObject(preSprite);
             }
             var mesh = Visualizer.MakeLine(start, end, color);
             var sprite = new DebugSprite(start, mesh, player.room);
@@ -325,12 +334,12 @@ class Pathfinder
         }
     }
 
-    private void VisualizeJump(Vector2 v0, IntVector2 startTile, IntVector2 endTile, Color color)
+    private void VisualizeJump(Vector2 v0, IntVector2 startTile, IntVector2 endTile)
     {
         Vector2 pathOffset = player.room.MiddleOfTile(startTile);
         Vector2 lastPos = pathOffset;
-        float maxT = 20 * Mathf.Abs(endTile.x - startTile.x) / v0.x;
-        for (float t = 0; t < maxT; t += 5)
+        float maxT = 20 * (endTile.x - startTile.x) / v0.x;
+        for (float t = 0; t < maxT; t += 2f)
         {
             var nextPos = new Vector2(pathOffset.x + v0.x * t, Parabola(pathOffset.y, v0, t));
             var sprite = new DebugSprite(lastPos, Visualizer.MakeLine(lastPos, nextPos, Color.white), player.room);
@@ -338,9 +347,10 @@ class Pathfinder
             player.room.AddObject(sprite);
             lastPos = nextPos;
         }
-        var finalSprite = new DebugSprite(lastPos, Visualizer.MakeLine(lastPos, player.room.MiddleOfTile(endTile), color), player.room);
-        pathSprites.Add(finalSprite);
-        player.room.AddObject(finalSprite);
+        var postLine = Visualizer.MakeLine(lastPos, player.room.MiddleOfTile(endTile), Color.white);
+        var postSprite = new DebugSprite(lastPos, postLine, player.room);
+        pathSprites.Add(postSprite);
+        player.room.AddObject(postSprite);
     }
 
     public void NewRoom()
@@ -566,18 +576,22 @@ class Pathfinder
 
     private void TraceDrop(int x, int y)
     {
-        for (int i = y - 1; i >= 0; i--)
+        for (int i = y - 2; i >= 0; i--)
         {
-            if (graph[x, i] is not null)
+            if (graph[x, i] is null)
+            {
+                continue;
+            }
+            if (graph[x, i].type is NodeType.Floor or NodeType.Slope)
             {
                 // t = sqrt(2 * d / g)
                 // weight might have inaccurate units
                 graph[x, y].connections.Add(new NodeConnection(ConnectionType.Drop, graph[x, i], Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity)));
-            }
-            if (player.room.Tiles[x, i].Terrain == Room.Tile.TerrainType.Solid
-                || player.room.Tiles[x, i].Terrain == Room.Tile.TerrainType.Slope)
-            {
                 break;
+            }
+            else if (graph[x, i].horizontalBeam)
+            {
+                graph[x, y].connections.Add(new NodeConnection(ConnectionType.Drop, graph[x, i], Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity)));
             }
         }
     }
@@ -585,7 +599,7 @@ class Pathfinder
     private float Parabola(float yOffset, Vector2 v0, float t) => v0.y * t - 0.5f * player.gravity * t * t + yOffset;
 
     // start refers to the head position
-    public void TraceJump(Node startNode, IntVector2 start, Vector2 v0)
+    private void TraceJump(Node startNode, IntVector2 start, Vector2 v0)
     {
         var x = start.x;
         var y = start.y;
@@ -606,20 +620,16 @@ class Pathfinder
 
         while (true)
         {
-            float result = Parabola(pathOffset.y, v0, (20 * (x + xOffset) - pathOffset.x) / v0.x);
-            if (result / 20 > y + 1)
+            float result = Parabola(pathOffset.y, v0, (20 * (x + xOffset) - pathOffset.x) / v0.x) / 20;
+            if (result > y + 1)
             {
-                if (player.room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Solid)
-                {
-                    break;
-                }
                 y++;
             }
-            else if (result / 20 < y)
+            else if (result < y)
             {
                 if (y - 2 < 0)
                 {
-                    return;
+                    break;
                 }
                 if (graph[x, y - 1]?.type is NodeType.Floor or NodeType.Slope)
                 {
@@ -637,9 +647,11 @@ class Pathfinder
                 x += direction;
             }
 
-            if (x < 0 || y < 0 || x >= width || y >= height)
+            if (x < 0 || y < 0 || x >= width || y >= height
+                || player.room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid
+                || player.room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope)
             {
-                return;
+                break;
             }
 
             if (graph[x, y] is null || graph[x, y].type is NodeType.Corridor)
@@ -665,7 +677,16 @@ class Pathfinder
                 var type = v0.y == 0 ? ConnectionType.WalkOffEdgePullUp : ConnectionType.JumpPullUp;
                 startNode.dynamicConnections.Add(new NodeConnection(type, graph[x + direction, y]));
             }
-            else if (graph[x, y].verticalBeam || graph[x, y].horizontalBeam)
+            else if (graph[x, y].verticalBeam)
+            {
+                float poleResult = Parabola(pathOffset.y, v0, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
+                if (poleResult > y && poleResult < y + 1)
+                {
+                    var type = v0.y == 0 ? ConnectionType.WalkOffEdge : ConnectionType.Jump;
+                    startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y]));
+                }
+            }
+            else if (graph[x, y].horizontalBeam)
             {
                 var type = v0.y == 0 ? ConnectionType.WalkOffEdge : ConnectionType.Jump;
                 startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y]));
@@ -748,7 +769,21 @@ class Pathfinder
             var graphNode = graph[currentPos.x, currentPos.y];
             graphNode.dynamicConnections.Clear();
 
-            if (graphNode.verticalBeam && !graphNode.horizontalBeam)
+            bool goLeft = true;
+            bool goRight = true;
+            if (graphNode.type is NodeType.Wall wall)
+            {
+                if (wall.Direction == -1)
+                {
+                    goLeft = false;
+                }
+                else
+                {
+                    goRight = false;
+                }
+            }
+
+            if (graphNode.verticalBeam && !graphNode.horizontalBeam && graphNode.type is not NodeType.Corridor)
             {
                 Vector2 v0;
                 if (player.isRivulet)
@@ -763,9 +798,15 @@ class Pathfinder
                 {
                     v0 = new Vector2(6f, 8f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
                 }
-                TraceJump(graphNode, currentPos, v0);
-                v0.x = -v0.x;
-                TraceJump(graphNode, currentPos, v0);
+                if (goRight)
+                {
+                    TraceJump(graphNode, currentPos, v0);
+                }
+                if (goLeft)
+                {
+                    v0.x = -v0.x;
+                    TraceJump(graphNode, currentPos, v0);
+                }
                 if (!graphNode.dynamicConnections.Any(c => c.type == ConnectionType.Drop))
                 {
                     TraceDrop(currentPos.x, currentPos.y);
@@ -777,9 +818,16 @@ class Pathfinder
                 var v0 = new Vector2(
                     4.2f * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
                     (player.isRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, player.Adrenaline) + JumpBoost(player.isSlugpup ? 7 : 8));
-                TraceJump(graphNode, headPos, v0);
-                v0.x = -v0.x;
-                TraceJump(graphNode, headPos, v0);
+                if (goRight)
+                {
+                    TraceJump(graphNode, headPos, v0);
+                }
+                if (goLeft)
+                {
+                    v0.x = -v0.x;
+                    TraceJump(graphNode, headPos, v0);
+                }
+
                 if (!graphNode.dynamicConnections.Any(c => c.type == ConnectionType.Drop))
                 {
                     TraceDrop(currentPos.x, currentPos.y);
@@ -791,21 +839,26 @@ class Pathfinder
                 var v0 = new Vector2(
                     4.2f * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
                     (player.isRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, player.Adrenaline) + JumpBoost(player.isSlugpup ? 7 : 8));
-                TraceJump(graphNode, headPos, v0);
-                v0.x = -v0.x;
-                TraceJump(graphNode, headPos, v0);
-                if (currentPos.x - 1 > 0 && graph[currentPos.x - 1, currentPos.y - 1]?.type is NodeType.Wall)
+                if (goRight)
                 {
-                    v0.y = 0f;
-                    v0.x = -Mathf.Abs(v0.x);
                     TraceJump(graphNode, headPos, v0);
+                    if (headPos.x + 1 < graph.GetLength(0) && graph[currentPos.x + 1, currentPos.y - 1]?.type is NodeType.Wall)
+                    {
+                        v0.y = 0f;
+                        TraceJump(graphNode, headPos, v0);
+                    }
                 }
-                else if (headPos.x + 1 < graph.GetLength(0) && graph[currentPos.x + 1, currentPos.y - 1]?.type is NodeType.Wall)
+                if (goLeft)
                 {
-                    v0.y = 0f;
-                    v0.x = Mathf.Abs(v0.x);
+                    v0.x = -v0.x;
                     TraceJump(graphNode, headPos, v0);
+                    if (currentPos.x - 1 > 0 && graph[currentPos.x - 1, currentPos.y - 1]?.type is NodeType.Wall)
+                    {
+                        v0.y = 0f;
+                        TraceJump(graphNode, headPos, v0);
+                    }
                 }
+
             }
 
             void CheckConnection(NodeConnection connection)
