@@ -783,7 +783,8 @@ class Pathfinder
                 }
             }
 
-            if (graphNode.verticalBeam && !graphNode.horizontalBeam && graphNode.type is not NodeType.Corridor)
+            if (graphNode.verticalBeam && !graphNode.horizontalBeam
+                && graphNode.type is not NodeType.Corridor or NodeType.Floor)
             {
                 Vector2 v0;
                 if (player.isRivulet)
