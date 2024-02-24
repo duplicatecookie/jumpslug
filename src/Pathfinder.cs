@@ -576,7 +576,7 @@ class Pathfinder
 
     private void TraceDrop(int x, int y)
     {
-        for (int i = y - 2; i >= 0; i--)
+        for (int i = y - 1; i >= 0; i--)
         {
             if (graph[x, i] is null)
             {
@@ -654,9 +654,13 @@ class Pathfinder
                 break;
             }
 
-            if (graph[x, y] is null || graph[x, y].type is NodeType.Corridor)
+            if (graph[x, y] is null)
             {
                 continue;
+            }
+            if (graph[x, y].type is NodeType.Corridor)
+            {
+                break;
             }
             if (graph[x, y].type is NodeType.Wall wall && wall.Direction == direction)
             {
@@ -784,7 +788,8 @@ class Pathfinder
             }
 
             if (graphNode.verticalBeam && !graphNode.horizontalBeam
-                && graphNode.type is not NodeType.Corridor or NodeType.Floor)
+                && graphNode.type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)
+                && graph[currentPos.x, currentPos.y - 1]?.type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope))
             {
                 Vector2 v0;
                 if (player.isRivulet)
@@ -813,7 +818,7 @@ class Pathfinder
                     TraceDrop(currentPos.x, currentPos.y);
                 }
             }
-            if (graphNode.horizontalBeam)
+            if (graphNode.horizontalBeam && graphNode.type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope))
             {
                 var headPos = new IntVector2(currentPos.x, currentPos.y + 1);
                 var v0 = new Vector2(
