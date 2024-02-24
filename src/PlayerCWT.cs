@@ -7,7 +7,6 @@ static class PlayerCWT
     public class PlayerExtension
     {
         public Pathfinder pathfinder;
-        public JumpTracer jumpTracer;
         public PlayerExtension()
         {
         }

@@ -176,7 +176,7 @@ class Visualizer
             {
                 var startVec2 = Custom.IntVector2ToVector2(connection.start * 20);
                 var endVec2 = Custom.IntVector2ToVector2(connection.end * 20);
-                var mesh = MakeLine(startVec2, endVec2);
+                var mesh = MakeLine(startVec2, endVec2, Color.white);
                 var debugSprite = new DebugSprite(pathfinder.realizedRoom.MiddleOfTile(startVec2), mesh, pathfinder.realizedRoom);
                 connection.sprite = debugSprite;
                 pathfinder.realizedRoom.AddObject(debugSprite);
@@ -225,16 +225,16 @@ class Visualizer
         }
         return newPath;
     }
-
-    public static TriangleMesh MakeLine(Vector2 start, Vector2 end)
+    public static TriangleMesh MakeLine(Vector2 start, Vector2 end, Color color)
     {
-        var mesh = TriangleMesh.MakeLongMesh(1, false, false);
+        var mesh = TriangleMesh.MakeLongMesh(1, false, true);
         var distVec = end - start;
         mesh.MoveVertice(0, new Vector2(0, 0));
         mesh.MoveVertice(1, new Vector2(0, distVec.magnitude));
         mesh.MoveVertice(2, new Vector2(1, 0));
         mesh.MoveVertice(3, new Vector2(1, distVec.magnitude));
         mesh.rotation = Custom.VecToDeg(distVec);
+        mesh.color = color;
         return mesh;
     }
 }
