@@ -398,16 +398,6 @@ class Pathfinder
                     {
                         graph[x, y] = new Node(new NodeType.Corridor(), x, y);
                     }
-                    else if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
-                        && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid)
-                    {
-                        graph[x, y] = new Node(new NodeType.Wall(1), x, y);
-                    }
-                    else if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
-                        && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air)
-                    {
-                        graph[x, y] = new Node(new NodeType.Wall(-1), x, y);
-                    }
                     else if (
                         room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Solid
                         || room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.ShortcutEntrance
@@ -421,6 +411,16 @@ class Pathfinder
                     else if (room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Floor)
                     {
                         graph[x, y] = new Node(new NodeType.Floor(), x, y);
+                    }
+                    else if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
+                        && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid)
+                    {
+                        graph[x, y] = new Node(new NodeType.Wall(1), x, y);
+                    }
+                    else if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
+                        && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air)
+                    {
+                        graph[x, y] = new Node(new NodeType.Wall(-1), x, y);
                     }
                 }
                 else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope
