@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using IL.MoreSlugcats;
 using RWCustom;
 using UnityEngine;
 
@@ -86,9 +85,7 @@ class Pathfinder
     {
         Standard,
         Jump,
-        JumpPullUp,
         WalkOffEdge,
-        WalkOffEdgePullUp,
         Pounce,
         Shortcut,
         Drop,
@@ -273,15 +270,14 @@ class Pathfinder
             var color = node.invertedConnection.type switch
             {
                 ConnectionType.Jump or ConnectionType.WalkOffEdge => Color.blue,
-                ConnectionType.JumpPullUp or ConnectionType.WalkOffEdgePullUp => Color.cyan,
                 ConnectionType.Pounce => Color.green,
                 ConnectionType.Drop => Color.red,
-                ConnectionType.Shortcut => Color.grey,
+                ConnectionType.Shortcut => Color.cyan,
                 ConnectionType.Standard => Color.white,
                 _ => throw new ArgumentOutOfRangeException(),
             };
             int direction = startTile.x < endTile.x ? 1 : -1;
-            if (node.invertedConnection.type is ConnectionType.Jump or ConnectionType.JumpPullUp)
+            if (node.invertedConnection.type is ConnectionType.Jump)
             {
                 var graphNode = graph[startTile.x, startTile.y];
                 if (graphNode.verticalBeam && !graphNode.horizontalBeam)
@@ -315,7 +311,7 @@ class Pathfinder
                 }
 
             }
-            else if (node.invertedConnection.type is ConnectionType.WalkOffEdge or ConnectionType.WalkOffEdgePullUp)
+            else if (node.invertedConnection.type is ConnectionType.WalkOffEdge)
             {
                 var headPos = new IntVector2(startTile.x, startTile.y + 1);
                 var v0 = new Vector2(
@@ -677,14 +673,6 @@ class Pathfinder
                     TraceDrop(x, y);
                 }
                 break;
-            }
-            else if (graph[x, y].type is not NodeType.Wall
-                && graph[x, y - 1]?.type is NodeType.Wall wall2 && wall2.Direction == direction
-                // I have no idea why this is causing null refs
-                && graph[x + direction, y] is not null)
-            {
-                var type = v0.y == 0 ? ConnectionType.WalkOffEdgePullUp : ConnectionType.JumpPullUp;
-                startNode.dynamicConnections.Add(new NodeConnection(type, graph[x + direction, y], t * 4.2f / 20));
             }
             else if (graph[x, y].verticalBeam)
             {
