@@ -576,6 +576,10 @@ class Pathfinder
 
     private void TraceDrop(int x, int y)
     {
+        if (graph[x,y] is null || graph[x,y].type is NodeType.Floor or NodeType.Slope)
+        {
+            return;
+        }
         for (int i = y - 1; i >= 0; i--)
         {
             if (graph[x, i] is null)
@@ -586,7 +590,7 @@ class Pathfinder
             {
                 // t = sqrt(2 * d / g)
                 // weight might have inaccurate units
-                graph[x, y].connections.Add(new NodeConnection(ConnectionType.Drop, graph[x, i], Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity)));
+                graph[x, y].connections.Add(new NodeConnection(ConnectionType.Drop, graph[x, i], Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity) * 4.2f / 20));
                 break;
             }
             else if (graph[x, i].horizontalBeam)
@@ -620,7 +624,8 @@ class Pathfinder
 
         while (true)
         {
-            float result = Parabola(pathOffset.y, v0, (20 * (x + xOffset) - pathOffset.x) / v0.x) / 20;
+            float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
+            float result = Parabola(pathOffset.y, v0, t) / 20;
             if (result > y + 1)
             {
                 y++;
@@ -634,7 +639,7 @@ class Pathfinder
                 if (graph[x, y - 1]?.type is NodeType.Floor or NodeType.Slope)
                 {
                     var type = v0.y == 0 ? ConnectionType.WalkOffEdge : ConnectionType.Jump;
-                    startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y - 1]));
+                    startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y - 1], t * 20 / 4.2f + 1));
                 }
                 if (player.room.Tiles[x, y - 2].Terrain == Room.Tile.TerrainType.Solid)
                 {
@@ -665,7 +670,7 @@ class Pathfinder
             if (graph[x, y].type is NodeType.Wall wall && wall.Direction == direction)
             {
                 var type = v0.y == 0 ? ConnectionType.WalkOffEdge : ConnectionType.Jump;
-                startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y]));
+                startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y], t * 4.2f / 20));
                 // TODO: wall jump
                 if (!graph[x, y].dynamicConnections.Any(c => c.type == ConnectionType.Drop))
                 {
@@ -675,11 +680,11 @@ class Pathfinder
             }
             else if (graph[x, y].type is not NodeType.Wall
                 && graph[x, y - 1]?.type is NodeType.Wall wall2 && wall2.Direction == direction
-                // I have no idea why this is causling null refs
+                // I have no idea why this is causing null refs
                 && graph[x + direction, y] is not null)
             {
                 var type = v0.y == 0 ? ConnectionType.WalkOffEdgePullUp : ConnectionType.JumpPullUp;
-                startNode.dynamicConnections.Add(new NodeConnection(type, graph[x + direction, y]));
+                startNode.dynamicConnections.Add(new NodeConnection(type, graph[x + direction, y], t * 4.2f / 20));
             }
             else if (graph[x, y].verticalBeam)
             {
@@ -687,13 +692,13 @@ class Pathfinder
                 if (poleResult > y && poleResult < y + 1)
                 {
                     var type = v0.y == 0 ? ConnectionType.WalkOffEdge : ConnectionType.Jump;
-                    startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y]));
+                    startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y], t * 4.2f / 20 + 5));
                 }
             }
             else if (graph[x, y].horizontalBeam)
             {
                 var type = v0.y == 0 ? ConnectionType.WalkOffEdge : ConnectionType.Jump;
-                startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y]));
+                startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y], t * 4.2f / 20 + 10));
             }
         }
     }
@@ -778,6 +783,17 @@ class Pathfinder
             if (graphNode.type is NodeType.Wall wall)
             {
                 if (wall.Direction == -1)
+                {
+                    goLeft = false;
+                }
+                else
+                {
+                    goRight = false;
+                }
+            }
+            if (currentPos.y -1 > 0 && graph[currentPos.x, currentPos.y - 1]?.type is NodeType.Wall footWall)
+            {
+                if (footWall.Direction == -1)
                 {
                     goLeft = false;
                 }
@@ -887,13 +903,13 @@ class Pathfinder
                             return;
                         }
                     }
-                    var newNode = new PathNode(connection.next.gridPos, goalPos, currentNode.pathCost + connection.weight)
+                    currentNeighbour = new PathNode(connection.next.gridPos, goalPos, currentNode.pathCost + connection.weight)
                     {
                         invertedConnection = new PathConnection(connection.type, currentNode),
                     };
-                    openNodes.Add(newNode);
+                    openNodes.Add(currentNeighbour);
                 }
-                else if (currentNode.pathCost + connection.weight < currentNeighbour.invertedConnection.previous.pathCost)
+                if (currentNode.pathCost + connection.weight < currentNeighbour.pathCost)
                 {
                     currentNeighbour.pathCost = currentNode.pathCost + connection.weight;
                     currentNeighbour.invertedConnection = new PathConnection(connection.type, currentNode);
