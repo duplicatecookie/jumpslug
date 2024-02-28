@@ -482,6 +482,10 @@ class Pathfinder
                             graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y - 1], 2));
                             graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y], 2));
                         }
+                        if (y + 1 < width && graph[x + 1, y + 1]?.type is NodeType.Corridor)
+                        {
+                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1]));
+                        }
                     }
                 }
 
@@ -537,6 +541,10 @@ class Pathfinder
                             graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1], 2));
                             graph[x + 1, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y], 2));
                         }
+                        if (y - 1 > 0 && graph[x+1, y-1]?.type is NodeType.Floor)
+                        {
+                            graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                        }
                     }
                     if (y + 1 < height && graph[x, y + 1]?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance)
                     {
@@ -572,7 +580,7 @@ class Pathfinder
 
     private void TraceDrop(int x, int y)
     {
-        if (graph[x,y] is null || graph[x,y].type is NodeType.Floor or NodeType.Slope)
+        if (graph[x, y] is null || graph[x, y].type is NodeType.Floor or NodeType.Slope)
         {
             return;
         }
@@ -779,7 +787,7 @@ class Pathfinder
                     goRight = false;
                 }
             }
-            if (currentPos.y -1 > 0 && graph[currentPos.x, currentPos.y - 1]?.type is NodeType.Wall footWall)
+            if (currentPos.y - 1 > 0 && graph[currentPos.x, currentPos.y - 1]?.type is NodeType.Wall footWall)
             {
                 if (footWall.Direction == -1)
                 {
@@ -869,6 +877,28 @@ class Pathfinder
                     }
                 }
 
+            }
+            else if (graphNode.type is NodeType.Corridor)
+            {
+                var v0 = new Vector2(
+                    4.2f * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
+                    0);
+                // v0.x might be too large
+                if (currentPos.x + 1 < graph.GetLength(0) && graph[currentPos.x + 1, currentPos.y] is null)
+                {
+                    TraceJump(graphNode, currentPos, v0);
+                }
+                if (currentPos.x - 1 > 0 && graph[currentPos.x - 1, currentPos.y] is null)
+                {
+                    v0.x = -v0.x;
+                    TraceJump(graphNode, currentPos, v0);
+                }
+                if (currentPos.y - 1 > 0
+                    && graph[currentPos.x, currentPos.y - 1] is null
+                    && player.room.Tiles[currentPos.x, currentPos.y - 1].Terrain == Room.Tile.TerrainType.Air)
+                {
+                    TraceDrop(currentPos.x, currentPos.y);
+                }
             }
 
             void CheckConnection(NodeConnection connection)
