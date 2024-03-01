@@ -4,7 +4,7 @@
 	"version": "0.1.0",
 	"authors": "Doppelkeks",
 	"description": "Mod that does creature AI things",
-	"requirements": [],
-	"requirements_names": [],
+	"requirements": [ "moreslugcats" ],
+	"requirements_names": [ ],
 	"tags": []
 }
