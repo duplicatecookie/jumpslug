@@ -20,6 +20,7 @@ class Plugin : BaseUnityPlugin
         //TemplateHooks.RegisterHooks();
 
         PathfinderHooks.RegisterHooks();
+        AIHooks.RegisterHooks();
     }
 
     public void OnDisable()

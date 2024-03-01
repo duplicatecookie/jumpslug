@@ -7,6 +7,7 @@ static class PlayerCWT
     public class PlayerExtension
     {
         public Pathfinder pathfinder;
+        public bool justPressedRight;
         public PlayerExtension()
         {
         }

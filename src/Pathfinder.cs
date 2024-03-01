@@ -92,26 +92,13 @@ class Pathfinder
         Drop,
     }
     public Player player;
-    public WorldCoordinate destination;
     public List<PathNode> path;
     public Node[,] graph;
     private bool justPressedG;
-    private bool justPressedN;
-    private bool justPressedC;
-    private bool justPressedLeft;
-    private bool justPressedRight;
-    private bool visualizingNodes;
-    private bool visualizingConnections;
-    private List<DebugSprite> nodeSprites;
-    private List<DebugSprite> connectionSprites;
-    private List<DebugSprite> pathSprites;
     public Pathfinder(Player player)
     {
         this.player = player;
         path = new();
-        nodeSprites = new();
-        connectionSprites = new();
-        pathSprites = new();
     }
 
     public void Update()
@@ -135,259 +122,6 @@ class Pathfinder
             default:
                 break;
         }
-        switch ((Input.GetKey(KeyCode.N), justPressedN))
-        {
-            case (true, false):
-                justPressedN = true;
-                if (visualizingNodes)
-                {
-                    foreach (var sprite in nodeSprites)
-                    {
-                        sprite.Destroy();
-                    }
-                    nodeSprites.Clear();
-                    visualizingNodes = false;
-                }
-                else
-                {
-                    VisualizeNodes();
-                    visualizingNodes = true;
-                }
-                break;
-            case (false, true):
-                justPressedN = false;
-                break;
-            default:
-                break;
-        }
-        switch ((Input.GetKey(KeyCode.C), justPressedC))
-        {
-            case (true, false):
-                justPressedC = true;
-                if (visualizingConnections)
-                {
-                    foreach (var sprite in connectionSprites)
-                    {
-                        sprite.Destroy();
-                    }
-                    connectionSprites.Clear();
-                    visualizingConnections = false;
-                }
-                else
-                {
-                    VisualizeConnections();
-                    visualizingConnections = true;
-                }
-                break;
-            case (false, true):
-                justPressedC = false;
-                break;
-            default:
-                break;
-        }
-        var mousePos = (Vector2)Input.mousePosition + player.room.game.cameras[0].pos;
-        switch ((Input.GetMouseButton(0), justPressedLeft))
-        {
-            case (true, false):
-                justPressedLeft = true;
-                foreach (var sprite in pathSprites)
-                {
-                    sprite.Destroy();
-                }
-                pathSprites.Clear();
-                destination = player.room.ToWorldCoordinate(mousePos);
-                FindPath();
-                VisualizePath();
-                break;
-            case (false, true):
-                justPressedLeft = false;
-                break;
-            default:
-                break;
-        }
-        // horrible hack because creature creation is pain
-        switch ((Input.GetMouseButton(1), justPressedRight))
-        {
-            case (true, false):
-                justPressedRight = true;
-                var scugTemplate = StaticWorld.GetCreatureTemplate(MoreSlugcatsEnums.CreatureTemplateType.SlugNPC);
-                var abstractScug = new AbstractCreature(
-                    player.room.world,
-                    scugTemplate,
-                    null,
-                    player.room.ToWorldCoordinate(mousePos),
-                    player.room.game.GetNewID());
-                abstractScug.state = new PlayerNPCState(abstractScug, 0);
-                player.room.abstractRoom.AddEntity(abstractScug);
-                abstractScug.RealizeInRoom();
-                abstractScug.abstractAI.RealAI = null;
-                break;
-            case (false, true):
-                justPressedRight = false;
-                break;
-            default:
-                break;
-        }
-    }
-
-    private void VisualizeNodes()
-    {
-        foreach (var node in graph)
-        {
-            if (node is null)
-            {
-                continue;
-            }
-
-            var color = node.type switch
-            {
-                NodeType.Air => Color.red,
-                NodeType.Floor => Color.white,
-                NodeType.Slope => Color.green,
-                NodeType.Corridor => Color.blue,
-                NodeType.ShortcutEntrance => Color.cyan,
-                NodeType.Wall => Color.grey,
-                _ => throw new ArgumentOutOfRangeException("unsupported NodeType variant"),
-            };
-
-            var pos = player.room.MiddleOfTile(node.gridPos);
-            var fs = new FSprite("pixel")
-            {
-                color = color,
-                scale = 5f,
-            };
-            var sprite = new DebugSprite(pos, fs, player.room);
-            player.room.AddObject(sprite);
-            nodeSprites.Add(sprite);
-        }
-    }
-
-    private void VisualizeConnections()
-    {
-        foreach (var node in graph)
-        {
-            if (node is null)
-            {
-                continue;
-            }
-
-            var start = player.room.MiddleOfTile(node.gridPos);
-            foreach (var connection in node.connections)
-            {
-                var end = player.room.MiddleOfTile(connection.next.gridPos);
-                var mesh = LineHelper.MakeLine(start, end, Color.white);
-                var line = new DebugSprite(start, mesh, player.room);
-                player.room.AddObject(line);
-                connectionSprites.Add(line);
-            }
-        }
-    }
-
-    private void VisualizePath()
-    {
-        path.Reverse();
-        foreach (var node in path)
-        {
-            var startTile = node.invertedConnection.previous.gridPos;
-            var endTile = node.gridPos;
-            var start = player.room.MiddleOfTile(startTile);
-            var end = player.room.MiddleOfTile(endTile);
-            var color = node.invertedConnection.type switch
-            {
-                ConnectionType.Jump or ConnectionType.WalkOffEdge => Color.blue,
-                ConnectionType.Pounce => Color.green,
-                ConnectionType.Drop => Color.red,
-                ConnectionType.Shortcut => Color.cyan,
-                ConnectionType.Standard => Color.white,
-                _ => throw new ArgumentOutOfRangeException(),
-            };
-            int direction = startTile.x < endTile.x ? 1 : -1;
-            if (node.invertedConnection.type is ConnectionType.Jump)
-            {
-                var graphNode = graph[startTile.x, startTile.y];
-                if (graphNode.verticalBeam && !graphNode.horizontalBeam)
-                {
-                    Vector2 v0;
-                    if (player.isRivulet)
-                    {
-                        v0 = new Vector2(9f * direction, 9f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
-                    }
-                    else if (player.isSlugpup)
-                    {
-                        v0 = new Vector2(5f * direction, 7f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
-                    }
-                    else
-                    {
-                        v0 = new Vector2(6f * direction, 8f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
-                    }
-                    VisualizeJump(v0, startTile, endTile);
-                }
-                else if (graphNode.horizontalBeam || graphNode.type is NodeType.Floor)
-                {
-                    var headPos = new IntVector2(startTile.x, startTile.y + 1);
-                    var v0 = new Vector2(
-                        4.2f * direction * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
-                        (player.isRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, player.Adrenaline) + JumpBoost(player.isSlugpup ? 7 : 8));
-                    VisualizeJump(v0, headPos, endTile);
-                    var preLine = LineHelper.MakeLine(start, player.room.MiddleOfTile(headPos), Color.white);
-                    var preSprite = new DebugSprite(start, preLine, player.room);
-                    pathSprites.Add(preSprite);
-                    player.room.AddObject(preSprite);
-                }
-                else if (graphNode.type is NodeType.Wall wall)
-                {
-                    Vector2 v0;
-                    if (player.isRivulet)
-                    {
-                        v0 = new Vector2(-wall.Direction * 9, 10) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
-                    }
-                    else if (player.isSlugpup)
-                    {
-                        v0 = new Vector2(-wall.Direction * 5, 6) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
-                    }
-                    else
-                    {
-                        v0 = new Vector2(-wall.Direction * 6, 8) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
-                    }
-                    VisualizeJump(v0, startTile, endTile);
-                }
-            }
-            else if (node.invertedConnection.type is ConnectionType.WalkOffEdge)
-            {
-                var headPos = new IntVector2(startTile.x, startTile.y + 1);
-                var v0 = new Vector2(
-                    4.2f * direction * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
-                    0);
-                VisualizeJump(v0, headPos, endTile);
-                var preLine = LineHelper.MakeLine(start, player.room.MiddleOfTile(headPos), Color.white);
-                var preSprite = new DebugSprite(start, preLine, player.room);
-                pathSprites.Add(preSprite);
-                player.room.AddObject(preSprite);
-            }
-            var mesh = LineHelper.MakeLine(start, end, color);
-            var sprite = new DebugSprite(start, mesh, player.room);
-            player.room.AddObject(sprite);
-            pathSprites.Add(sprite);
-        }
-    }
-
-    private void VisualizeJump(Vector2 v0, IntVector2 startTile, IntVector2 endTile)
-    {
-        Vector2 pathOffset = player.room.MiddleOfTile(startTile);
-        Vector2 lastPos = pathOffset;
-        float maxT = 20 * (endTile.x - startTile.x) / v0.x;
-        for (float t = 0; t < maxT; t += 2f)
-        {
-            var nextPos = new Vector2(pathOffset.x + v0.x * t, Parabola(pathOffset.y, v0, t));
-            var sprite = new DebugSprite(lastPos, LineHelper.MakeLine(lastPos, nextPos, Color.white), player.room);
-            pathSprites.Add(sprite);
-            player.room.AddObject(sprite);
-            lastPos = nextPos;
-        }
-        var postLine = LineHelper.MakeLine(lastPos, player.room.MiddleOfTile(endTile), Color.white);
-        var postSprite = new DebugSprite(lastPos, postLine, player.room);
-        pathSprites.Add(postSprite);
-        player.room.AddObject(postSprite);
     }
 
     public void NewRoom()
@@ -731,31 +465,31 @@ class Pathfinder
         }
     }
 
-    private float JumpBoost(float boost)
+    private static float JumpBoost(float boost)
     {
         float t = Mathf.Ceil(boost / 1.5f);
         return 0.3f * ((boost - 0.5f) * t - 0.75f * t * t);
     }
 
-    public void FindPath()
+    public List<PathNode> FindPath(WorldCoordinate start, WorldCoordinate destination)
     {
+        // TODO: optimize this entire function, it's probably really inefficient
         if (graph is null)
         {
-            return;
+            return null;
         }
-        // TODO: optimize this entire function, it's probably really inefficient
-        var startPos = player.room.GetTilePosition(player.mainBodyChunk.pos);
+        var startPos = new IntVector2(start.x, start.y);
         if (graph[startPos.x, startPos.y] is null)
         {
             Plugin.Logger.LogDebug($"no node at start ({startPos.x}, {startPos.y})");
-            return;
+            return null;
         }
         path.Clear();
         var goalPos = new IntVector2(destination.x, destination.y);
         if (graph[goalPos.x, goalPos.y] is null)
         {
             Plugin.Logger.LogDebug($"no node at destination ({goalPos.x}, {goalPos.y})");
-            return;
+            return null;
         }
         var openNodes = new List<PathNode>()
         {
@@ -781,13 +515,14 @@ class Pathfinder
             if (currentNode is null)
             {
                 Plugin.Logger.LogError($"current node was null");
-                return;
+                return null;
             }
 
             var currentPos = currentNode.gridPos;
 
             if (currentPos == goalPos)
             {
+                Plugin.Logger.LogDebug("found path");
                 while (currentNode.gridPos != startPos)
                 {
                     path.Add(currentNode);
@@ -797,7 +532,7 @@ class Pathfinder
                     }
                     currentNode = currentNode.invertedConnection.previous;
                 }
-                return;
+                return path;
             }
 
             openNodes.RemoveAt(currentIndex);
@@ -992,6 +727,222 @@ class Pathfinder
                 CheckConnection(connection);
             }
         }
+        return null;
+    }
+
+    public class Visualizer
+    {
+        public Pathfinder pathfinder;
+        public Player player => pathfinder.player;
+        public bool visualizingNodes { get; private set; }
+        public bool visualizingConnections { get; private set; }
+        public bool visualizingPath { get; private set; }
+        private List<DebugSprite> nodeSprites;
+        private List<DebugSprite> connectionSprites;
+        private List<DebugSprite> pathSprites;
+
+        public Visualizer(Pathfinder pathfinder)
+        {
+            this.pathfinder = pathfinder;
+            nodeSprites = new();
+            connectionSprites = new();
+            pathSprites = new();
+        }
+
+        public void ToggleNodes()
+        {
+            if (visualizingNodes)
+            {
+                foreach (var sprite in nodeSprites)
+                {
+                    sprite.Destroy();
+                }
+                nodeSprites.Clear();
+                visualizingNodes = false;
+                return;
+            }
+            visualizingNodes = true;
+            foreach (var node in pathfinder.graph)
+            {
+                if (node is null)
+                {
+                    continue;
+                }
+
+                var color = node.type switch
+                {
+                    NodeType.Air => Color.red,
+                    NodeType.Floor => Color.white,
+                    NodeType.Slope => Color.green,
+                    NodeType.Corridor => Color.blue,
+                    NodeType.ShortcutEntrance => Color.cyan,
+                    NodeType.Wall => Color.grey,
+                    _ => throw new ArgumentOutOfRangeException("unsupported NodeType variant"),
+                };
+
+                var pos = pathfinder.player.room.MiddleOfTile(node.gridPos);
+                var fs = new FSprite("pixel")
+                {
+                    color = color,
+                    scale = 5f,
+                };
+                var sprite = new DebugSprite(pos, fs, pathfinder.player.room);
+                pathfinder.player.room.AddObject(sprite);
+                nodeSprites.Add(sprite);
+            }
+        }
+
+        public void ToggleConnections()
+        {
+            if (visualizingConnections)
+            {
+                foreach (var sprite in connectionSprites)
+                {
+                    sprite.Destroy();
+                }
+                connectionSprites.Clear();
+                visualizingConnections = false;
+                return;
+            }
+            visualizingConnections = true;
+            foreach (var node in pathfinder.graph)
+            {
+                if (node is null)
+                {
+                    continue;
+                }
+
+                var start = pathfinder.player.room.MiddleOfTile(node.gridPos);
+                foreach (var connection in node.connections)
+                {
+                    var end = pathfinder.player.room.MiddleOfTile(connection.next.gridPos);
+                    var mesh = LineHelper.MakeLine(start, end, Color.white);
+                    var line = new DebugSprite(start, mesh, pathfinder.player.room);
+                    pathfinder.player.room.AddObject(line);
+                    connectionSprites.Add(line);
+                }
+            }
+        }
+
+        public void TogglePath(List<PathNode> path)
+        {
+            if (visualizingPath)
+            {
+                Plugin.Logger.LogDebug("destroying path sprites");
+                foreach (var sprite in pathSprites)
+                {
+                    sprite.Destroy();
+                }
+                pathSprites.Clear();
+                visualizingPath = false;
+                return;
+            }
+            path.Reverse();
+            visualizingPath = true;
+            Plugin.Logger.LogDebug("creating path sprites");
+            foreach (var node in path)
+            {
+                var startTile = node.invertedConnection.previous.gridPos;
+                var endTile = node.gridPos;
+                var start = pathfinder.player.room.MiddleOfTile(startTile);
+                var end = pathfinder.player.room.MiddleOfTile(endTile);
+                var color = node.invertedConnection.type switch
+                {
+                    ConnectionType.Jump or ConnectionType.WalkOffEdge => Color.blue,
+                    ConnectionType.Pounce => Color.green,
+                    ConnectionType.Drop => Color.red,
+                    ConnectionType.Shortcut => Color.cyan,
+                    ConnectionType.Standard => Color.white,
+                    _ => throw new ArgumentOutOfRangeException(),
+                };
+                int direction = startTile.x < endTile.x ? 1 : -1;
+                if (node.invertedConnection.type is ConnectionType.Jump)
+                {
+                    var graphNode = pathfinder.graph[startTile.x, startTile.y];
+                    if (graphNode.verticalBeam && !graphNode.horizontalBeam)
+                    {
+                        Vector2 v0;
+                        if (player.isRivulet)
+                        {
+                            v0 = new Vector2(9f * direction, 9f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
+                        }
+                        else if (player.isSlugpup)
+                        {
+                            v0 = new Vector2(5f * direction, 7f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
+                        }
+                        else
+                        {
+                            v0 = new Vector2(6f * direction, 8f) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
+                        }
+                        VisualizeJump(v0, startTile, endTile);
+                    }
+                    else if (graphNode.horizontalBeam || graphNode.type is NodeType.Floor)
+                    {
+                        var headPos = new IntVector2(startTile.x, startTile.y + 1);
+                        var v0 = new Vector2(
+                            4.2f * direction * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
+                            (player.isRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, pathfinder.player.Adrenaline) + JumpBoost(player.isSlugpup ? 7 : 8));
+                        VisualizeJump(v0, headPos, endTile);
+                        var preLine = LineHelper.MakeLine(start, pathfinder.player.room.MiddleOfTile(headPos), Color.white);
+                        var preSprite = new DebugSprite(start, preLine, pathfinder.player.room);
+                        pathSprites.Add(preSprite);
+                        player.room.AddObject(preSprite);
+                    }
+                    else if (graphNode.type is NodeType.Wall wall)
+                    {
+                        Vector2 v0;
+                        if (player.isRivulet)
+                        {
+                            v0 = new Vector2(-wall.Direction * 9, 10) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
+                        }
+                        else if (pathfinder.player.isSlugpup)
+                        {
+                            v0 = new Vector2(-wall.Direction * 5, 6) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
+                        }
+                        else
+                        {
+                            v0 = new Vector2(-wall.Direction * 6, 8) * Mathf.Lerp(1, 1.15f, player.Adrenaline);
+                        }
+                        VisualizeJump(v0, startTile, endTile);
+                    }
+                }
+                else if (node.invertedConnection.type is ConnectionType.WalkOffEdge)
+                {
+                    var headPos = new IntVector2(startTile.x, startTile.y + 1);
+                    var v0 = new Vector2(
+                        4.2f * direction * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
+                        0);
+                    VisualizeJump(v0, headPos, endTile);
+                    var preLine = LineHelper.MakeLine(start, player.room.MiddleOfTile(headPos), Color.white);
+                    var preSprite = new DebugSprite(start, preLine, player.room);
+                    pathSprites.Add(preSprite);
+                    player.room.AddObject(preSprite);
+                }
+                var mesh = LineHelper.MakeLine(start, end, color);
+                var sprite = new DebugSprite(start, mesh, player.room);
+                player.room.AddObject(sprite);
+                pathSprites.Add(sprite);
+            }
+        }
+
+        private void VisualizeJump(Vector2 v0, IntVector2 startTile, IntVector2 endTile)
+        {
+            Vector2 pathOffset = player.room.MiddleOfTile(startTile);
+            Vector2 lastPos = pathOffset;
+            float maxT = 20 * (endTile.x - startTile.x) / v0.x;
+            for (float t = 0; t < maxT; t += 2f)
+            {
+                var nextPos = new Vector2(pathOffset.x + v0.x * t, pathfinder.Parabola(pathOffset.y, v0, t));
+                var sprite = new DebugSprite(lastPos, LineHelper.MakeLine(lastPos, nextPos, Color.white), player.room);
+                pathSprites.Add(sprite);
+                player.room.AddObject(sprite);
+                lastPos = nextPos;
+            }
+            var postLine = LineHelper.MakeLine(lastPos, player.room.MiddleOfTile(endTile), Color.white);
+            var postSprite = new DebugSprite(lastPos, postLine, player.room);
+            pathSprites.Add(postSprite);
+            player.room.AddObject(postSprite);
+        }
     }
 }
 
@@ -1010,6 +961,33 @@ static class PathfinderHooks
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu)
     {
+        // horrible hack because creature creation is pain
+        var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
+        switch ((Input.GetMouseButton(1), self.GetCWT().justPressedRight))
+        {
+            case (true, false):
+                self.GetCWT().justPressedRight = true;
+                var scugTemplate = StaticWorld.GetCreatureTemplate(MoreSlugcatsEnums.CreatureTemplateType.SlugNPC);
+                var abstractScug = new AbstractCreature(
+                    self.room.world,
+                    scugTemplate,
+                    null,
+                    self.room.ToWorldCoordinate(mousePos),
+                    self.room.game.GetNewID());
+                abstractScug.state = new PlayerNPCState(abstractScug, 0);
+                self.room.abstractRoom.AddEntity(abstractScug);
+                abstractScug.RealizeInRoom();
+                abstractScug.abstractAI = new JumpSlugAbstractAI(abstractScug, self.room.world)
+                {
+                    RealAI = new JumpSlugAI(abstractScug, self.room.world),
+                };
+                break;
+            case (false, true):
+                self.GetCWT().justPressedRight = false;
+                break;
+            default:
+                break;
+        }
         orig(self, eu);
         self.GetCWT().pathfinder?.Update();
     }
