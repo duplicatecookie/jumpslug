@@ -1,9 +1,9 @@
 ﻿using BepInEx;
 using BepInEx.Logging;
 
-namespace AIMod;
+namespace JumpSlug;
 
-[BepInPlugin("doppelkeks.aimod", "AI Mod", "0.1.0")]
+[BepInPlugin("doppelkeks.jumpslug", "JumpSlug", "0.1.0")]
 class Plugin : BaseUnityPlugin
 {
     public static new ManualLogSource Logger;

@@ -7,7 +7,7 @@ using MoreSlugcats;
 using RWCustom;
 using UnityEngine;
 
-namespace AIMod;
+namespace JumpSlug;
 
 class Pathfinder
 {

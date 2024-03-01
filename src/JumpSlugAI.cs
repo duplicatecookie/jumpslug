@@ -1,4 +1,4 @@
-namespace AIMod;
+namespace JumpSlug;
 
 class JumpSlugAbstractAI : AbstractCreatureAI
 {

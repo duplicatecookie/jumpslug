@@ -1,10 +1,10 @@
 ﻿{
-	"id": "doppelkeks.aimod",
-	"name": "AI Mod",
+	"id": "doppelkeks.jumpslug",
+	"name": "JumpSlug",
 	"version": "0.1.0",
 	"authors": "Doppelkeks",
-	"description": "Mod that does creature AI things",
+	"description": "Slugcat NPCs with trajectory tracing AI",
 	"requirements": [ "moreslugcats" ],
-	"requirements_names": [ ],
+	"requirements_names": [],
 	"tags": []
 }

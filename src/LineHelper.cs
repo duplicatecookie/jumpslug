@@ -1,7 +1,7 @@
 using UnityEngine;
 using RWCustom;
 
-namespace AIMod;
+namespace JumpSlug;
 
 static class LineHelper
 {

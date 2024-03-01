@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace AIMod;
+namespace JumpSlug;
 
 static class PlayerCWT
 {
