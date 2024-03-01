@@ -1,12 +1,10 @@
-﻿using UnityEngine;
-using BepInEx;
-using System.Collections.Generic;
+﻿using BepInEx;
 using BepInEx.Logging;
 
 namespace AIMod;
 
 [BepInPlugin("doppelkeks.aimod", "AI Mod", "0.1.0")]
-partial class Plugin : BaseUnityPlugin
+class Plugin : BaseUnityPlugin
 {
     public static new ManualLogSource Logger;
     public Plugin()
@@ -18,9 +16,8 @@ partial class Plugin : BaseUnityPlugin
     {
         On.RainWorld.OnModsInit += Extras.WrapInit(LoadResources);
 
-        AITestCreatureTemplateType.RegisterValues();
-
-        On.StaticWorld.InitCustomTemplates += InitCustomTemplates;
+        //TemplateType.RegisterValues();
+        //TemplateHooks.RegisterHooks();
 
         //VisualizerHooks.RegisterHooks();
         PathfinderHooks.RegisterHooks();
@@ -28,7 +25,7 @@ partial class Plugin : BaseUnityPlugin
 
     public void OnDisable()
     {
-        AITestCreatureTemplateType.UnregisterValues();
+        //TemplateType.UnregisterValues();
     }
 
     // Load any resources, such as sprites or sounds

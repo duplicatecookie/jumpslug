@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using MoreSlugcats;
 using RWCustom;
 using UnityEngine;
 
@@ -98,6 +99,7 @@ class Pathfinder
     private bool justPressedN;
     private bool justPressedC;
     private bool justPressedLeft;
+    private bool justPressedRight;
     private bool visualizingNodes;
     private bool visualizingConnections;
     private List<DebugSprite> nodeSprites;
@@ -183,6 +185,7 @@ class Pathfinder
             default:
                 break;
         }
+        var mousePos = (Vector2)Input.mousePosition + player.room.game.cameras[0].pos;
         switch ((Input.GetMouseButton(0), justPressedLeft))
         {
             case (true, false):
@@ -192,6 +195,7 @@ class Pathfinder
                     sprite.Destroy();
                 }
                 pathSprites.Clear();
+                destination = player.room.ToWorldCoordinate(mousePos);
                 FindPath();
                 VisualizePath();
                 break;
@@ -201,8 +205,29 @@ class Pathfinder
             default:
                 break;
         }
-        var mousePos = (Vector2)Input.mousePosition + player.room.game.cameras[0].pos;
-        destination = player.room.ToWorldCoordinate(mousePos);
+        // horrible hack because creature creation is pain
+        switch ((Input.GetMouseButton(1), justPressedRight))
+        {
+            case (true, false):
+                justPressedRight = true;
+                var scugTemplate = StaticWorld.GetCreatureTemplate(MoreSlugcatsEnums.CreatureTemplateType.SlugNPC);
+                var abstractScug = new AbstractCreature(
+                    player.room.world,
+                    scugTemplate,
+                    null,
+                    player.room.ToWorldCoordinate(mousePos),
+                    player.room.game.GetNewID());
+                abstractScug.state = new PlayerNPCState(abstractScug, 0);
+                player.room.abstractRoom.AddEntity(abstractScug);
+                abstractScug.RealizeInRoom();
+                abstractScug.abstractAI.RealAI = null;
+                break;
+            case (false, true):
+                justPressedRight = false;
+                break;
+            default:
+                break;
+        }
     }
 
     private void VisualizeNodes()
