@@ -19,7 +19,6 @@ class Plugin : BaseUnityPlugin
         //TemplateType.RegisterValues();
         //TemplateHooks.RegisterHooks();
 
-        //VisualizerHooks.RegisterHooks();
         PathfinderHooks.RegisterHooks();
     }
 

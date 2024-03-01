@@ -275,7 +275,7 @@ class Pathfinder
             foreach (var connection in node.connections)
             {
                 var end = player.room.MiddleOfTile(connection.next.gridPos);
-                var mesh = Visualizer.MakeLine(start, end, Color.white);
+                var mesh = LineHelper.MakeLine(start, end, Color.white);
                 var line = new DebugSprite(start, mesh, player.room);
                 player.room.AddObject(line);
                 connectionSprites.Add(line);
@@ -329,7 +329,7 @@ class Pathfinder
                         4.2f * direction * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
                         (player.isRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, player.Adrenaline) + JumpBoost(player.isSlugpup ? 7 : 8));
                     VisualizeJump(v0, headPos, endTile);
-                    var preLine = Visualizer.MakeLine(start, player.room.MiddleOfTile(headPos), Color.white);
+                    var preLine = LineHelper.MakeLine(start, player.room.MiddleOfTile(headPos), Color.white);
                     var preSprite = new DebugSprite(start, preLine, player.room);
                     pathSprites.Add(preSprite);
                     player.room.AddObject(preSprite);
@@ -359,12 +359,12 @@ class Pathfinder
                     4.2f * direction * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
                     0);
                 VisualizeJump(v0, headPos, endTile);
-                var preLine = Visualizer.MakeLine(start, player.room.MiddleOfTile(headPos), Color.white);
+                var preLine = LineHelper.MakeLine(start, player.room.MiddleOfTile(headPos), Color.white);
                 var preSprite = new DebugSprite(start, preLine, player.room);
                 pathSprites.Add(preSprite);
                 player.room.AddObject(preSprite);
             }
-            var mesh = Visualizer.MakeLine(start, end, color);
+            var mesh = LineHelper.MakeLine(start, end, color);
             var sprite = new DebugSprite(start, mesh, player.room);
             player.room.AddObject(sprite);
             pathSprites.Add(sprite);
@@ -379,12 +379,12 @@ class Pathfinder
         for (float t = 0; t < maxT; t += 2f)
         {
             var nextPos = new Vector2(pathOffset.x + v0.x * t, Parabola(pathOffset.y, v0, t));
-            var sprite = new DebugSprite(lastPos, Visualizer.MakeLine(lastPos, nextPos, Color.white), player.room);
+            var sprite = new DebugSprite(lastPos, LineHelper.MakeLine(lastPos, nextPos, Color.white), player.room);
             pathSprites.Add(sprite);
             player.room.AddObject(sprite);
             lastPos = nextPos;
         }
-        var postLine = Visualizer.MakeLine(lastPos, player.room.MiddleOfTile(endTile), Color.white);
+        var postLine = LineHelper.MakeLine(lastPos, player.room.MiddleOfTile(endTile), Color.white);
         var postSprite = new DebugSprite(lastPos, postLine, player.room);
         pathSprites.Add(postSprite);
         player.room.AddObject(postSprite);
