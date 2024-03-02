@@ -99,6 +99,20 @@ class Pathfinder
         this.player = player;
     }
 
+    public Node GetNode(int x, int y)
+    {
+        if (x < 0 || y < 0 || x >= graph.GetLength(0) || y >= graph.GetLength(1))
+        {
+            return null;
+        }
+        return graph[x, y];
+    }
+
+    public Node GetNode(IntVector2 pos)
+    {
+        return GetNode(pos.x, pos.y);
+    }
+
     public void Update()
     {
         switch ((Input.GetKey(KeyCode.G), justPressedG))
@@ -242,39 +256,36 @@ class Pathfinder
                 }
                 if (graph[x, y].type is NodeType.Floor)
                 {
-                    if (x + 1 < width)
-                    {
-                        if (graph[x + 1, y]?.type is NodeType.Floor or NodeType.Slope or NodeType.Corridor)
-                        {
-                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
-                            graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
-                        }
-                        if (y - 1 > 0 && graph[x + 1, y - 1]?.type is NodeType.Slope or NodeType.Corridor)
-                        {
-                            // these need to have higher weights than normal movement so the pathfinding algorithm doesn't prefer them
-                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y - 1], 2));
-                            graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y], 2));
-                        }
-                        if (y + 1 < width && graph[x + 1, y + 1]?.type is NodeType.Corridor)
-                        {
-                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1]));
-                        }
-                    }
-                }
-
-                if (graph[x, y].type is NodeType.Slope && x + 1 < width)
-                {
-                    if (graph[x + 1, y]?.type is NodeType.Floor or NodeType.Slope)
+                    if (GetNode(x + 1, y)?.type is NodeType.Floor or NodeType.Slope or NodeType.Corridor)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
                         graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                     }
-                    else if (y - 1 > 0 && graph[x + 1, y - 1]?.type is NodeType.Slope)
+                    if (GetNode(x + 1, y - 1)?.type is NodeType.Slope or NodeType.Corridor)
+                    {
+                        // these need to have higher weights than normal movement so the pathfinding algorithm doesn't prefer them
+                        graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y - 1], 2));
+                        graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y], 2));
+                    }
+                    if (GetNode(x + 1, y + 1)?.type is NodeType.Corridor)
+                    {
+                        graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1]));
+                    }
+                }
+
+                if (graph[x, y].type is NodeType.Slope)
+                {
+                    if (GetNode(x + 1, y)?.type is NodeType.Floor or NodeType.Slope)
+                    {
+                        graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
+                        graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                    }
+                    else if (GetNode(x + 1, y - 1)?.type is NodeType.Slope)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y - 1]));
                         graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                     }
-                    else if (y + 1 < height && graph[x + 1, y + 1]?.type is NodeType.Slope or NodeType.Floor)
+                    else if (GetNode(x + 1, y + 1)?.type is NodeType.Slope or NodeType.Floor)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1]));
                         graph[x + 1, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
@@ -282,17 +293,17 @@ class Pathfinder
                 }
 
                 // TODO: climbing is slower than walking, the connection weights should be adjusted accordingly
-                if (room.Tiles[x, y].horizontalBeam)
+                if (graph[x, y].horizontalBeam)
                 {
-                    if (x + 1 < width && room.Tiles[x + 1, y].horizontalBeam)
+                    if (GetNode(x + 1, y)?.horizontalBeam == true)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
                         graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                     }
                 }
-                if (room.Tiles[x, y].verticalBeam)
+                if (graph[x, y].verticalBeam)
                 {
-                    if (y + 1 < height && room.Tiles[x, y + 1].verticalBeam)
+                    if (GetNode(x, y + 1)?.verticalBeam == true)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y + 1]));
                         graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
@@ -301,25 +312,22 @@ class Pathfinder
                 // TODO: weights, again
                 if (graph[x, y].type is NodeType.Corridor)
                 {
-                    if (x + 1 < width)
+                    if (GetNode(x + 1, y)?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance)
                     {
-                        if (graph[x + 1, y]?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance)
-                        {
-                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
-                            graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
-                        }
-                        if (y + 1 < height && graph[x + 1, y + 1]?.type is NodeType.Floor)
-                        {
-                            // these need to have higher weights than normal movement so the pathfinding algorithm doesn't prefer them
-                            graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1], 2));
-                            graph[x + 1, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y], 2));
-                        }
-                        if (y - 1 > 0 && graph[x + 1, y - 1]?.type is NodeType.Floor)
-                        {
-                            graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
-                        }
+                        graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
+                        graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                     }
-                    if (y + 1 < height && graph[x, y + 1]?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance)
+                    if (GetNode(x + 1, y + 1)?.type is NodeType.Floor)
+                    {
+                        // these need to have higher weights than normal movement so the pathfinding algorithm doesn't prefer them
+                        graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y + 1], 2));
+                        graph[x + 1, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y], 2));
+                    }
+                    if (GetNode(x + 1, y - 1)?.type is NodeType.Floor)
+                    {
+                        graph[x + 1, y - 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
+                    }
+                    if (GetNode(x, y + 1)?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y + 1]));
                         graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
@@ -336,12 +344,12 @@ class Pathfinder
                         return;
                     }
                     graph[x, y].connections.Add(new NodeConnection(ConnectionType.Shortcut, destNode, shortcutData.length));
-                    if (x + 1 < width && graph[x + 1, y]?.type is NodeType.Corridor)
+                    if (GetNode(x + 1, y)?.type is NodeType.Corridor)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x + 1, y]));
                         graph[x + 1, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
                     }
-                    if (y + 1 < height && graph[x, y + 1]?.type is NodeType.Corridor)
+                    if (GetNode(x, y + 1)?.type is NodeType.Corridor)
                     {
                         graph[x, y].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y + 1]));
                         graph[x, y + 1].connections.Add(new NodeConnection(ConnectionType.Standard, graph[x, y]));
@@ -477,13 +485,13 @@ class Pathfinder
             return null;
         }
         var startPos = new IntVector2(start.x, start.y);
-        if (graph[startPos.x, startPos.y] is null)
+        if (GetNode(startPos) is null)
         {
             Plugin.Logger.LogDebug($"no node at start ({startPos.x}, {startPos.y})");
             return null;
         }
         var goalPos = new IntVector2(destination.x, destination.y);
-        if (graph[goalPos.x, goalPos.y] is null)
+        if (GetNode(goalPos) is null)
         {
             Plugin.Logger.LogDebug($"no node at destination ({goalPos.x}, {goalPos.y})");
             return null;
@@ -552,7 +560,7 @@ class Pathfinder
                     goRight = false;
                 }
             }
-            if (currentPos.y - 1 > 0 && graph[currentPos.x, currentPos.y - 1]?.type is NodeType.Wall footWall)
+            if (GetNode(currentPos.x, currentPos.y - 1)?.type is NodeType.Wall footWall)
             {
                 if (footWall.Direction == -1)
                 {
@@ -566,7 +574,7 @@ class Pathfinder
 
             if (graphNode.verticalBeam && !graphNode.horizontalBeam
                 && graphNode.type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)
-                && graph[currentPos.x, currentPos.y - 1]?.type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope))
+                && GetNode(currentPos.x, currentPos.y - 1)?.type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope))
             {
                 Vector2 v0;
                 if (player.isRivulet)
