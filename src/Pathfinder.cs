@@ -113,6 +113,17 @@ class Pathfinder
         return GetNode(pos.x, pos.y);
     }
 
+    public IntVector2? CurrentNodePos()
+    {
+        var pos = player.room.GetTilePosition(player.bodyChunks[player.standing ? 1 : 0].pos);
+
+        if (0 < pos.x && pos.x < graph.GetLength(0) && 0 < pos.y && pos.y < graph.GetLength(1))
+        {
+            return pos;
+        }
+        return null;
+    }
+
     public void Update()
     {
         switch ((Input.GetKey(KeyCode.G), justPressedG))
@@ -477,28 +488,26 @@ class Pathfinder
         return 0.3f * ((boost - 0.5f) * t - 0.75f * t * t);
     }
 
-    public List<PathNode> FindPath(WorldCoordinate start, WorldCoordinate destination)
+    public List<PathNode> FindPath(IntVector2 start, IntVector2 destination)
     {
         // TODO: optimize this entire function, it's probably really inefficient
         if (graph is null)
         {
             return null;
         }
-        var startPos = new IntVector2(start.x, start.y);
-        if (GetNode(startPos) is null)
+        if (GetNode(start) is null)
         {
-            Plugin.Logger.LogDebug($"no node at start ({startPos.x}, {startPos.y})");
+            Plugin.Logger.LogDebug($"no node at start ({start.x}, {start.y})");
             return null;
         }
-        var goalPos = new IntVector2(destination.x, destination.y);
-        if (GetNode(goalPos) is null)
+        if (GetNode(destination) is null)
         {
-            Plugin.Logger.LogDebug($"no node at destination ({goalPos.x}, {goalPos.y})");
+            Plugin.Logger.LogDebug($"no node at destination ({destination.x}, {destination.y})");
             return null;
         }
         var openNodes = new List<PathNode>()
         {
-            new(startPos, goalPos, 0),
+            new(start, destination, 0),
         };
         var closedNodes = new List<PathNode>();
         while (openNodes.Count > 0)
@@ -525,11 +534,11 @@ class Pathfinder
 
             var currentPos = currentNode.gridPos;
 
-            if (currentPos == goalPos)
+            if (currentPos == destination)
             {
                 Plugin.Logger.LogDebug("found path");
                 var path = new List<PathNode>();
-                while (currentNode.gridPos != startPos)
+                while (currentNode.gridPos != start)
                 {
                     path.Add(currentNode);
                     if (currentNode.invertedConnection.previous is null)
@@ -711,7 +720,7 @@ class Pathfinder
                             return;
                         }
                     }
-                    currentNeighbour = new PathNode(connection.next.gridPos, goalPos, currentNode.pathCost + connection.weight)
+                    currentNeighbour = new PathNode(connection.next.gridPos, destination, currentNode.pathCost + connection.weight)
                     {
                         invertedConnection = new PathConnection(connection.type, currentNode),
                     };

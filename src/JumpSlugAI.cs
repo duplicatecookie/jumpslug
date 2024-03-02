@@ -64,9 +64,9 @@ class JumpSlugAI : ArtificialIntelligence
         {
             case (true, false):
                 justPressedLeft = true;
-                var start = player.room.ToWorldCoordinate(player.mainBodyChunk.pos);
-                var destination = player.room.ToWorldCoordinate(mousePos);
-                path = pathfinder.FindPath(start, destination);
+                var start = pathfinder.CurrentNodePos();
+                var destination = player.room.GetTilePosition(mousePos);
+                path = start is null ? null : pathfinder.FindPath(start.Value, destination);
                 if (visualizer.visualizingPath)
                 {
                     visualizer.TogglePath(path);
