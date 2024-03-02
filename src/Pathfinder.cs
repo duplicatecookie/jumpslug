@@ -92,13 +92,11 @@ class Pathfinder
         Drop,
     }
     public Player player;
-    public List<PathNode> path;
     public Node[,] graph;
     private bool justPressedG;
     public Pathfinder(Player player)
     {
         this.player = player;
-        path = new();
     }
 
     public void Update()
@@ -484,7 +482,6 @@ class Pathfinder
             Plugin.Logger.LogDebug($"no node at start ({startPos.x}, {startPos.y})");
             return null;
         }
-        path.Clear();
         var goalPos = new IntVector2(destination.x, destination.y);
         if (graph[goalPos.x, goalPos.y] is null)
         {
@@ -523,6 +520,7 @@ class Pathfinder
             if (currentPos == goalPos)
             {
                 Plugin.Logger.LogDebug("found path");
+                var path = new List<PathNode>();
                 while (currentNode.gridPos != startPos)
                 {
                     path.Add(currentNode);

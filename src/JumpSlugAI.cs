@@ -18,7 +18,7 @@ class JumpSlugAI : ArtificialIntelligence
     Pathfinder pathfinder;
     Pathfinder.Visualizer visualizer;
     List<Pathfinder.PathNode> path;
-    Player player => this.creature.realizedCreature as Player;
+    Player player => creature.realizedCreature as Player;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world)
     {
         pathfinder = new Pathfinder(player);
