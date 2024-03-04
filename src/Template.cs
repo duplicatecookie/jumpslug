@@ -23,6 +23,11 @@ static class TemplateHooks
         On.StaticWorld.InitCustomTemplates += StaticWorld_InitCustomTemplates;
     }
 
+    public static void UnregisterHooks()
+    {
+        On.StaticWorld.InitCustomTemplates -= StaticWorld_InitCustomTemplates;
+    }
+
     private static void StaticWorld_InitCustomTemplates(On.StaticWorld.orig_InitCustomTemplates orig)
     {
         CreatureTemplate stdGroundTemplate = null;

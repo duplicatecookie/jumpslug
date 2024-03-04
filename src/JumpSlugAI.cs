@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MonoMod.Cil;
 using UnityEngine;
 
 namespace JumpSlug;
@@ -17,7 +18,7 @@ class JumpSlugAI : ArtificialIntelligence
     private bool justPressedC;
     Pathfinder pathfinder;
     Pathfinder.Visualizer visualizer;
-    List<Pathfinder.PathNode> path;
+    Pathfinder.PathNode path;
     Player player => creature.realizedCreature as Player;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world)
     {
@@ -34,8 +35,8 @@ class JumpSlugAI : ArtificialIntelligence
     public override void Update()
     {
         base.Update();
-        var mousePos = (Vector2)Input.mousePosition + player.room.game.cameras[0].pos;
         pathfinder.Update();
+        var mousePos = (Vector2)Input.mousePosition + player.room.game.cameras[0].pos;
         switch ((Input.GetKey(KeyCode.N), justPressedN))
         {
             case (true, false):
@@ -86,7 +87,11 @@ class JumpSlugAI : ArtificialIntelligence
             default:
                 break;
         }
-       
+        FollowPath();
+    }
+
+    private void FollowPath()
+    {
     }
 }
 
@@ -95,6 +100,13 @@ static class AIHooks
     public static void RegisterHooks()
     {
         On.Player.Update += Player_Update;
+        On.Player.checkInput += Player_checkInput;
+    }
+
+    public static void UnregisterHooks()
+    {
+        On.Player.Update -= Player_Update;
+        On.Player.checkInput -= Player_checkInput;
     }
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu)
@@ -104,5 +116,10 @@ static class AIHooks
         {
             (self.abstractCreature.abstractAI.RealAI as JumpSlugAI).Update();
         }
+    }
+
+    private static void Player_checkInput(On.Player.orig_checkInput orig, Player self)
+    {
+        orig(self);
     }
 }

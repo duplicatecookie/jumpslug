@@ -25,7 +25,13 @@ class Plugin : BaseUnityPlugin
 
     public void OnDisable()
     {
+        On.RainWorld.OnModsInit -= Extras.WrapInit(LoadResources);
+
         //TemplateType.UnregisterValues();
+        //TemplateHooks.UnregisterHooks();
+        
+        PathfinderHooks.UnregisterHooks();
+        AIHooks.UnregisterHooks();
     }
 
     // Load any resources, such as sprites or sounds

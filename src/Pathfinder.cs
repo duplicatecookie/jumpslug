@@ -14,7 +14,7 @@ class Pathfinder
     public class PathNode
     {
         public IntVector2 gridPos;
-        public PathConnection invertedConnection;
+        public PathConnection? connection;
         public float pathCost;
         public float heuristic;
         public PathNode(IntVector2 gridPos, IntVector2 goalPos, float cost)
@@ -24,14 +24,14 @@ class Pathfinder
             heuristic = Mathf.Sqrt((gridPos.x - goalPos.x) * (gridPos.x - goalPos.x) + (gridPos.y - goalPos.y) * (gridPos.y - goalPos.y));
         }
     }
-    public class PathConnection
+    public struct PathConnection
     {
         public ConnectionType type;
-        public PathNode previous;
-        public PathConnection(ConnectionType type, PathNode previous)
+        public PathNode next;
+        public PathConnection(ConnectionType type, PathNode next)
         {
             this.type = type;
-            this.previous = previous;
+            this.next = next;
         }
     }
     public class Node
@@ -116,7 +116,10 @@ class Pathfinder
     public IntVector2? CurrentNodePos()
     {
         var pos = player.room.GetTilePosition(player.bodyChunks[player.standing ? 1 : 0].pos);
-
+        if (graph is null)
+        {
+            return null;
+        }
         if (0 < pos.x && pos.x < graph.GetLength(0) && 0 < pos.y && pos.y < graph.GetLength(1))
         {
             return pos;
@@ -488,7 +491,7 @@ class Pathfinder
         return 0.3f * ((boost - 0.5f) * t - 0.75f * t * t);
     }
 
-    public List<PathNode> FindPath(IntVector2 start, IntVector2 destination)
+    public PathNode FindPath(IntVector2 start, IntVector2 destination)
     {
         // TODO: optimize this entire function, it's probably really inefficient
         if (graph is null)
@@ -536,18 +539,21 @@ class Pathfinder
 
             if (currentPos == destination)
             {
-                Plugin.Logger.LogDebug("found path");
-                var path = new List<PathNode>();
-                while (currentNode.gridPos != start)
+                PathNode previousNode = null;
+                PathNode nextNode = null;
+                ConnectionType? previousType = null;
+                ConnectionType? currentType;
+                while (currentNode is not null)
                 {
-                    path.Add(currentNode);
-                    if (currentNode.invertedConnection.previous is null)
-                    {
-                        break;
-                    }
-                    currentNode = currentNode.invertedConnection.previous;
+                    nextNode = currentNode.connection?.next;
+                    currentType = currentNode.connection?.type;
+                    currentNode.connection = previousType is null ? null : new PathConnection(previousType.Value, previousNode);
+                    previousType = currentType;
+                    previousNode = currentNode;
+                    currentNode = nextNode;
                 }
-                return path;
+                Plugin.Logger.LogDebug($"found path, is null: {previousNode is null}");
+                return previousNode;
             }
 
             openNodes.RemoveAt(currentIndex);
@@ -722,14 +728,14 @@ class Pathfinder
                     }
                     currentNeighbour = new PathNode(connection.next.gridPos, destination, currentNode.pathCost + connection.weight)
                     {
-                        invertedConnection = new PathConnection(connection.type, currentNode),
+                        connection = new PathConnection(connection.type, currentNode),
                     };
                     openNodes.Add(currentNeighbour);
                 }
                 if (currentNode.pathCost + connection.weight < currentNeighbour.pathCost)
                 {
                     currentNeighbour.pathCost = currentNode.pathCost + connection.weight;
-                    currentNeighbour.invertedConnection = new PathConnection(connection.type, currentNode);
+                    currentNeighbour.connection = new PathConnection(connection.type, currentNode);
                 }
             }
 
@@ -766,7 +772,7 @@ class Pathfinder
 
         public void ToggleNodes()
         {
-            if (visualizingNodes)
+            if (visualizingNodes || pathfinder is null || pathfinder.graph is null)
             {
                 foreach (var sprite in nodeSprites)
                 {
@@ -809,7 +815,7 @@ class Pathfinder
 
         public void ToggleConnections()
         {
-            if (visualizingConnections)
+            if (visualizingConnections || pathfinder is null || pathfinder.graph is null)
             {
                 foreach (var sprite in connectionSprites)
                 {
@@ -839,11 +845,10 @@ class Pathfinder
             }
         }
 
-        public void TogglePath(List<PathNode> path)
+        public void TogglePath(PathNode path)
         {
-            if (visualizingPath)
+            if (visualizingPath || pathfinder is null || pathfinder.graph is null)
             {
-                Plugin.Logger.LogDebug("destroying path sprites");
                 foreach (var sprite in pathSprites)
                 {
                     sprite.Destroy();
@@ -852,16 +857,16 @@ class Pathfinder
                 visualizingPath = false;
                 return;
             }
-            path.Reverse();
             visualizingPath = true;
-            Plugin.Logger.LogDebug("creating path sprites");
-            foreach (var node in path)
+            PathNode node = path;
+            while (node.connection is not null)
             {
-                var startTile = node.invertedConnection.previous.gridPos;
-                var endTile = node.gridPos;
+                var connection = node.connection.Value;
+                var startTile = node.gridPos;
+                var endTile = connection.next.gridPos;
                 var start = pathfinder.player.room.MiddleOfTile(startTile);
                 var end = pathfinder.player.room.MiddleOfTile(endTile);
-                var color = node.invertedConnection.type switch
+                var color = connection.type switch
                 {
                     ConnectionType.Jump or ConnectionType.WalkOffEdge => Color.blue,
                     ConnectionType.Pounce => Color.green,
@@ -871,7 +876,7 @@ class Pathfinder
                     _ => throw new ArgumentOutOfRangeException(),
                 };
                 int direction = startTile.x < endTile.x ? 1 : -1;
-                if (node.invertedConnection.type is ConnectionType.Jump)
+                if (connection.type is ConnectionType.Jump)
                 {
                     var graphNode = pathfinder.graph[startTile.x, startTile.y];
                     if (graphNode.verticalBeam && !graphNode.horizontalBeam)
@@ -921,7 +926,7 @@ class Pathfinder
                         VisualizeJump(v0, startTile, endTile);
                     }
                 }
-                else if (node.invertedConnection.type is ConnectionType.WalkOffEdge)
+                else if (connection.type is ConnectionType.WalkOffEdge)
                 {
                     var headPos = new IntVector2(startTile.x, startTile.y + 1);
                     var v0 = new Vector2(
@@ -937,6 +942,7 @@ class Pathfinder
                 var sprite = new DebugSprite(start, mesh, player.room);
                 player.room.AddObject(sprite);
                 pathSprites.Add(sprite);
+                node = connection.next;
             }
         }
 
@@ -968,6 +974,13 @@ static class PathfinderHooks
         On.Player.ctor += Player_ctor;
         On.Player.Update += Player_Update;
     }
+
+    public static void UnregisterHooks()
+    {
+        On.Player.ctor -= Player_ctor;
+        On.Player.Update -= Player_Update;
+    }
+
     private static void Player_ctor(On.Player.orig_ctor orig, Player self, AbstractCreature abstractCreature, World world)
     {
         orig(self, abstractCreature, world);
