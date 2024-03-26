@@ -5,6 +5,7 @@
         <LangVersion>11</LangVersion>
         <DebugSymbols>true</DebugSymbols>
         <DebugType>full</DebugType>
+        <Nullable>enable</Nullable>
     </PropertyGroup>
     
     <ItemGroup>

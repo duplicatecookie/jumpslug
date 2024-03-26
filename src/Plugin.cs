@@ -1,4 +1,5 @@
-﻿using BepInEx;
+﻿using System;
+using BepInEx;
 using BepInEx.Logging;
 
 namespace JumpSlug;
@@ -6,7 +7,7 @@ namespace JumpSlug;
 [BepInPlugin("doppelkeks.jumpslug", "JumpSlug", "0.1.0")]
 class Plugin : BaseUnityPlugin
 {
-    public static new ManualLogSource Logger;
+    public static new ManualLogSource? Logger;
     public Plugin()
     {
         Logger = base.Logger;
@@ -20,7 +21,7 @@ class Plugin : BaseUnityPlugin
         //TemplateHooks.RegisterHooks();
 
         PathfinderHooks.RegisterHooks();
-        AIHooks.RegisterHooks();
+        AIHooks.RegisterHooks();        
     }
 
     public void OnDisable()

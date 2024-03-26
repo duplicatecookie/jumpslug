@@ -2,7 +2,7 @@ namespace JumpSlug;
 
 static class TemplateType
 {
-    public static CreatureTemplate.Type JumpSlug;
+    public static CreatureTemplate.Type? JumpSlug;
 
     public static void RegisterValues()
     {
@@ -30,7 +30,7 @@ static class TemplateHooks
 
     private static void StaticWorld_InitCustomTemplates(On.StaticWorld.orig_InitCustomTemplates orig)
     {
-        CreatureTemplate stdGroundTemplate = null;
+        CreatureTemplate? stdGroundTemplate = null;
         foreach (var template in StaticWorld.creatureTemplates)
         {
             if (template.type == CreatureTemplate.Type.StandardGroundCreature)
@@ -41,7 +41,7 @@ static class TemplateHooks
         }
         if (stdGroundTemplate is null)
         {
-            Plugin.Logger.LogError("could not find Standard Ground Creature template");
+            Plugin.Logger!.LogError("could not find Standard Ground Creature template");
             return;
         }
         var jumpslugTemplate = new CreatureTemplate(
@@ -55,7 +55,7 @@ static class TemplateHooks
             if (StaticWorld.creatureTemplates[i] is null)
             {
                 StaticWorld.creatureTemplates[i] = jumpslugTemplate;
-                Plugin.Logger.LogInfo($"inserted JumpSlug creature template at index {i}");
+                Plugin.Logger!.LogInfo($"inserted JumpSlug creature template at index {i}");
                 break;
             }
         }

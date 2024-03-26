@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using Mono.Cecil.Cil;
 using MonoMod.Cil;
+using RWCustom;
 using UnityEngine;
 
 namespace JumpSlug;
@@ -16,13 +19,14 @@ class JumpSlugAI : ArtificialIntelligence
     private bool justPressedLeft;
     private bool justPressedN;
     private bool justPressedC;
+    IntVector2? destination;
     Pathfinder pathfinder;
     Pathfinder.Visualizer visualizer;
-    Pathfinder.PathNode path;
-    Player player => creature.realizedCreature as Player;
+    Pathfinder.Path? path;
+    Player? Player => creature.realizedCreature as Player;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world)
     {
-        pathfinder = new Pathfinder(player);
+        pathfinder = new Pathfinder(Player!);
         visualizer = new Pathfinder.Visualizer(pathfinder);
     }
 
@@ -36,7 +40,7 @@ class JumpSlugAI : ArtificialIntelligence
     {
         base.Update();
         pathfinder.Update();
-        var mousePos = (Vector2)Input.mousePosition + player.room.game.cameras[0].pos;
+        var mousePos = (Vector2)Input.mousePosition + Player!.room.game.cameras[0].pos;
         switch ((Input.GetKey(KeyCode.N), justPressedN))
         {
             case (true, false):
@@ -66,19 +70,19 @@ class JumpSlugAI : ArtificialIntelligence
             case (true, false):
                 justPressedLeft = true;
                 var start = pathfinder.CurrentNodePos();
-                var destination = player.room.GetTilePosition(mousePos);
-                path = start is null ? null : pathfinder.FindPath(start.Value, destination);
+                destination = Player!.room.GetTilePosition(mousePos);
+                path = start is null || destination is null ? null : pathfinder.FindPath(start.Value, destination.Value);
                 if (visualizer.visualizingPath)
                 {
-                    visualizer.TogglePath(path);
+                    visualizer.TogglePath(path?.start);
                     if (path is not null)
                     {
-                        visualizer.TogglePath(path);
+                        visualizer.TogglePath(path?.start);
                     }
                 }
                 else if (path is not null)
                 {
-                    visualizer.TogglePath(path);
+                    visualizer.TogglePath(path?.start);
                 }
                 break;
             case (false, true):
@@ -87,11 +91,58 @@ class JumpSlugAI : ArtificialIntelligence
             default:
                 break;
         }
-        FollowPath();
+        if (path is not null)
+        {
+            FollowPath();
+        }
     }
 
     private void FollowPath()
     {
+        if (path is null)
+        {
+            return;
+        }
+        // AI shouldn't exist without a non-null player instance
+        // copy everything to avoid struct mutation hell
+        var input = Player!.input[0];
+        var currentNodePos = pathfinder.CurrentNodePos();
+        if (currentNodePos is null)
+        {
+            // can't move on non-existant node, wait instead
+            return;
+        }
+        else if (currentNodePos == path.cursor.gridPos)
+        {
+            if (path.cursor.connection is null)
+            {
+                // end of path
+            }
+            else
+            {
+                switch (path.cursor.connection.Value.type)
+                {
+                    case Pathfinder.ConnectionType.Walk(int direction):
+                        input.x = direction;
+                        Player!.input[0] = input;
+                        break;
+                }
+            }
+        }
+        else
+        {
+            var cursor = path.cursor;
+            while (cursor.connection is not null)
+            {
+                if (currentNodePos == cursor.gridPos)
+                {
+                    path.cursor = cursor;
+                    return;
+                }
+                cursor = cursor.connection.Value.next;
+            }
+            path = destination is null ? null : pathfinder.FindPath(currentNodePos.Value, destination.Value);
+        }
     }
 }
 
@@ -101,25 +152,67 @@ static class AIHooks
     {
         On.Player.Update += Player_Update;
         On.Player.checkInput += Player_checkInput;
+        IL.Player.checkInput += IL_Player_checkInput;
     }
 
     public static void UnregisterHooks()
     {
         On.Player.Update -= Player_Update;
         On.Player.checkInput -= Player_checkInput;
+        //IL.Player.checkInput -= IL_Player_checkInput;
     }
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu)
     {
         orig(self, eu);
-        if (self.abstractCreature?.abstractAI?.RealAI is JumpSlugAI)
+        if (self.abstractCreature?.abstractAI?.RealAI is JumpSlugAI ai)
         {
-            (self.abstractCreature.abstractAI.RealAI as JumpSlugAI).Update();
+            ai.Update();
         }
     }
 
     private static void Player_checkInput(On.Player.orig_checkInput orig, Player self)
     {
         orig(self);
+    }
+
+    private static void IL_Player_checkInput(ILContext il)
+    {
+        try
+        {
+            ILCursor cursor = new(il);
+            ILLabel? elseBody = null;
+            // find condition
+            cursor.GotoNext(
+                i => i.MatchLdarg(0),
+                i => i.MatchCall(nameof(Player), "get_AI"),
+                i => i.MatchBrfalse(out elseBody));
+            cursor.Index += 2;
+            ILLabel oldBranch = cursor.DefineLabel();
+            cursor.MarkLabel(oldBranch);
+            ILLabel? consoleDebugCondition = null;
+            cursor.GotoNext(i => i.MatchBr(out consoleDebugCondition));
+            cursor.GotoLabel(elseBody, MoveType.Before);
+            // new condition
+            ILLabel condition = cursor.DefineLabel();
+            cursor.MarkLabel(condition);
+            cursor.Emit(OpCodes.Ldarg_0);
+            cursor.EmitDelegate((Player self) => self.abstractCreature?.abstractAI?.RealAI is JumpSlugAI);
+            cursor.Emit(OpCodes.Brfalse, elseBody);
+            // body
+            cursor.Emit(OpCodes.Ldarg_0);
+            cursor.EmitDelegate((Player self) => (self.abstractCreature.abstractAI.RealAI as JumpSlugAI)!.Update());
+            cursor.Emit(OpCodes.Br_S, consoleDebugCondition);
+            // replace branch instruction in previous else if
+            cursor.GotoLabel(oldBranch);
+            cursor.Remove();
+            cursor.Emit(OpCodes.Brfalse, condition);
+            Plugin.Logger!.LogDebug(il.ToString());
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger!.LogError(e);
+            throw;
+        }
     }
 }
