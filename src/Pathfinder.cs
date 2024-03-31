@@ -105,7 +105,7 @@ class Pathfinder
         public record Shortcut() : ConnectionType();
         public record Drop() : ConnectionType();
 
-        private ConnectionType() {}
+        private ConnectionType() { }
     }
 
     public Player player;
@@ -114,7 +114,7 @@ class Pathfinder
     public Pathfinder(Player player)
     {
         this.player = player;
-        graph = new Node[0,0];
+        graph = new Node[0, 0];
     }
 
     public Node? GetNode(int x, int y)
@@ -131,18 +131,18 @@ class Pathfinder
         return GetNode(pos.x, pos.y);
     }
 
-    public IntVector2? CurrentNodePos()
+    public Node? CurrentNode()
     {
-        var pos = player.room.GetTilePosition(player.bodyChunks[player.standing ? 1 : 0].pos);
-        if (graph is null)
+        IntVector2 pos = player.room.GetTilePosition(player.bodyChunks[0].pos);
+        if (player.bodyMode == Player.BodyModeIndex.Stand)
         {
-            return null;
+            if (GetNode(pos.x, pos.y - 1) is Node node)
+            {
+                return node;
+            }
+            return GetNode(pos.x, pos.y - 2);
         }
-        if (0 < pos.x && pos.x < graph.GetLength(0) && 0 < pos.y && pos.y < graph.GetLength(1))
-        {
-            return pos;
-        }
-        return null;
+        return GetNode(pos);
     }
 
     public void Update()
@@ -1013,36 +1013,39 @@ static class PathfinderHooks
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu)
     {
         // horrible hack because creature creation is pain
-        var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
-        switch ((Input.GetMouseButton(1), self.GetCWT().justPressedRight))
+        if (self.abstractCreature?.abstractAI is null)
         {
-            case (true, false):
-                self.GetCWT().justPressedRight = true;
-                var scugTemplate = StaticWorld.GetCreatureTemplate(MoreSlugcatsEnums.CreatureTemplateType.SlugNPC);
-                var abstractScug = new AbstractCreature(
-                    self.room.world,
-                    scugTemplate,
-                    null,
-                    self.room.ToWorldCoordinate(mousePos),
-                    self.room.game.GetNewID());
-                abstractScug.state = new PlayerNPCState(abstractScug, 0)
-                {
-                    forceFullGrown = true,
-                };
-                self.room.abstractRoom.AddEntity(abstractScug);
-                abstractScug.RealizeInRoom();
-                abstractScug.abstractAI = new JumpSlugAbstractAI(abstractScug, self.room.world)
-                {
-                    RealAI = new JumpSlugAI(abstractScug, self.room.world),
-                };
-                var realizedScug = (abstractScug.realizedCreature as Player)!;
-                realizedScug.controller = null;
-                break;
-            case (false, true):
-                self.GetCWT().justPressedRight = false;
-                break;
-            default:
-                break;
+            var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
+            switch ((Input.GetMouseButton(1), self.GetCWT().justPressedRight))
+            {
+                case (true, false):
+                    self.GetCWT().justPressedRight = true;
+                    var scugTemplate = StaticWorld.GetCreatureTemplate(MoreSlugcatsEnums.CreatureTemplateType.SlugNPC);
+                    var abstractScug = new AbstractCreature(
+                        self.room.world,
+                        scugTemplate,
+                        null,
+                        self.room.ToWorldCoordinate(mousePos),
+                        self.room.game.GetNewID());
+                    abstractScug.state = new PlayerNPCState(abstractScug, 0)
+                    {
+                        forceFullGrown = true,
+                    };
+                    self.room.abstractRoom.AddEntity(abstractScug);
+                    abstractScug.RealizeInRoom();
+                    abstractScug.abstractAI = new JumpSlugAbstractAI(abstractScug, self.room.world)
+                    {
+                        RealAI = new JumpSlugAI(abstractScug, self.room.world),
+                    };
+                    var realizedScug = (abstractScug.realizedCreature as Player)!;
+                    realizedScug.controller = null;
+                    break;
+                case (false, true):
+                    self.GetCWT().justPressedRight = false;
+                    break;
+                default:
+                    break;
+            }
         }
         orig(self, eu);
         self.GetCWT().pathfinder?.Update();

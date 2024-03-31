@@ -1,9 +1,9 @@
 using System;
-using System.Collections.Generic;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
 using RWCustom;
 using UnityEngine;
+using UnityEngine.Windows.WebCam;
 
 namespace JumpSlug;
 
@@ -24,10 +24,30 @@ class JumpSlugAI : ArtificialIntelligence
     Pathfinder.Visualizer visualizer;
     Pathfinder.Path? path;
     Player? Player => creature.realizedCreature as Player;
+    private DebugSprite currentNodeSprite;
+    private DebugSprite cursorSprite;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world)
     {
         pathfinder = new Pathfinder(Player!);
         visualizer = new Pathfinder.Visualizer(pathfinder);
+        cursorSprite = new DebugSprite(
+            Vector2.zero,
+            new FSprite("pixel")
+            {
+                scale = 10f,
+                color = Color.red,
+                isVisible = false,
+            },
+            abstractCreature.Room.realizedRoom);
+        currentNodeSprite = new DebugSprite(
+            Vector2.zero,
+            new FSprite("pixel")
+            {
+                scale = 10f,
+                color = Color.white,
+                isVisible = false,
+            },
+            abstractCreature.Room.realizedRoom);
     }
 
     public override void NewRoom(Room room)
@@ -69,7 +89,7 @@ class JumpSlugAI : ArtificialIntelligence
         {
             case (true, false):
                 justPressedLeft = true;
-                var start = pathfinder.CurrentNodePos();
+                IntVector2? start = pathfinder.CurrentNode()?.gridPos;
                 destination = Player!.room.GetTilePosition(mousePos);
                 path = start is null || destination is null ? null : pathfinder.FindPath(start.Value, destination.Value);
                 if (visualizer.visualizingPath)
@@ -95,6 +115,11 @@ class JumpSlugAI : ArtificialIntelligence
         {
             FollowPath();
         }
+        if (Player.slatedForDeletetion)
+        {
+            currentNodeSprite.slatedForDeletetion = true;
+            cursorSprite.slatedForDeletetion = true;
+        }
     }
 
     private void FollowPath()
@@ -103,20 +128,27 @@ class JumpSlugAI : ArtificialIntelligence
         {
             return;
         }
-        // AI shouldn't exist without a non-null player instance
-        // copy everything to avoid struct mutation hell
-        var input = Player!.input[0];
-        var currentNodePos = pathfinder.CurrentNodePos();
+        Player.InputPackage input = default;
+        IntVector2? currentNodePos = pathfinder.CurrentNode()?.gridPos;
+        if (Player!.bodyMode == Player.BodyModeIndex.Crawl)
+        {
+            var pos = Player.room.GetTilePosition(Player.bodyChunks[1].pos);
+            if (Player.room.GetTile(pos.x, pos.y + 1).Terrain == Room.Tile.TerrainType.Air)
+            {
+                input.y = 1;
+            }
+        }
         if (currentNodePos is null)
         {
             // can't move on non-existant node, wait instead
+            currentNodeSprite.sprite.isVisible = false;
             return;
         }
         else if (currentNodePos == path.cursor.gridPos)
         {
             if (path.cursor.connection is null)
             {
-                // end of path
+                path = null;
             }
             else
             {
@@ -124,25 +156,34 @@ class JumpSlugAI : ArtificialIntelligence
                 {
                     case Pathfinder.ConnectionType.Walk(int direction):
                         input.x = direction;
-                        Player!.input[0] = input;
                         break;
                 }
             }
         }
         else
         {
-            var cursor = path.cursor;
-            while (cursor.connection is not null)
+            for (var cursor = path.cursor; cursor.connection is not null; cursor = cursor.connection.Value.next)
             {
                 if (currentNodePos == cursor.gridPos)
                 {
                     path.cursor = cursor;
                     return;
                 }
-                cursor = cursor.connection.Value.next;
             }
             path = destination is null ? null : pathfinder.FindPath(currentNodePos.Value, destination.Value);
         }
+        currentNodeSprite.sprite.isVisible = true;
+        currentNodeSprite.pos = Player.room.MiddleOfTile(currentNodePos.Value);
+        if (path is not null)
+        {
+            cursorSprite.sprite.isVisible = true;
+            cursorSprite.pos = Player.room.MiddleOfTile(path.cursor.gridPos);
+        }
+        else
+        {
+            cursorSprite.sprite.isVisible = false;
+        }
+        Player.input[0] = input;
     }
 }
 
@@ -207,7 +248,6 @@ static class AIHooks
             cursor.GotoLabel(oldBranch);
             cursor.Remove();
             cursor.Emit(OpCodes.Brfalse, condition);
-            Plugin.Logger!.LogDebug(il.ToString());
         }
         catch (Exception e)
         {
