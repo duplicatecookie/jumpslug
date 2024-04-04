@@ -16,16 +16,16 @@
     
     <Target Name="GenerateMod" AfterTargets="PostBuildEvent">
 		<ItemGroup>
-			<RemovePlugins Include="../aimod/plugins/*.dll" />
-            <RemovePlugins Include="../aimod/plugins/*.pdb" />
+			<RemovePlugins Include="../jumpslug/plugins/*.dll" />
+            <RemovePlugins Include="../jumpslug/plugins/*.pdb" />
 		</ItemGroup>
 		<ItemGroup>
 			<CopyPlugins Include="$(TargetPath)" />
-            <CopyPlugins Include="$(TargetPath)/../AIMod.pdb" />
+            <CopyPlugins Include="$(TargetPath)/../JumpSlug.pdb" />
 		</ItemGroup>
 		
         <Delete Files="@(RemovePlugins)" />
-        <Copy SourceFiles="@(CopyPlugins)" DestinationFolder="../aimod/plugins/" />
+        <Copy SourceFiles="@(CopyPlugins)" DestinationFolder="../jumpslug/plugins/" />
     </Target>
     
 </Project>
