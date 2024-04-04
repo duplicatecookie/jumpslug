@@ -1,48 +1,44 @@
 using System;
+
 using Mono.Cecil.Cil;
+
 using MonoMod.Cil;
+
 using RWCustom;
+
 using UnityEngine;
 using UnityEngine.Windows.WebCam;
 
 namespace JumpSlug;
 
-class JumpSlugAbstractAI : AbstractCreatureAI
-{
-    public JumpSlugAbstractAI(AbstractCreature abstractCreature, World world) : base(world, abstractCreature)
-    {
-    }
+class JumpSlugAbstractAI : AbstractCreatureAI {
+    public JumpSlugAbstractAI(AbstractCreature abstractCreature, World world) : base(world, abstractCreature) { }
 }
 
-class JumpSlugAI : ArtificialIntelligence
-{
+class JumpSlugAI : ArtificialIntelligence {
     private bool justPressedLeft;
     private bool justPressedN;
     private bool justPressedC;
     IntVector2? destination;
-    Pathfinder pathfinder;
-    Pathfinder.Visualizer visualizer;
+    readonly Pathfinder pathfinder;
+    readonly Pathfinder.Visualizer visualizer;
     Pathfinder.Path? path;
     Player? Player => (Player)creature.realizedCreature;
-    public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world)
-    {
+    public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         pathfinder = new Pathfinder(Player);
         visualizer = new Pathfinder.Visualizer(pathfinder);
     }
 
-    public override void NewRoom(Room room)
-    {
+    public override void NewRoom(Room room) {
         base.NewRoom(room);
         pathfinder.NewRoom();
     }
 
-    public override void Update()
-    {
+    public override void Update() {
         base.Update();
         pathfinder.Update();
         var mousePos = (Vector2)Input.mousePosition + Player.room.game.cameras[0].pos;
-        switch ((Input.GetKey(KeyCode.N), justPressedN))
-        {
+        switch ((Input.GetKey(KeyCode.N), justPressedN)) {
             case (true, false):
                 justPressedN = true;
                 visualizer.ToggleNodes();
@@ -53,8 +49,7 @@ class JumpSlugAI : ArtificialIntelligence
             default:
                 break;
         }
-        switch ((Input.GetKey(KeyCode.C), justPressedC))
-        {
+        switch ((Input.GetKey(KeyCode.C), justPressedC)) {
             case (true, false):
                 justPressedC = true;
                 visualizer.ToggleConnections();
@@ -65,23 +60,18 @@ class JumpSlugAI : ArtificialIntelligence
             default:
                 break;
         }
-        switch ((Input.GetMouseButton(0), justPressedLeft))
-        {
+        switch ((Input.GetMouseButton(0), justPressedLeft)) {
             case (true, false):
                 justPressedLeft = true;
                 IntVector2? start = pathfinder.CurrentNode()?.gridPos;
                 destination = Player.room.GetTilePosition(mousePos);
                 path = start is null || destination is null ? null : pathfinder.FindPath(start.Value, destination.Value);
-                if (visualizer.visualizingPath)
-                {
+                if (visualizer.visualizingPath) {
                     visualizer.TogglePath(path?.start);
-                    if (path is not null)
-                    {
+                    if (path is not null) {
                         visualizer.TogglePath(path?.start);
                     }
-                }
-                else if (path is not null)
-                {
+                } else if (path is not null) {
                     visualizer.TogglePath(path?.start);
                 }
                 break;
@@ -91,99 +81,77 @@ class JumpSlugAI : ArtificialIntelligence
             default:
                 break;
         }
-        if (path is not null)
-        {
+        if (path is not null) {
             FollowPath();
         }
     }
 
-    private void FollowPath()
-    {
-        if (path is null)
-        {
+    private void FollowPath() {
+        if (path is null) {
             return;
         }
         Player.InputPackage input = default;
         IntVector2? currentNodePos = pathfinder.CurrentNode()?.gridPos;
-        if (Player.bodyMode == Player.BodyModeIndex.Crawl)
-        {
+        if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
             var pos = Player.room.GetTilePosition(Player.bodyChunks[1].pos);
-            if (Player.room.GetTile(pos.x, pos.y + 1).Terrain == Room.Tile.TerrainType.Air)
-            {
+            if (Player.room.GetTile(pos.x, pos.y + 1).Terrain == Room.Tile.TerrainType.Air) {
                 input.y = 1;
             }
         }
-        if (currentNodePos is null)
-        {
+        if (currentNodePos is null) {
             // can't move on non-existant node, wait instead
             return;
-        }
-        else if (currentNodePos == path.cursor.gridPos)
-        {
-            if (path.cursor.connection is null)
-            {
+        } else if (currentNodePos == path.cursor.gridPos) {
+            if (path.cursor.connection is null) {
                 path = null;
-            }
-            else
-            {
-                switch (path.cursor.connection.Value.type)
-                {
+            } else {
+                switch (path.cursor.connection.Value.type) {
                     case Pathfinder.ConnectionType.Walk(int direction):
                         input.x = direction;
                         break;
                 }
             }
-        }
-        else
-        {
-            for (var cursor = path.cursor; cursor.connection is not null; cursor = cursor.connection.Value.next)
-            {
-                if (currentNodePos == cursor.gridPos)
-                {
+        } else {
+            bool foundNode = false;
+            for (var cursor = path.cursor; cursor.connection is not null; cursor = cursor.connection.Value.next) {
+                if (currentNodePos == cursor.gridPos) {
                     path.cursor = cursor;
-                    return;
+                    foundNode = true;
                 }
             }
-            path = destination is null ? null : pathfinder.FindPath(currentNodePos.Value, destination.Value);
+            if (foundNode) {
+                path = destination is null ? null : pathfinder.FindPath(currentNodePos.Value, destination.Value);
+            }
         }
         Player.input[0] = input;
     }
 }
 
-static class AIHooks
-{
-    public static void RegisterHooks()
-    {
+static class AIHooks {
+    public static void RegisterHooks() {
         On.Player.Update += Player_Update;
         On.Player.checkInput += Player_checkInput;
         IL.Player.checkInput += IL_Player_checkInput;
     }
 
-    public static void UnregisterHooks()
-    {
+    public static void UnregisterHooks() {
         On.Player.Update -= Player_Update;
         On.Player.checkInput -= Player_checkInput;
-        //IL.Player.checkInput -= IL_Player_checkInput;
     }
 
-    private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu)
-    {
+    private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
         orig(self, eu);
-        if (self.abstractCreature?.abstractAI?.RealAI is JumpSlugAI ai)
-        {
+        if (self.abstractCreature?.abstractAI?.RealAI is JumpSlugAI ai) {
             ai.Update();
         }
     }
 
-    private static void Player_checkInput(On.Player.orig_checkInput orig, Player self)
-    {
+    private static void Player_checkInput(On.Player.orig_checkInput orig, Player self) {
         orig(self);
     }
 
-    private static void IL_Player_checkInput(ILContext il)
-    {
-        try
-        {
+    private static void IL_Player_checkInput(ILContext il) {
+        try {
             ILCursor cursor = new(il);
             ILLabel? elseBody = null;
             // find condition
@@ -211,9 +179,7 @@ static class AIHooks
             cursor.GotoLabel(oldBranch);
             cursor.Remove();
             cursor.Emit(OpCodes.Brfalse, condition);
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             Plugin.Logger!.LogError(e);
             throw;
         }
