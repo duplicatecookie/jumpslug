@@ -24,30 +24,10 @@ class JumpSlugAI : ArtificialIntelligence
     Pathfinder.Visualizer visualizer;
     Pathfinder.Path? path;
     Player? Player => creature.realizedCreature as Player;
-    private DebugSprite currentNodeSprite;
-    private DebugSprite cursorSprite;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world)
     {
         pathfinder = new Pathfinder(Player!);
         visualizer = new Pathfinder.Visualizer(pathfinder);
-        cursorSprite = new DebugSprite(
-            Vector2.zero,
-            new FSprite("pixel")
-            {
-                scale = 10f,
-                color = Color.red,
-                isVisible = false,
-            },
-            abstractCreature.Room.realizedRoom);
-        currentNodeSprite = new DebugSprite(
-            Vector2.zero,
-            new FSprite("pixel")
-            {
-                scale = 10f,
-                color = Color.white,
-                isVisible = false,
-            },
-            abstractCreature.Room.realizedRoom);
     }
 
     public override void NewRoom(Room room)
@@ -115,11 +95,6 @@ class JumpSlugAI : ArtificialIntelligence
         {
             FollowPath();
         }
-        if (Player.slatedForDeletetion)
-        {
-            currentNodeSprite.slatedForDeletetion = true;
-            cursorSprite.slatedForDeletetion = true;
-        }
     }
 
     private void FollowPath()
@@ -141,7 +116,6 @@ class JumpSlugAI : ArtificialIntelligence
         if (currentNodePos is null)
         {
             // can't move on non-existant node, wait instead
-            currentNodeSprite.sprite.isVisible = false;
             return;
         }
         else if (currentNodePos == path.cursor.gridPos)
@@ -171,17 +145,6 @@ class JumpSlugAI : ArtificialIntelligence
                 }
             }
             path = destination is null ? null : pathfinder.FindPath(currentNodePos.Value, destination.Value);
-        }
-        currentNodeSprite.sprite.isVisible = true;
-        currentNodeSprite.pos = Player.room.MiddleOfTile(currentNodePos.Value);
-        if (path is not null)
-        {
-            cursorSprite.sprite.isVisible = true;
-            cursorSprite.pos = Player.room.MiddleOfTile(path.cursor.gridPos);
-        }
-        else
-        {
-            cursorSprite.sprite.isVisible = false;
         }
         Player.input[0] = input;
     }
