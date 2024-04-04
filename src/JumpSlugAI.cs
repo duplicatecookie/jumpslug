@@ -23,10 +23,10 @@ class JumpSlugAI : ArtificialIntelligence
     Pathfinder pathfinder;
     Pathfinder.Visualizer visualizer;
     Pathfinder.Path? path;
-    Player? Player => creature.realizedCreature as Player;
+    Player? Player => (Player)creature.realizedCreature;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world)
     {
-        pathfinder = new Pathfinder(Player!);
+        pathfinder = new Pathfinder(Player);
         visualizer = new Pathfinder.Visualizer(pathfinder);
     }
 
@@ -40,7 +40,7 @@ class JumpSlugAI : ArtificialIntelligence
     {
         base.Update();
         pathfinder.Update();
-        var mousePos = (Vector2)Input.mousePosition + Player!.room.game.cameras[0].pos;
+        var mousePos = (Vector2)Input.mousePosition + Player.room.game.cameras[0].pos;
         switch ((Input.GetKey(KeyCode.N), justPressedN))
         {
             case (true, false):
@@ -70,7 +70,7 @@ class JumpSlugAI : ArtificialIntelligence
             case (true, false):
                 justPressedLeft = true;
                 IntVector2? start = pathfinder.CurrentNode()?.gridPos;
-                destination = Player!.room.GetTilePosition(mousePos);
+                destination = Player.room.GetTilePosition(mousePos);
                 path = start is null || destination is null ? null : pathfinder.FindPath(start.Value, destination.Value);
                 if (visualizer.visualizingPath)
                 {
@@ -105,7 +105,7 @@ class JumpSlugAI : ArtificialIntelligence
         }
         Player.InputPackage input = default;
         IntVector2? currentNodePos = pathfinder.CurrentNode()?.gridPos;
-        if (Player!.bodyMode == Player.BodyModeIndex.Crawl)
+        if (Player.bodyMode == Player.BodyModeIndex.Crawl)
         {
             var pos = Player.room.GetTilePosition(Player.bodyChunks[1].pos);
             if (Player.room.GetTile(pos.x, pos.y + 1).Terrain == Room.Tile.TerrainType.Air)
