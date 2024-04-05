@@ -7,7 +7,6 @@ using MonoMod.Cil;
 using RWCustom;
 
 using UnityEngine;
-using UnityEngine.Windows.WebCam;
 
 namespace JumpSlug;
 
@@ -21,12 +20,12 @@ class JumpSlugAI : ArtificialIntelligence {
     private bool justPressedC;
     IntVector2? destination;
     readonly Pathfinder pathfinder;
-    readonly Pathfinder.Visualizer visualizer;
+    readonly PathfindingVisualizer visualizer;
     Pathfinder.Path? path;
-    Player? Player => (Player)creature.realizedCreature;
+    Player Player => (Player)creature.realizedCreature;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         pathfinder = new Pathfinder(Player);
-        visualizer = new Pathfinder.Visualizer(pathfinder);
+        visualizer = new PathfindingVisualizer(pathfinder);
     }
 
     public override void NewRoom(Room room) {
@@ -81,9 +80,7 @@ class JumpSlugAI : ArtificialIntelligence {
             default:
                 break;
         }
-        if (path is not null) {
-            FollowPath();
-        }
+        FollowPath();
     }
 
     private void FollowPath() {
@@ -112,16 +109,13 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
             }
         } else {
-            bool foundNode = false;
             for (var cursor = path.cursor; cursor.connection is not null; cursor = cursor.connection.Value.next) {
                 if (currentNodePos == cursor.gridPos) {
                     path.cursor = cursor;
-                    foundNode = true;
+                    return;
                 }
             }
-            if (foundNode) {
-                path = destination is null ? null : pathfinder.FindPath(currentNodePos.Value, destination.Value);
-            }
+            path = destination is null ? null : pathfinder.FindPath(currentNodePos.Value, destination.Value);
         }
         Player.input[0] = input;
     }
