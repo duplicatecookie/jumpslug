@@ -5,6 +5,7 @@ using Mono.Cecil.Cil;
 using MonoMod.Cil;
 
 using RWCustom;
+using IVec2 = RWCustom.IntVector2;
 
 using UnityEngine;
 
@@ -88,7 +89,7 @@ class JumpSlugAI : ArtificialIntelligence {
             return;
         }
         Player.InputPackage input = default;
-        IntVector2? currentNodePos = pathfinder.CurrentNode()?.gridPos;
+        IVec2? currentNodePos = pathfinder.CurrentNode()?.gridPos;
         if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
             var pos = Player.room.GetTilePosition(Player.bodyChunks[1].pos);
             if (Player.room.GetTile(pos.x, pos.y + 1).Terrain == Room.Tile.TerrainType.Air) {
@@ -105,6 +106,10 @@ class JumpSlugAI : ArtificialIntelligence {
                 switch (path.cursor.connection.Value.type) {
                     case Pathfinder.ConnectionType.Walk(int direction):
                         input.x = direction;
+                        break;
+                    case Pathfinder.ConnectionType.Crawl(IVec2 dirVec):
+                        input.x += dirVec.x;
+                        input.y += dirVec.y;
                         break;
                 }
             }
