@@ -249,7 +249,7 @@ class Pathfinder {
                             new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     }
-                    if (GetNode(x + 1, y - 1)?.type is NodeType.Slope or NodeType.Corridor) {
+                    if (GetNode(x + 1, y - 1)?.type is NodeType.Corridor) {
                         // these need to have higher weights than normal movement so the pathfinding algorithm doesn't prefer them
                         ConnectNodes(
                             graph[x, y]!,
@@ -257,6 +257,13 @@ class Pathfinder {
                             new ConnectionType.Crawl(new IVec2(1, -1)),
                             new ConnectionType.Crawl(new IVec2(-1, 1)),
                             2f
+                        );
+                    } else if (GetNode(x + 1, y - 1)?.type is NodeType.Slope) {
+                        ConnectNodes(
+                            graph[x, y]!,
+                            graph[x + 1, y - 1]!,
+                            new ConnectionType.Walk(1),
+                            new ConnectionType.Walk(-1)
                         );
                     }
                     if (GetNode(x + 1, y + 1)?.type is NodeType.Corridor) {
