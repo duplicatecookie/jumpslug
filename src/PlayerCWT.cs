@@ -2,14 +2,11 @@ using System.Runtime.CompilerServices;
 
 namespace JumpSlug;
 
-static class PlayerCWT
-{
-    public class PlayerExtension
-    {
+static class PlayerCWT {
+    public class PlayerExtension {
         public Pathfinder? pathfinder;
         public bool justPressedRight;
-        public PlayerExtension()
-        {
+        public PlayerExtension() {
         }
     }
     public static ConditionalWeakTable<Player, PlayerExtension> cwt = new();

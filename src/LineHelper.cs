@@ -1,12 +1,11 @@
-using UnityEngine;
 using RWCustom;
+
+using UnityEngine;
 
 namespace JumpSlug;
 
-static class LineHelper
-{
-    public static TriangleMesh MakeLine(Vector2 start, Vector2 end, Color color)
-    {
+static class LineHelper {
+    public static TriangleMesh MakeLine(Vector2 start, Vector2 end, Color color) {
         var mesh = TriangleMesh.MakeLongMesh(1, false, true);
         var distVec = end - start;
         mesh.MoveVertice(0, new Vector2(0, 0));

@@ -1,42 +1,38 @@
 ﻿using System;
+
 using BepInEx;
 using BepInEx.Logging;
 
 namespace JumpSlug;
 
 [BepInPlugin("doppelkeks.jumpslug", "JumpSlug", "0.1.0")]
-class Plugin : BaseUnityPlugin
-{
+class Plugin : BaseUnityPlugin {
     public static new ManualLogSource? Logger;
-    public Plugin()
-    {
+    public Plugin() {
         Logger = base.Logger;
     }
     // Add hooks
-    public void OnEnable()
-    {
+    public void OnEnable() {
         On.RainWorld.OnModsInit += Extras.WrapInit(LoadResources);
 
         //TemplateType.RegisterValues();
         //TemplateHooks.RegisterHooks();
 
         PathfinderHooks.RegisterHooks();
-        AIHooks.RegisterHooks();        
+        AIHooks.RegisterHooks();
     }
 
-    public void OnDisable()
-    {
+    public void OnDisable() {
         On.RainWorld.OnModsInit -= Extras.WrapInit(LoadResources);
 
         //TemplateType.UnregisterValues();
         //TemplateHooks.UnregisterHooks();
-        
+
         PathfinderHooks.UnregisterHooks();
         AIHooks.UnregisterHooks();
     }
 
     // Load any resources, such as sprites or sounds
-    private void LoadResources(RainWorld rainWorld)
-    {
+    private void LoadResources(RainWorld rainWorld) {
     }
 }
