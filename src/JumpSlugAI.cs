@@ -97,7 +97,7 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         }
         if (currentNodePos is null) {
-            // can't move on non-existant node, wait instead
+            // can't move on non-existent node, wait instead
             return;
         } else if (currentNodePos == path.cursor.gridPos) {
             if (path.cursor.connection is null) {
@@ -108,8 +108,36 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.x = direction;
                         break;
                     case Pathfinder.ConnectionType.Crawl(IVec2 dirVec):
-                        input.x += dirVec.x;
-                        input.y += dirVec.y;
+                        input.x = dirVec.x;
+                        input.y = dirVec.y;
+                        // turn around if going backwards and look at next node to not get stuck in corners
+                        if (Player.mainBodyChunk.pos.x > Player.bodyChunks[1].pos.x) {
+                            if (dirVec.x < 0) {
+                                input.jmp = true;
+                                if (path.cursor.connection?.next.connection?.type
+                                    is Pathfinder.ConnectionType.Crawl(IVec2 nextDirVec)
+                                    && nextDirVec.y != dirVec.y
+                                ) {
+                                    input.y = nextDirVec.y;
+                                }
+                            }
+                        } else if (dirVec.x > 0) {
+                            input.jmp = true;
+                            if (path.cursor.connection?.next.connection?.type
+                                is Pathfinder.ConnectionType.Crawl(IVec2 nextDirVec)
+                                && nextDirVec.y != dirVec.y
+                            ) {
+                                input.y = nextDirVec.y;
+                            }
+                        } else if (Player.mainBodyChunk.pos.x > Player.bodyChunks[1].pos.x && dirVec.y > 0) {
+                            input.jmp = true;
+                            if (path.cursor.connection?.next.connection?.type
+                                is Pathfinder.ConnectionType.Crawl(IVec2 nextDirVec)
+                                && nextDirVec.x != dirVec.x
+                            ) {
+                                input.y = nextDirVec.x;
+                            }
+                        }
                         break;
                 }
             }
