@@ -16,6 +16,7 @@ class JumpSlugAbstractAI : AbstractCreatureAI {
 }
 
 class JumpSlugAI : ArtificialIntelligence {
+    private readonly DebugSprite inputDirSprite;
     private bool justPressedLeft;
     private bool justPressedN;
     private bool justPressedC;
@@ -27,11 +28,15 @@ class JumpSlugAI : ArtificialIntelligence {
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         pathfinder = new Pathfinder(Player);
         visualizer = new PathfindingVisualizer(pathfinder);
+        inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Player.room);
+        inputDirSprite.sprite.color = Color.red;
+        inputDirSprite.sprite.isVisible = false;
     }
 
     public override void NewRoom(Room room) {
         base.NewRoom(room);
         pathfinder.NewRoom();
+        Player.room.AddObject(inputDirSprite);
     }
 
     public override void Update() {
@@ -127,7 +132,7 @@ class JumpSlugAI : ArtificialIntelligence {
                                 } else if (Player.mainBodyChunk.pos.x < Player.bodyChunks[1].pos.x && dir.y > 0) {
                                     input.jmp = true;
                                 }
-                            // without this it can get stuck in corners
+                                // without this it can get stuck in corners
                             } else if (dir.Dot(nextDir) == 0) {
                                 input.x += nextDir.x;
                                 input.y += nextDir.y;
@@ -146,6 +151,20 @@ class JumpSlugAI : ArtificialIntelligence {
             path = destination is null ? null : pathfinder.FindPath(currentNodePos.Value, destination.Value);
         }
         Player.input[0] = input;
+        if (input.x == 0 && input.y == 0) {
+            inputDirSprite.sprite.isVisible = false;
+        } else {
+            inputDirSprite.sprite.isVisible = true;
+            inputDirSprite.pos = Player.mainBodyChunk.pos;
+            LineHelper.ReshapeLine(
+                (TriangleMesh)inputDirSprite.sprite,
+                Player.mainBodyChunk.pos,
+                new Vector2(
+                    Player.mainBodyChunk.pos.x + input.x * 20,
+                    Player.mainBodyChunk.pos.y + input.y * 20
+                )
+            );
+        }
     }
 }
 
