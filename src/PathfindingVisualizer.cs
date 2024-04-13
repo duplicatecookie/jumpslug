@@ -149,12 +149,16 @@ class PathfindingVisualizer {
                     VisualizeJump(v0, startTile, endTile);
                 }
             } else if (connection.type is ConnectionType.WalkOffEdge) {
-                var headPos = new IVec2(startTile.x, startTile.y + 1);
+                var startPos = new IVec2(
+                    startTile.x,
+                    pathfinder.GetNode(startTile)?.type is NodeType.Corridor ? startTile.y : startTile.y + 1
+                );
                 var v0 = new Vector2(
                     4.2f * direction * Player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, Player.Adrenaline),
-                    0);
-                VisualizeJump(v0, headPos, endTile);
-                var preLine = LineHelper.MakeLine(start, Player.room.MiddleOfTile(headPos), Color.white);
+                    0
+                );
+                VisualizeJump(v0, startPos, endTile);
+                var preLine = LineHelper.MakeLine(start, Player.room.MiddleOfTile(startPos), Color.white);
                 var preSprite = new DebugSprite(start, preLine, Player.room);
                 pathSprites.Add(preSprite);
                 Player.room.AddObject(preSprite);

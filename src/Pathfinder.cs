@@ -406,11 +406,11 @@ class Pathfinder {
     public float Parabola(float yOffset, Vector2 v0, float t) => v0.y * t - 0.5f * player.gravity * t * t + yOffset;
 
     // start refers to the head position
-    private void TraceJump(Node startNode, IVec2 start, Vector2 v0, ConnectionType type) {
-        var x = start.x;
-        var y = start.y;
-        var width = player.room.Tiles.GetLength(0);
-        var height = player.room.Tiles.GetLength(1);
+    private void TraceJump(Node startNode, IVec2 start, Vector2 v0, ConnectionType type, bool upright = true) {
+        int x = start.x;
+        int y = start.y;
+        int width = player.room.Tiles.GetLength(0);
+        int height = player.room.Tiles.GetLength(1);
         if (x < 0 || y < 0 || x >= width || y >= height || graph is null) {
             return;
         }
@@ -431,10 +431,10 @@ class Pathfinder {
                 if (y - 2 < 0) {
                     break;
                 }
-                if (graph[x, y - 1]?.type is NodeType.Floor or NodeType.Slope) {
-                    startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, y - 1]!, t * 20 / 4.2f + 1));
+                if (graph[x, upright ? y - 1 : y]?.type is NodeType.Floor or NodeType.Slope) {
+                    startNode.dynamicConnections.Add(new NodeConnection(type, graph[x, upright ? y - 1 : y]!, t * 20 / 4.2f + 1));
                 }
-                if (player.room.Tiles[x, y - 2].Terrain == Room.Tile.TerrainType.Solid) {
+                if (player.room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
                     break;
                 }
                 y--;
@@ -615,15 +615,14 @@ class Pathfinder {
                     4.2f * player.slugcatStats.runspeedFac * Mathf.Lerp(1, 1.5f, player.Adrenaline),
                     0);
                 // v0.x might be too large
-                if (currentPos.x + 1 < graph.GetLength(0) && graph[currentPos.x + 1, currentPos.y] is null) {
-                    TraceJump(graphNode, currentPos, v0, new ConnectionType.WalkOffEdge(1));
+                if (GetNode(currentPos.x + 1, currentPos.y) is null) {
+                    TraceJump(graphNode, currentPos, v0, new ConnectionType.WalkOffEdge(1), upright: false);
                 }
-                if (currentPos.x - 1 > 0 && graph[currentPos.x - 1, currentPos.y] is null) {
+                if (GetNode(currentPos.x - 1, currentPos.y) is null) {
                     v0.x = -v0.x;
-                    TraceJump(graphNode, currentPos, v0, new ConnectionType.WalkOffEdge(-1));
+                    TraceJump(graphNode, currentPos, v0, new ConnectionType.WalkOffEdge(-1), upright: false);
                 }
-                if (currentPos.y - 1 > 0
-                    && graph[currentPos.x, currentPos.y - 1] is null
+                if (GetNode(currentPos.x, currentPos.y - 1) is null
                     && player.room.Tiles[currentPos.x, currentPos.y - 1].Terrain == Room.Tile.TerrainType.Air) {
                     TraceDrop(currentPos.x, currentPos.y);
                 }

@@ -4,10 +4,10 @@ using Mono.Cecil.Cil;
 
 using MonoMod.Cil;
 
-using RWCustom;
 using IVec2 = RWCustom.IntVector2;
 
 using UnityEngine;
+using IL.RWCustom;
 
 namespace JumpSlug;
 
@@ -19,11 +19,11 @@ class JumpSlugAI : ArtificialIntelligence {
     private bool justPressedLeft;
     private bool justPressedN;
     private bool justPressedC;
-    IntVector2? destination;
-    readonly Pathfinder pathfinder;
-    readonly PathfindingVisualizer visualizer;
-    Pathfinder.Path? path;
-    Player Player => (Player)creature.realizedCreature;
+    private IVec2? destination;
+    private readonly Pathfinder pathfinder;
+    private readonly PathfindingVisualizer visualizer;
+    private Pathfinder.Path? path;
+    private Player Player => (Player)creature.realizedCreature;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         pathfinder = new Pathfinder(Player);
         visualizer = new PathfindingVisualizer(pathfinder);
@@ -63,7 +63,7 @@ class JumpSlugAI : ArtificialIntelligence {
         switch ((Input.GetMouseButton(0), justPressedLeft)) {
             case (true, false):
                 justPressedLeft = true;
-                IntVector2? start = pathfinder.CurrentNode()?.gridPos;
+                IVec2? start = pathfinder.CurrentNode()?.gridPos;
                 destination = Player.room.GetTilePosition(mousePos);
                 path = start is null || destination is null ? null : pathfinder.FindPath(start.Value, destination.Value);
                 if (visualizer.visualizingPath) {
@@ -107,35 +107,30 @@ class JumpSlugAI : ArtificialIntelligence {
                     case Pathfinder.ConnectionType.Walk(int direction):
                         input.x = direction;
                         break;
-                    case Pathfinder.ConnectionType.Crawl(IVec2 dirVec):
-                        input.x = dirVec.x;
-                        input.y = dirVec.y;
-                        // turn around if going backwards and look at next node to not get stuck in corners
-                        if (Player.mainBodyChunk.pos.x > Player.bodyChunks[1].pos.x) {
-                            if (dirVec.x < 0) {
-                                input.jmp = true;
-                                if (path.cursor.connection?.next.connection?.type
-                                    is Pathfinder.ConnectionType.Crawl(IVec2 nextDirVec)
-                                    && nextDirVec.y != dirVec.y
-                                ) {
-                                    input.y = nextDirVec.y;
+                    case Pathfinder.ConnectionType.Crawl(IVec2 dir):
+                        input.x = dir.x;
+                        input.y = dir.y;
+
+                        if (path.cursor.connection?.next.connection?.type
+                            is Pathfinder.ConnectionType.Crawl(IVec2 nextDir)
+                        ) {
+                            if (dir == nextDir) {
+                                // turn around if going backwards
+                                // should not trigger when in a corner because that can lock it into switching forever
+                                // when trying to go up an inverse T junction
+                                if (Player.mainBodyChunk.pos.x > Player.bodyChunks[1].pos.x) {
+                                    if (dir.x < 0) {
+                                        input.jmp = true;
+                                    }
+                                } else if (dir.x > 0) {
+                                    input.jmp = true;
+                                } else if (Player.mainBodyChunk.pos.x < Player.bodyChunks[1].pos.x && dir.y > 0) {
+                                    input.jmp = true;
                                 }
-                            }
-                        } else if (dirVec.x > 0) {
-                            input.jmp = true;
-                            if (path.cursor.connection?.next.connection?.type
-                                is Pathfinder.ConnectionType.Crawl(IVec2 nextDirVec)
-                                && nextDirVec.y != dirVec.y
-                            ) {
-                                input.y = nextDirVec.y;
-                            }
-                        } else if (Player.mainBodyChunk.pos.x > Player.bodyChunks[1].pos.x && dirVec.y > 0) {
-                            input.jmp = true;
-                            if (path.cursor.connection?.next.connection?.type
-                                is Pathfinder.ConnectionType.Crawl(IVec2 nextDirVec)
-                                && nextDirVec.x != dirVec.x
-                            ) {
-                                input.y = nextDirVec.x;
+                            // without this it can get stuck in corners
+                            } else if (dir.Dot(nextDir) == 0) {
+                                input.x += nextDir.x;
+                                input.y += nextDir.y;
                             }
                         }
                         break;
