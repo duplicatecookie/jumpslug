@@ -95,52 +95,60 @@ class JumpSlugAI : ArtificialIntelligence {
         }
         Player.InputPackage input = default;
         IVec2? currentNodePos = pathfinder.CurrentNode()?.gridPos;
-        if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
-            var pos = Player.room.GetTilePosition(Player.bodyChunks[1].pos);
-            if (Player.room.GetTile(pos.x, pos.y + 1).Terrain == Room.Tile.TerrainType.Air) {
-                input.y = 1;
-            }
-        }
         if (currentNodePos is null) {
             // can't move on non-existent node, wait instead
             return;
         } else if (currentNodePos == path.cursor.gridPos) {
             if (path.cursor.connection is null) {
                 path = null;
-            } else {
-                switch (path.cursor.connection.Value.type) {
-                    case Pathfinder.ConnectionType.Walk(int direction):
-                        input.x = direction;
-                        break;
-                    case Pathfinder.ConnectionType.Crawl(IVec2 dir):
-                        input.x = dir.x;
-                        input.y = dir.y;
-
-                        if (path.cursor.connection?.next.connection?.type
-                            is Pathfinder.ConnectionType.Crawl(IVec2 nextDir)
-                        ) {
-                            if (dir == nextDir) {
-                                // turn around if going backwards
-                                // should not trigger when in a corner because that can lock it into switching forever
-                                // when trying to go up an inverse T junction
-                                if (Player.mainBodyChunk.pos.x > Player.bodyChunks[1].pos.x) {
-                                    if (dir.x < 0) {
-                                        input.jmp = true;
-                                    }
-                                } else if (dir.x > 0) {
-                                    input.jmp = true;
-                                } else if (Player.mainBodyChunk.pos.x < Player.bodyChunks[1].pos.x && dir.y > 0) {
-                                    input.jmp = true;
-                                }
-                                // without this it can get stuck in corners
-                            } else if (dir.Dot(nextDir) == 0) {
-                                input.x += nextDir.x;
-                                input.y += nextDir.y;
-                            }
+            } else if (path.cursor.connection.Value.type
+                is Pathfinder.ConnectionType.Walk(int direction)
+            ) {
+                if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
+                    var pos = Player.room.GetTilePosition(Player.bodyChunks[1].pos);
+                    if (Player.room.GetTile(pos.x, pos.y + 1).Terrain == Room.Tile.TerrainType.Air) {
+                        input.y = 1;
+                    }
+                } else {
+                    input.x = direction;
+                }
+            } else if (path.cursor.connection.Value.type
+                is Pathfinder.ConnectionType.Crawl(IVec2 dir)
+            ) {
+                input.x = dir.x;
+                input.y = dir.y;
+                if (path.cursor.connection.Value.next.connection?.type
+                    is Pathfinder.ConnectionType.Crawl(IVec2 nextDir)
+                ) {
+                    bool backwards = false;
+                    Vector2 scugDir = Player.mainBodyChunk.pos - Player.bodyChunks[1].pos;
+                    if (0 < scugDir.x) {
+                        if (dir.x < 0) {
+                            backwards = true;
                         }
-                        break;
+                    } else if (dir.x > 0) {
+                        backwards = true;
+                    } else if (scugDir.y < 0) {
+                        if (dir.y > 0) {
+                            backwards = true;
+                        }
+                    } else if (dir.y < 0) {
+                        backwards = true;
+                    }
+                    if (backwards) {
+                        // turn around if going backwards
+                        // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
+                        if (dir == nextDir) {
+                            input.jmp = true;
+                        // prevents getting stuck when moving backwards into a corner
+                        } else if (dir.Dot(nextDir) == 0) {
+                            input.x = nextDir.x;
+                            input.y = nextDir.y;
+                        }
+                    }
                 }
             }
+
         } else {
             for (var cursor = path.cursor; cursor.connection is not null; cursor = cursor.connection.Value.next) {
                 if (currentNodePos == cursor.gridPos) {

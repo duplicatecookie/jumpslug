@@ -338,7 +338,7 @@ class Pathfinder {
                         );
                     }
                     if (GetNode(x + 1, y - 1)?.type is NodeType.Floor) {
-                        graph[x + 1, y - 1]!.connections.Add(new NodeConnection(new ConnectionType.Crawl(new IVec2(1, -1)), graph[x, y]!));
+                        graph[x + 1, y - 1]!.connections.Add(new NodeConnection(new ConnectionType.Walk(-1), graph[x, y]!));
                     }
                     if (GetNode(x, y + 1)?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
                         ConnectNodes(
