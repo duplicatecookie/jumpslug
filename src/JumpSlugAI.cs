@@ -7,7 +7,7 @@ using MonoMod.Cil;
 using IVec2 = RWCustom.IntVector2;
 
 using UnityEngine;
-using IL.RWCustom;
+using RWCustom;
 
 namespace JumpSlug;
 
@@ -120,22 +120,7 @@ class JumpSlugAI : ArtificialIntelligence {
                 if (path.cursor.connection.Value.next.connection?.type
                     is Pathfinder.ConnectionType.Crawl(IVec2 nextDir)
                 ) {
-                    bool backwards = false;
-                    Vector2 scugDir = Player.mainBodyChunk.pos - Player.bodyChunks[1].pos;
-                    if (0 < scugDir.x) {
-                        if (dir.x < 0) {
-                            backwards = true;
-                        }
-                    } else if (dir.x > 0) {
-                        backwards = true;
-                    } else if (scugDir.y < 0) {
-                        if (dir.y > 0) {
-                            backwards = true;
-                        }
-                    } else if (dir.y < 0) {
-                        backwards = true;
-                    }
-                    if (backwards) {
+                    if ((Player.mainBodyChunk.pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0) {
                         // turn around if going backwards
                         // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
                         if (dir == nextDir) {
