@@ -88,6 +88,20 @@ class JumpSlugAI : ArtificialIntelligence {
                 break;
         }
         FollowPath();
+        if (Player.input[0].x == 0 && Player.input[0].y == 0) {
+            inputDirSprite.sprite.isVisible = false;
+        } else {
+            inputDirSprite.sprite.isVisible = true;
+            inputDirSprite.pos = Player.mainBodyChunk.pos;
+            LineHelper.ReshapeLine(
+                (TriangleMesh)inputDirSprite.sprite,
+                Player.mainBodyChunk.pos,
+                new Vector2(
+                    Player.mainBodyChunk.pos.x + Player.input[0].x * 20,
+                    Player.mainBodyChunk.pos.y + Player.input[0].y * 20
+                )
+            );
+        }
     }
 
     private void FollowPath() {
@@ -99,6 +113,7 @@ class JumpSlugAI : ArtificialIntelligence {
         }
         var currentNode = pathfinder.CurrentNode();
         if (currentNode is null) {
+            Player.input[0] = input;
             // can't move on non-existent node, wait instead
             return;
         } else if (currentNode.gridPos == path.cursor.gridPos) {
@@ -157,7 +172,17 @@ class JumpSlugAI : ArtificialIntelligence {
                             waitOneTick = true;
                         }
                     }
-                    input.y = climbDir.y;
+                    if (Player.animation != Player.AnimationIndex.StandOnBeam
+                        && path.cursor.GetGraphNode(pathfinder)?.verticalBeam == false
+                        && Player.room
+                            .GetTile(path.cursor.gridPos.x, path.cursor.gridPos.y + 1)
+                            .Terrain == Room.Tile.TerrainType.Air
+                        && Player.input[1].y != 1
+                    ) {
+                        input.y = 1;
+                    } else {
+                        input.y = climbDir.y;
+                    }
                 } else {
                     if (currentNode.verticalBeam) {
                         input.y = 1;
@@ -181,20 +206,6 @@ class JumpSlugAI : ArtificialIntelligence {
             path = destination is null ? null : pathfinder.FindPath(currentNode.gridPos, destination.Value);
         }
         Player.input[0] = input;
-        if (input.x == 0 && input.y == 0) {
-            inputDirSprite.sprite.isVisible = false;
-        } else {
-            inputDirSprite.sprite.isVisible = true;
-            inputDirSprite.pos = Player.mainBodyChunk.pos;
-            LineHelper.ReshapeLine(
-                (TriangleMesh)inputDirSprite.sprite,
-                Player.mainBodyChunk.pos,
-                new Vector2(
-                    Player.mainBodyChunk.pos.x + input.x * 20,
-                    Player.mainBodyChunk.pos.y + input.y * 20
-                )
-            );
-        }
     }
 }
 

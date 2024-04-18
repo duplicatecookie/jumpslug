@@ -121,11 +121,10 @@ class Pathfinder {
 
     public Node? CurrentNode() {
         IVec2 pos = player.room.GetTilePosition(player.bodyChunks[0].pos);
-        if (player.bodyMode == Player.BodyModeIndex.Stand) {
-            if (GetNode(pos.x, pos.y - 1) is Node node) {
-                return node;
-            }
-            return GetNode(pos.x, pos.y - 2);
+        if (player.bodyMode == Player.BodyModeIndex.Stand
+            || player.animation == Player.AnimationIndex.StandOnBeam
+        ) {
+            return GetNode(pos.x, pos.y - 1) is Node node ? node : GetNode(pos.x, pos.y - 2);
         }
         return GetNode(pos);
     }
