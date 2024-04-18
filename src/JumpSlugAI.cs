@@ -107,13 +107,12 @@ class JumpSlugAI : ArtificialIntelligence {
             ) {
                 input.x = direction;
                 if (pathfinder.CurrentNode()?.type is Pathfinder.NodeType.Floor) {
-                    if (path.cursor
-                            .connection?.next
-                            .connection?.next
-                            .GetGraphNode(pathfinder)?.type
-                            is Pathfinder.NodeType.Corridor
+                    var first = path.cursor.connection?.next;
+                    var second = first?.connection?.next;
+                    if (second?.GetGraphNode(pathfinder)?.type is Pathfinder.NodeType.Corridor
                     ) {
                         if (Player.bodyMode != Player.BodyModeIndex.Crawl
+                            && first!.gridPos.y == second.gridPos.y
                             && Player.input[1].y != -1
                         ) {
                             input.y = -1;
@@ -147,7 +146,10 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
             }
         } else {
-            for (var cursor = path.cursor; cursor.connection is not null; cursor = cursor.connection.Value.next) {
+            for (var cursor = path.cursor;
+                cursor.connection is not null;
+                cursor = cursor.connection.Value.next
+            ) {
                 if (currentNodePos == cursor.gridPos) {
                     path.cursor = cursor;
                     return;
