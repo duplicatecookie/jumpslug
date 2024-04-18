@@ -7,7 +7,6 @@ using MonoMod.Cil;
 using IVec2 = RWCustom.IntVector2;
 
 using UnityEngine;
-using RWCustom;
 
 namespace JumpSlug;
 
@@ -20,6 +19,7 @@ class JumpSlugAI : ArtificialIntelligence {
     private bool justPressedLeft;
     private bool justPressedN;
     private bool justPressedC;
+    private bool waitOneTick;
     private IVec2? destination;
     private readonly Pathfinder pathfinder;
     private readonly PathfindingVisualizer visualizer;
@@ -31,6 +31,7 @@ class JumpSlugAI : ArtificialIntelligence {
         inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Player.room);
         inputDirSprite.sprite.color = Color.red;
         inputDirSprite.sprite.isVisible = false;
+        Player.room.AddObject(inputDirSprite);
     }
 
     public override void NewRoom(Room room) {
@@ -91,15 +92,16 @@ class JumpSlugAI : ArtificialIntelligence {
 
     private void FollowPath() {
         Player.InputPackage input = default;
-        if (path is null) {
+        if (path is null || waitOneTick) {
             Player.input[0] = input;
+            waitOneTick = false;
             return;
         }
-        IVec2? currentNodePos = pathfinder.CurrentNode()?.gridPos;
-        if (currentNodePos is null) {
+        var currentNode = pathfinder.CurrentNode();
+        if (currentNode is null) {
             // can't move on non-existent node, wait instead
             return;
-        } else if (currentNodePos == path.cursor.gridPos) {
+        } else if (currentNode.gridPos == path.cursor.gridPos) {
             if (path.cursor.connection is null) {
                 path = null;
             } else if (path.cursor.connection.Value.type
@@ -144,18 +146,39 @@ class JumpSlugAI : ArtificialIntelligence {
                         }
                     }
                 }
+            } else if (path.cursor.connection.Value.type
+                is Pathfinder.ConnectionType.Climb(IVec2 climbDir)
+            ) {
+                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                    if (climbDir.x != 0) {
+                        input.x = climbDir.x;
+                        // this is required for moving from vertical to horizontal poles
+                        if (Player.flipDirection != climbDir.x) {
+                            waitOneTick = true;
+                        }
+                    }
+                    input.y = climbDir.y;
+                } else {
+                    if (currentNode.verticalBeam) {
+                        input.y = 1;
+                    } else if (currentNode.horizontalBeam) {
+                        input.x = Player.flipDirection;
+                    } else {
+                        Plugin.Logger!.LogWarning("trying to climb on node without pole");
+                    }
+                }
             }
         } else {
             for (var cursor = path.cursor;
                 cursor.connection is not null;
                 cursor = cursor.connection.Value.next
             ) {
-                if (currentNodePos == cursor.gridPos) {
+                if (currentNode.gridPos == cursor.gridPos) {
                     path.cursor = cursor;
                     return;
                 }
             }
-            path = destination is null ? null : pathfinder.FindPath(currentNodePos.Value, destination.Value);
+            path = destination is null ? null : pathfinder.FindPath(currentNode.gridPos, destination.Value);
         }
         Player.input[0] = input;
         if (input.x == 0 && input.y == 0) {
