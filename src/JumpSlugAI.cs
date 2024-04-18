@@ -90,10 +90,11 @@ class JumpSlugAI : ArtificialIntelligence {
     }
 
     private void FollowPath() {
+        Player.InputPackage input = default;
         if (path is null) {
+            Player.input[0] = input;
             return;
         }
-        Player.InputPackage input = default;
         IVec2? currentNodePos = pathfinder.CurrentNode()?.gridPos;
         if (currentNodePos is null) {
             // can't move on non-existent node, wait instead
@@ -104,13 +105,25 @@ class JumpSlugAI : ArtificialIntelligence {
             } else if (path.cursor.connection.Value.type
                 is Pathfinder.ConnectionType.Walk(int direction)
             ) {
-                if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
-                    var pos = Player.room.GetTilePosition(Player.bodyChunks[1].pos);
-                    if (Player.room.GetTile(pos.x, pos.y + 1).Terrain == Room.Tile.TerrainType.Air) {
+                input.x = direction;
+                if (pathfinder.CurrentNode()?.type is Pathfinder.NodeType.Floor) {
+                    if (path.cursor
+                            .connection?.next
+                            .connection?.next
+                            .GetGraphNode(pathfinder)?.type
+                            is Pathfinder.NodeType.Corridor
+                    ) {
+                        if (Player.bodyMode != Player.BodyModeIndex.Crawl
+                            && Player.input[1].y != -1
+                        ) {
+                            input.y = -1;
+                        }
+                    } else if (
+                        Player.bodyMode == Player.BodyModeIndex.Crawl
+                        && Player.input[1].y != 1
+                    ) {
                         input.y = 1;
                     }
-                } else {
-                    input.x = direction;
                 }
             } else if (path.cursor.connection.Value.type
                 is Pathfinder.ConnectionType.Crawl(IVec2 dir)
@@ -133,7 +146,6 @@ class JumpSlugAI : ArtificialIntelligence {
                     }
                 }
             }
-
         } else {
             for (var cursor = path.cursor; cursor.connection is not null; cursor = cursor.connection.Value.next) {
                 if (currentNodePos == cursor.gridPos) {

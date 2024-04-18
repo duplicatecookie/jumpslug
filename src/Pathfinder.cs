@@ -34,6 +34,8 @@ class Pathfinder {
             pathCost = cost;
             heuristic = Mathf.Sqrt((gridPos.x - goalPos.x) * (gridPos.x - goalPos.x) + (gridPos.y - goalPos.y) * (gridPos.y - goalPos.y));
         }
+
+        public Node? GetGraphNode(Pathfinder pathfinder) => pathfinder.GetNode(gridPos);
     }
     public struct PathConnection {
         public ConnectionType type;
