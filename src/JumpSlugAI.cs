@@ -16,9 +16,6 @@ class JumpSlugAbstractAI : AbstractCreatureAI {
 
 class JumpSlugAI : ArtificialIntelligence {
     private readonly DebugSprite inputDirSprite;
-    private bool justPressedLeft;
-    private bool justPressedN;
-    private bool justPressedC;
     private bool waitOneTick;
     private IVec2? destination;
     private readonly Pathfinder pathfinder;
@@ -44,48 +41,24 @@ class JumpSlugAI : ArtificialIntelligence {
         base.Update();
         pathfinder.Update();
         var mousePos = (Vector2)Input.mousePosition + Player.room.game.cameras[0].pos;
-        switch ((Input.GetKey(KeyCode.N), justPressedN)) {
-            case (true, false):
-                justPressedN = true;
-                visualizer.ToggleNodes();
-                break;
-            case (false, true):
-                justPressedN = false;
-                break;
-            default:
-                break;
+        if (InputHelper.JustPressed(KeyCode.N)) {
+            visualizer.ToggleNodes();
         }
-        switch ((Input.GetKey(KeyCode.C), justPressedC)) {
-            case (true, false):
-                justPressedC = true;
-                visualizer.ToggleConnections();
-                break;
-            case (false, true):
-                justPressedC = false;
-                break;
-            default:
-                break;
+        if (InputHelper.JustPressed(KeyCode.C)) {
+            visualizer.ToggleConnections();
         }
-        switch ((Input.GetMouseButton(0), justPressedLeft)) {
-            case (true, false):
-                justPressedLeft = true;
-                IVec2? start = pathfinder.CurrentNode()?.gridPos;
-                destination = Player.room.GetTilePosition(mousePos);
-                path = start is null || destination is null ? null : pathfinder.FindPath(start.Value, destination.Value);
-                if (visualizer.visualizingPath) {
-                    visualizer.TogglePath(path?.start);
-                    if (path is not null) {
-                        visualizer.TogglePath(path?.start);
-                    }
-                } else if (path is not null) {
+        if (InputHelper.JustPressedMouseButton(0)) {
+            IVec2? start = pathfinder.CurrentNode()?.gridPos;
+            destination = Player.room.GetTilePosition(mousePos);
+            path = start is null || destination is null ? null : pathfinder.FindPath(start.Value, destination.Value);
+            if (visualizer.visualizingPath) {
+                visualizer.TogglePath(path?.start);
+                if (path is not null) {
                     visualizer.TogglePath(path?.start);
                 }
-                break;
-            case (false, true):
-                justPressedLeft = false;
-                break;
-            default:
-                break;
+            } else if (path is not null) {
+                visualizer.TogglePath(path?.start);
+            }
         }
         FollowPath();
         if (Player.input[0].x == 0 && Player.input[0].y == 0) {

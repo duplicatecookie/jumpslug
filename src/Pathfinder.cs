@@ -5,8 +5,6 @@ using System.Linq;
 
 using MoreSlugcats;
 
-using RWCustom;
-
 using UnityEngine;
 
 using IVec2 = RWCustom.IntVector2;
@@ -102,7 +100,6 @@ class Pathfinder {
 
     public Player player;
     public Node?[,]? graph;
-    private bool justPressedG;
     public Pathfinder(Player player) {
         this.player = player;
         graph = new Node[0, 0];
@@ -130,20 +127,12 @@ class Pathfinder {
     }
 
     public void Update() {
-        switch ((Input.GetKey(KeyCode.G), justPressedG)) {
-            case (true, false):
-                justPressedG = true;
-                if (graph is null) {
-                    NewRoom();
-                } else {
-                    graph = null;
-                }
-                break;
-            case (false, true):
-                justPressedG = false;
-                break;
-            default:
-                break;
+        if (InputHelper.JustPressed(KeyCode.G)) {
+            if (graph is null) {
+                NewRoom();
+            } else {
+                graph = null;
+            }
         }
     }
 
@@ -707,32 +696,24 @@ static class PathfinderHooks {
         // horrible hack because creature creation is pain
         if (self.abstractCreature?.abstractAI is null) {
             var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
-            switch ((Input.GetMouseButton(1), self.GetCWT().justPressedRight)) {
-                case (true, false):
-                    self.GetCWT().justPressedRight = true;
-                    var scugTemplate = StaticWorld.GetCreatureTemplate(MoreSlugcatsEnums.CreatureTemplateType.SlugNPC);
-                    var abstractScug = new AbstractCreature(
-                        self.room.world,
-                        scugTemplate,
-                        null,
-                        self.room.ToWorldCoordinate(mousePos),
-                        self.room.game.GetNewID());
-                    abstractScug.state = new PlayerNPCState(abstractScug, 0) {
-                        forceFullGrown = true,
-                    };
-                    self.room.abstractRoom.AddEntity(abstractScug);
-                    abstractScug.RealizeInRoom();
-                    abstractScug.abstractAI = new JumpSlugAbstractAI(abstractScug, self.room.world) {
-                        RealAI = new JumpSlugAI(abstractScug, self.room.world),
-                    };
-                    var realizedScug = (abstractScug.realizedCreature as Player)!;
-                    realizedScug.controller = null;
-                    break;
-                case (false, true):
-                    self.GetCWT().justPressedRight = false;
-                    break;
-                default:
-                    break;
+            if (InputHelper.JustPressedMouseButton(1)) {
+                var scugTemplate = StaticWorld.GetCreatureTemplate(MoreSlugcatsEnums.CreatureTemplateType.SlugNPC);
+                var abstractScug = new AbstractCreature(
+                    self.room.world,
+                    scugTemplate,
+                    null,
+                    self.room.ToWorldCoordinate(mousePos),
+                    self.room.game.GetNewID());
+                abstractScug.state = new PlayerNPCState(abstractScug, 0) {
+                    forceFullGrown = true,
+                };
+                self.room.abstractRoom.AddEntity(abstractScug);
+                abstractScug.RealizeInRoom();
+                abstractScug.abstractAI = new JumpSlugAbstractAI(abstractScug, self.room.world) {
+                    RealAI = new JumpSlugAI(abstractScug, self.room.world),
+                };
+                var realizedScug = (abstractScug.realizedCreature as Player)!;
+                realizedScug.controller = null;
             }
         }
         orig(self, eu);
