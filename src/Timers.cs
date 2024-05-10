@@ -24,14 +24,15 @@ class FunctionTimer {
     }
 
     public void Report() {
-        double totalSeconds = (watch.ElapsedTicks / Stopwatch.Frequency);
+        double totalSeconds = ((double)watch.ElapsedTicks / (double)Stopwatch.Frequency);
         Plugin.Logger!.LogInfo(
             String.Format(
-                "name: {0}, invocations: {1}, total time: {2} ms, average time: {3} μs",
+                "name: {0}, invocations: {1}, ticks: {2} total time: {3} ms, average time: {4} μs",
                 name,
                 invocations,
-                totalSeconds * 1000,
-                (totalSeconds * 1000_000) / invocations
+                watch.ElapsedTicks,
+                Math.Round(totalSeconds * 1000.0),
+                Math.Round((totalSeconds * 1000_000.0) / (double)invocations)
             )
         );
     }
