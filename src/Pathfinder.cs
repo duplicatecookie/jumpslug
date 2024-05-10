@@ -487,6 +487,9 @@ class Pathfinder {
             Plugin.Logger!.LogDebug($"no node at destination ({destination.x}, {destination.y})");
             return null;
         }
+        if (Timers.active) {
+            Timers.findPath.Start();
+        }
         var openNodes = new List<PathNode>()
         {
             new(start, destination, 0),
@@ -507,6 +510,9 @@ class Pathfinder {
             // might be redundant
             if (currentNode is null) {
                 Plugin.Logger!.LogError($"current node was null");
+                if (Timers.active) {
+                    Timers.findPath.Stop();
+                }
                 return null;
             }
 
@@ -524,6 +530,9 @@ class Pathfinder {
                     previousType = currentType;
                     previousNode = currentNode;
                     currentNode = nextNode;
+                }
+                if (Timers.active) {
+                    Timers.findPath.Stop();
                 }
                 return previousNode is null ? null : new Path(previousNode);
             }
@@ -670,6 +679,9 @@ class Pathfinder {
             foreach (var connection in graphNode.dynamicConnections) {
                 CheckConnection(connection);
             }
+        }
+        if (Timers.active) {
+            Timers.findPath.Stop();
         }
         return null;
     }

@@ -1,4 +1,4 @@
-﻿using System;
+﻿using System.Diagnostics;
 
 using BepInEx;
 using BepInEx.Logging;
@@ -11,15 +11,23 @@ class Plugin : BaseUnityPlugin {
     public Plugin() {
         Logger = base.Logger;
     }
-    // Add hooks
+
     public void OnEnable() {
         On.RainWorld.OnModsInit += Extras.WrapInit(LoadResources);
+
+        if (Stopwatch.IsHighResolution) {
+            Logger!.LogInfo("Performance timing enabled");
+            Timers.active = true;
+        } else {
+            Logger!.LogError("No high resolution timer available, disabling performance timing");
+        }
 
         //TemplateType.RegisterValues();
         //TemplateHooks.RegisterHooks();
 
         PathfinderHooks.RegisterHooks();
         AIHooks.RegisterHooks();
+        TimerHooks.RegisterHooks();
     }
 
     public void OnDisable() {

@@ -111,10 +111,16 @@ class JumpSlugAI : ArtificialIntelligence {
             waitOneTick = false;
             return;
         }
+        if (Timers.active) {
+            Timers.followPath.Start();
+        }
         var currentNode = pathfinder.CurrentNode();
         if (currentNode is null) {
             Player.input[0] = input;
             // can't move on non-existent node, wait instead
+            if (Timers.active) {
+                Timers.followPath.Stop();
+            }
             return;
         } else if (currentNode.gridPos == path.cursor.gridPos) {
             if (path.cursor.connection is null) {
@@ -154,7 +160,7 @@ class JumpSlugAI : ArtificialIntelligence {
                         // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
                         if (dir == nextDir) {
                             input.jmp = true;
-                        // prevents getting stuck when moving backwards into a corner
+                            // prevents getting stuck when moving backwards into a corner
                         } else if (dir.Dot(nextDir) == 0) {
                             input.x = nextDir.x;
                             input.y = nextDir.y;
@@ -200,12 +206,18 @@ class JumpSlugAI : ArtificialIntelligence {
             ) {
                 if (currentNode.gridPos == cursor.gridPos) {
                     path.cursor = cursor;
+                    if (Timers.active) {
+                        Timers.followPath.Stop();
+                    }
                     return;
                 }
             }
             path = destination is null ? null : pathfinder.FindPath(currentNode.gridPos, destination.Value);
         }
         Player.input[0] = input;
+        if (Timers.active) {
+            Timers.followPath.Stop();
+        }
     }
 }
 
