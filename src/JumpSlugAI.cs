@@ -52,12 +52,12 @@ class JumpSlugAI : ArtificialIntelligence {
             destination = Player.room.GetTilePosition(mousePos);
             path = start is null || destination is null ? null : pathfinder.FindPath(start.Value, destination.Value);
             if (visualizer.visualizingPath) {
-                visualizer.TogglePath(path?.start);
+                visualizer.TogglePath(path);
                 if (path is not null) {
-                    visualizer.TogglePath(path?.start);
+                    visualizer.TogglePath(path);
                 }
             } else if (path is not null) {
-                visualizer.TogglePath(path?.start);
+                visualizer.TogglePath(path);
             }
         }
         FollowPath();
@@ -88,27 +88,32 @@ class JumpSlugAI : ArtificialIntelligence {
             Timers.followPath.Start();
         }
         var currentNode = pathfinder.CurrentNode();
-        if (currentNode is null) {
+        var currentPathPosNullable = path.CurrentNode();
+        if (currentNode is null || currentPathPosNullable is null) {
             Player.input[0] = input;
             // can't move on non-existent node, wait instead
             if (Timers.active) {
                 Timers.followPath.Stop();
             }
             return;
-        } else if (currentNode.gridPos == path.cursor.gridPos) {
-            if (path.cursor.connection is null) {
+        }
+        var currentPathPos = currentPathPosNullable.Value;
+        if (currentNode.gridPos == currentPathPos) {
+            var currentConnection = path.CurrentConnection();
+            if (currentConnection is null) {
+                Plugin.Logger!.LogDebug("path ended");
                 path = null;
-            } else if (path.cursor.connection.Value.type
-                is Pathfinder.ConnectionType.Walk(int direction)
-            ) {
+            } else if (currentConnection is Pathfinder.ConnectionType.Walk(int direction)) {
                 input.x = direction;
                 if (pathfinder.CurrentNode()?.type is Pathfinder.NodeType.Floor) {
-                    var first = path.cursor.connection?.next;
-                    var second = first?.connection?.next;
-                    if (second?.GetGraphNode(pathfinder)?.type is Pathfinder.NodeType.Corridor
+                    var first = path.PeekNode(1);
+                    var second = path.PeekNode(2);
+                    if (second is not null
+                        && pathfinder.GetNode(second.Value)?.type
+                        is Pathfinder.NodeType.Corridor
                     ) {
                         if (Player.bodyMode != Player.BodyModeIndex.Crawl
-                            && first!.gridPos.y == second.gridPos.y
+                            && first!.Value.y == second.Value.y
                             && Player.input[1].y != -1
                         ) {
                             input.y = -1;
@@ -120,14 +125,10 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.y = 1;
                     }
                 }
-            } else if (path.cursor.connection.Value.type
-                is Pathfinder.ConnectionType.Crawl(IVec2 dir)
-            ) {
+            } else if (currentConnection is Pathfinder.ConnectionType.Crawl(IVec2 dir)) {
                 input.x = dir.x;
                 input.y = dir.y;
-                if (path.cursor.connection.Value.next.connection?.type
-                    is Pathfinder.ConnectionType.Crawl(IVec2 nextDir)
-                ) {
+                if (path.PeekConnection(1) is Pathfinder.ConnectionType.Crawl(IVec2 nextDir)) {
                     if ((Player.mainBodyChunk.pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0) {
                         // turn around if going backwards
                         // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
@@ -140,9 +141,7 @@ class JumpSlugAI : ArtificialIntelligence {
                         }
                     }
                 }
-            } else if (path.cursor.connection.Value.type
-                is Pathfinder.ConnectionType.Climb(IVec2 climbDir)
-            ) {
+            } else if (currentConnection is Pathfinder.ConnectionType.Climb(IVec2 climbDir)) {
                 if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
                     if (climbDir.x != 0) {
                         input.x = climbDir.x;
@@ -152,9 +151,9 @@ class JumpSlugAI : ArtificialIntelligence {
                         }
                     }
                     if (Player.animation != Player.AnimationIndex.StandOnBeam
-                        && path.cursor.GetGraphNode(pathfinder)?.verticalBeam == false
+                        && pathfinder.GetNode(currentPathPos)?.verticalBeam == false
                         && Player.room
-                            .GetTile(path.cursor.gridPos.x, path.cursor.gridPos.y + 1)
+                            .GetTile(currentPathPos.x, currentPathPos.y + 1)
                             .Terrain == Room.Tile.TerrainType.Air
                         && Player.input[1].y != 1
                     ) {
@@ -173,19 +172,26 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
             }
         } else {
-            for (var cursor = path.cursor;
-                cursor.connection is not null;
-                cursor = cursor.connection.Value.next
-            ) {
-                if (currentNode.gridPos == cursor.gridPos) {
-                    path.cursor = cursor;
+            path.Advance();
+            IVec2? current;
+            while ((current = path.CurrentNode()) is not null) {
+                if (currentNode.gridPos == current) {
                     if (Timers.active) {
                         Timers.followPath.Stop();
                     }
                     return;
                 }
+                path.Advance();
             }
             path = destination is null ? null : pathfinder.FindPath(currentNode.gridPos, destination.Value);
+            if (visualizer.visualizingPath) {
+                visualizer.TogglePath(this.path);
+                if (this.path is not null) {
+                    visualizer.TogglePath(this.path);
+                }
+            } else if (this.path is not null) {
+                visualizer.TogglePath(this.path);
+            }
         }
         Player.input[0] = input;
         if (Timers.active) {

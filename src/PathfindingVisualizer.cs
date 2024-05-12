@@ -48,7 +48,7 @@ class PathfindingVisualizer {
                 NodeType.Corridor => Color.blue,
                 NodeType.ShortcutEntrance => Color.cyan,
                 NodeType.Wall => Color.grey,
-                _ => throw new ArgumentOutOfRangeException("unsupported NodeType variant"),
+                _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
             };
 
             var pos = Player.room.MiddleOfTile(node.gridPos);
@@ -87,8 +87,12 @@ class PathfindingVisualizer {
         }
     }
 
-    public void TogglePath(PathNode? path) {
-        if (visualizingPath || pathfinder?.graph is null || path is null) {
+    public void TogglePath(Path? path) {
+        if (visualizingPath
+            || pathfinder?.graph is null
+            || path is null
+            || path.NodeCount <= 2
+        ) {
             foreach (var sprite in pathSprites) {
                 sprite.Destroy();
             }
@@ -97,24 +101,22 @@ class PathfindingVisualizer {
             return;
         }
         visualizingPath = true;
-        PathNode node = path;
-        while (node.connection is not null) {
-            var connection = node.connection.Value;
-            var startTile = node.gridPos;
-            var endTile = connection.next.gridPos;
+        for (int i = 0; i < path!.ConnectionCount; i++) {
+            IVec2 startTile = path.nodes[i + 1];
+            IVec2 endTile = path.nodes[i];
             var start = Player.room.MiddleOfTile(startTile);
             var end = Player.room.MiddleOfTile(endTile);
-            var color = connection.type switch {
+            var color = path.connections[i] switch {
                 ConnectionType.Jump or ConnectionType.WalkOffEdge => Color.blue,
                 ConnectionType.Pounce => Color.green,
                 ConnectionType.Drop => Color.red,
                 ConnectionType.Shortcut => Color.cyan,
                 ConnectionType.Walk or ConnectionType.Climb or ConnectionType.Crawl => Color.white,
-                _ => throw new ArgumentOutOfRangeException(),
+                _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
             };
             int direction = startTile.x < endTile.x ? 1 : -1;
-
-            if (connection.type is ConnectionType.Jump) {
+            var connection = path.connections[i];
+            if (connection is ConnectionType.Jump) {
                 // this node can be null only if the path is constructed incorrectly so this should throw
                 Node graphNode = pathfinder.graph[startTile.x, startTile.y]!;
                 if (graphNode.verticalBeam && !graphNode.horizontalBeam) {
@@ -148,7 +150,7 @@ class PathfindingVisualizer {
                     }
                     VisualizeJump(v0, startTile, endTile);
                 }
-            } else if (connection.type is ConnectionType.WalkOffEdge) {
+            } else if (connection is ConnectionType.WalkOffEdge) {
                 var startPos = new IVec2(
                     startTile.x,
                     pathfinder.GetNode(startTile)?.type is NodeType.Corridor ? startTile.y : startTile.y + 1
@@ -167,7 +169,6 @@ class PathfindingVisualizer {
             var sprite = new DebugSprite(start, mesh, Player.room);
             Player.room.AddObject(sprite);
             pathSprites.Add(sprite);
-            node = connection.next;
         }
     }
 

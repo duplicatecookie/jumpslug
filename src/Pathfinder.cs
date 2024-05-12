@@ -12,13 +12,56 @@ using IVec2 = RWCustom.IntVector2;
 namespace JumpSlug;
 
 class Pathfinder {
-    // linked list of path nodes with cursor pointing to the current path node
     public class Path {
-        public PathNode start;
-        public PathNode cursor;
-        public Path(PathNode start) {
-            this.start = start;
-            cursor = start;
+        // these aren't private because it's more straightforward for the visualizer to use manual indexing
+        // and the accessors can't be made const correct
+        public int cursor;
+        public readonly List<IVec2> nodes;
+        public readonly List<ConnectionType> connections;
+
+        public Path(PathNode startNode) {
+            nodes = new();
+            connections = new();
+            var currentNode = startNode;
+            while (currentNode is not null) {
+                nodes.Add(currentNode.gridPos);
+                if (currentNode.connection is not null) {
+                    connections.Add(currentNode.connection.Value.type);
+                }
+                currentNode = currentNode.connection?.next;
+            }
+            cursor = nodes.Count - 1;
+        }
+
+        public int NodeCount => nodes.Count;
+        public int ConnectionCount => connections.Count;
+
+        public IVec2? CurrentNode() {
+            if (cursor < 0) {
+                return null;
+            }
+            return nodes[cursor];
+        }
+        public IVec2? PeekNode(int offset) {
+            if (cursor - offset < 0) {
+                return null;
+            }
+            return nodes[cursor - offset];
+        }
+        public ConnectionType? CurrentConnection() {
+            if (cursor < 1) {
+                return null;
+            }
+            return connections[cursor - 1];
+        }
+        public ConnectionType? PeekConnection(int offset) {
+            if (cursor - offset < 1) {
+                return null;
+            }
+            return connections[cursor - offset - 1];
+        }
+        public void Advance() {
+            cursor -= 1;
         }
     }
 
@@ -32,8 +75,6 @@ class Pathfinder {
             pathCost = cost;
             heuristic = Mathf.Sqrt((gridPos.x - goalPos.x) * (gridPos.x - goalPos.x) + (gridPos.y - goalPos.y) * (gridPos.y - goalPos.y));
         }
-
-        public Node? GetGraphNode(Pathfinder pathfinder) => pathfinder.GetNode(gridPos);
     }
     public struct PathConnection {
         public ConnectionType type;
@@ -508,22 +549,10 @@ class Pathfinder {
             var currentPos = currentNode.gridPos;
 
             if (currentPos == destination) {
-                PathNode? previousNode = null;
-                PathNode? nextNode = null;
-                ConnectionType? previousType = null;
-                ConnectionType? currentType;
-                while (currentNode is not null) {
-                    nextNode = currentNode.connection?.next;
-                    currentType = currentNode.connection?.type;
-                    currentNode.connection = previousType is null ? null : new PathConnection(previousType, previousNode!);
-                    previousType = currentType;
-                    previousNode = currentNode;
-                    currentNode = nextNode;
-                }
                 if (Timers.active) {
                     Timers.findPath.Stop();
                 }
-                return previousNode is null ? null : new Path(previousNode);
+                return new Path(currentNode);
             }
 
             openNodes.RemoveAt(currentIndex);
