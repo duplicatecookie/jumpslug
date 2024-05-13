@@ -163,6 +163,8 @@ class Pathfinder {
             || player.animation == Player.AnimationIndex.StandOnBeam
         ) {
             return GetNode(pos.x, pos.y - 1) is Node node ? node : GetNode(pos.x, pos.y - 2);
+        } else if (player.bodyMode == Player.BodyModeIndex.Crawl) {
+            return GetNode(pos) is Node node ? node : GetNode(pos.x, pos.y - 1);
         }
         return GetNode(pos);
     }

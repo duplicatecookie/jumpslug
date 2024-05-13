@@ -107,11 +107,14 @@ class PathfindingVisualizer {
             var start = Player.room.MiddleOfTile(startTile);
             var end = Player.room.MiddleOfTile(endTile);
             var color = path.connections[i] switch {
-                ConnectionType.Jump or ConnectionType.WalkOffEdge => Color.blue,
-                ConnectionType.Pounce => Color.green,
+                ConnectionType.Jump
+                or ConnectionType.WalkOffEdge
+                or ConnectionType.Pounce => Color.blue,
                 ConnectionType.Drop => Color.red,
                 ConnectionType.Shortcut => Color.cyan,
-                ConnectionType.Walk or ConnectionType.Climb or ConnectionType.Crawl => Color.white,
+                ConnectionType.Crawl => Color.green,
+                ConnectionType.Climb => Color.magenta,
+                ConnectionType.Walk => Color.white,
                 _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
             };
             int direction = startTile.x < endTile.x ? 1 : -1;

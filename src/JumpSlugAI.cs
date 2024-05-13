@@ -111,7 +111,9 @@ class JumpSlugAI : ArtificialIntelligence {
                         && pathfinder.GetNode(second.Value)?.type
                         is Pathfinder.NodeType.Corridor
                     ) {
+                        var first = path.PeekNode(1);
                         if (Player.bodyMode != Player.BodyModeIndex.Crawl
+                            && second.Value.y != first!.Value.y + 1
                             && Player.input[1].y != -1
                         ) {
                             input.y = -1;
