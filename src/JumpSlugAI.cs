@@ -105,15 +105,13 @@ class JumpSlugAI : ArtificialIntelligence {
                 path = null;
             } else if (currentConnection is Pathfinder.ConnectionType.Walk(int direction)) {
                 input.x = direction;
-                if (pathfinder.CurrentNode()?.type is Pathfinder.NodeType.Floor) {
-                    var first = path.PeekNode(1);
+                if (currentNode.type is Pathfinder.NodeType.Floor) {
                     var second = path.PeekNode(2);
                     if (second is not null
                         && pathfinder.GetNode(second.Value)?.type
                         is Pathfinder.NodeType.Corridor
                     ) {
                         if (Player.bodyMode != Player.BodyModeIndex.Crawl
-                            && first!.Value.y == second.Value.y
                             && Player.input[1].y != -1
                         ) {
                             input.y = -1;
@@ -185,12 +183,12 @@ class JumpSlugAI : ArtificialIntelligence {
             }
             path = destination is null ? null : pathfinder.FindPath(currentNode.gridPos, destination.Value);
             if (visualizer.visualizingPath) {
-                visualizer.TogglePath(this.path);
-                if (this.path is not null) {
-                    visualizer.TogglePath(this.path);
+                visualizer.TogglePath(path);
+                if (path is not null) {
+                    visualizer.TogglePath(path);
                 }
-            } else if (this.path is not null) {
-                visualizer.TogglePath(this.path);
+            } else if (path is not null) {
+                visualizer.TogglePath(path);
             }
         }
         Player.input[0] = input;

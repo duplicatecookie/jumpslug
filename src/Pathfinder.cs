@@ -280,16 +280,7 @@ class Pathfinder {
                             new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     }
-                    if (GetNode(x + 1, y - 1)?.type is NodeType.Corridor) {
-                        // these need to have higher weights than normal movement so the pathfinding algorithm doesn't prefer them
-                        ConnectNodes(
-                            graph[x, y]!,
-                            graph[x + 1, y - 1]!,
-                            new ConnectionType.Crawl(new IVec2(1, -1)),
-                            new ConnectionType.Crawl(new IVec2(-1, 1)),
-                            2f
-                        );
-                    } else if (GetNode(x + 1, y - 1)?.type is NodeType.Slope) {
+                    if (GetNode(x + 1, y - 1)?.type is NodeType.Slope) {
                         ConnectNodes(
                             graph[x, y]!,
                             graph[x + 1, y - 1]!,
@@ -327,57 +318,61 @@ class Pathfinder {
                     }
                 }
 
-                // TODO: climbing is slower than walking, the connection weights should be adjusted accordingly
-                if (graph[x, y]!.horizontalBeam) {
-                    if (GetNode(x + 1, y)?.horizontalBeam == true) {
-                        ConnectNodes(
-                            graph[x, y]!,
-                            graph[x + 1, y]!,
-                            new ConnectionType.Climb(new IVec2(1, 0)),
-                            new ConnectionType.Climb(new IVec2(-1, 0))
-                        );
-                    }
-                }
-                if (graph[x, y]!.verticalBeam) {
-                    if (GetNode(x, y + 1)?.verticalBeam == true) {
-                        ConnectNodes(
-                            graph[x, y]!,
-                            graph[x, y + 1]!,
-                            new ConnectionType.Climb(new IVec2(0, 1)),
-                            new ConnectionType.Climb(new IVec2(0, -1))
-                        );
-                    }
-                }
-                // TODO: weights, again
+                var rightNode = GetNode(x + 1, y);
+                var aboveNode = GetNode(x, y + 1);
                 if (graph[x, y]!.type is NodeType.Corridor) {
-                    if (GetNode(x + 1, y)?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
+                    if (rightNode?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
                         ConnectNodes(
                             graph[x, y]!,
-                            graph[x + 1, y]!,
+                            rightNode,
                             new ConnectionType.Crawl(new IVec2(1, 0)),
                             new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
-                    }
-                    if (GetNode(x + 1, y + 1)?.type is NodeType.Floor) {
-                        // these need to have higher weights than normal movement so the pathfinding algorithm doesn't prefer them over walking on platforms
+                    } else if (rightNode?.horizontalBeam == true) {
                         ConnectNodes(
                             graph[x, y]!,
-                            graph[x + 1, y + 1]!,
-                            new ConnectionType.Crawl(new IVec2(1, 1)),
-                            new ConnectionType.Crawl(new IVec2(-1, -1)),
-                            2f
+                            rightNode,
+                            new ConnectionType.Crawl(new IVec2(1, 0)),
+                            rightNode.horizontalBeam
+                                ? new ConnectionType.Climb(new IVec2(-1, 0))
+                                : new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     }
                     if (GetNode(x + 1, y - 1)?.type is NodeType.Floor) {
                         graph[x + 1, y - 1]!.connections.Add(new NodeConnection(new ConnectionType.Walk(-1), graph[x, y]!));
                     }
-                    if (GetNode(x, y + 1)?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
+                    if (aboveNode?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
                         ConnectNodes(
                             graph[x, y]!,
-                            graph[x, y + 1]!,
+                            aboveNode,
                             new ConnectionType.Crawl(new IVec2(0, 1)),
                             new ConnectionType.Crawl(new IVec2(0, -1))
                         );
+                    }
+                } else {
+                    if (graph[x, y]!.horizontalBeam) {
+                        if (rightNode?.horizontalBeam == true) {
+                            ConnectNodes(
+                                graph[x, y]!,
+                                graph[x + 1, y]!,
+                                new ConnectionType.Climb(new IVec2(1, 0)),
+                                rightNode.type is NodeType.Corridor
+                                    ? new ConnectionType.Crawl(new IVec2(-1, 0))
+                                    : new ConnectionType.Climb(new IVec2(-1, 0))
+                            );
+                        }
+                    }
+                    if (graph[x, y]!.verticalBeam) {
+                        if (aboveNode?.verticalBeam == true) {
+                            ConnectNodes(
+                                graph[x, y]!,
+                                aboveNode,
+                                new ConnectionType.Climb(new IVec2(0, 1)),
+                                aboveNode.type is NodeType.Corridor
+                                    ? new ConnectionType.Crawl(new IVec2(0, -1))
+                                    : new ConnectionType.Climb(new IVec2(0, -1))
+                            );
+                        }
                     }
                 }
                 if (graph[x, y]!.type is NodeType.ShortcutEntrance) {
