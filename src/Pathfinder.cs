@@ -37,7 +37,7 @@ class Pathfinder {
                             connections.Add(new ConnectionType.GrabPole());
                         } else if (nextConnection is ConnectionType.Walk) {
                             if (dir.y == 1) {
-                                connections.Add(new ConnectionType.Drop());
+                                connections.Add(new ConnectionType.Drop(new IgnoreList()));
                                 var abovePos = currentNode.gridPos;
                                 abovePos.y += 1;
                                 if (pathfinder.GetNode(abovePos)?.verticalBeam == true) {
@@ -50,7 +50,7 @@ class Pathfinder {
                                 nodes.Add(currentNode.gridPos);
                                 connections.Add(previousConnection);
                             } else if (dir.y == -1) {
-                                connections.Add(new ConnectionType.Drop());
+                                connections.Add(new ConnectionType.Drop(new IgnoreList()));
                             } else {
                                 Plugin.Logger!.LogError("invalid path: climb connection leading to walk connection");
                                 return;
@@ -163,6 +163,41 @@ class Pathfinder {
         }
     }
 
+    public class IgnoreList {
+        private int cursor;
+        private List<IVec2> ignoreList;
+
+        public IgnoreList() {
+            cursor = 0;
+            ignoreList = new();
+        }
+
+        // builder like thing because it seems silly to implement IEnumerable only for the collection initialiser
+        public void Add(IVec2 node) {
+            ignoreList.Add(node);
+        }
+
+        public bool ShouldIgnore(IVec2 node) {
+            while (cursor < ignoreList.Count) {
+                if (node == ignoreList[cursor]) {
+                    return true;
+                }
+                cursor++;
+            }
+            return false;
+        }
+
+        public IgnoreList Clone() {
+            var cloneList = new List<IVec2>();
+            cloneList.AddRange(ignoreList);
+            var clone = new IgnoreList() {
+                cursor = cursor,
+                ignoreList = cloneList,
+            };
+            return clone;
+        }
+    }
+
     public record ConnectionType {
         public record Walk(int Direction) : ConnectionType();
         public record Climb(IVec2 Direction) : ConnectionType();
@@ -172,7 +207,7 @@ class Pathfinder {
         public record WalkOffEdge(int Direction) : ConnectionType();
         public record Pounce(int Direction) : ConnectionType();
         public record Shortcut() : ConnectionType();
-        public record Drop() : ConnectionType();
+        public record Drop(IgnoreList ignoreList) : ConnectionType();
 
         private ConnectionType() { }
     }
@@ -461,17 +496,43 @@ class Pathfinder {
         if (graph is null || graph[x, y]?.type is NodeType.Floor or NodeType.Slope) {
             return;
         }
+        var ignoreList = new IgnoreList();
         for (int i = y - 1; i >= 0; i--) {
             if (graph[x, i] is null) {
                 continue;
             }
-            if (graph[x, i]!.type is NodeType.Floor or NodeType.Slope) {
+            if (graph[x, i]!.type is NodeType.Floor) {
                 // t = sqrt(2 * d / g)
                 // weight might have inaccurate units
-                graph[x, y]!.dynamicConnections.Add(new NodeConnection(new ConnectionType.Drop(), graph[x, i]!, Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity) * 4.2f / 20));
-                break;
+                graph[x, y]!.dynamicConnections.Add(
+                    new NodeConnection(
+                        new ConnectionType.Drop(ignoreList),
+                        graph[x, i]!,
+                        Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity) * 4.2f / 20
+                    )
+                );
+                if (GetNode(x, i - 1)?.hasPlatform == false) {
+                    break;
+                }
+            } else if (graph[x, i]!.type is NodeType.Slope) {
+                graph[x, y]!.dynamicConnections.Add(
+                    new NodeConnection(
+                        new ConnectionType.Drop(ignoreList),
+                        graph[x, i]!,
+                        Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity) * 4.2f / 20
+                    )
+                );
             } else if (graph[x, i]!.horizontalBeam) {
-                graph[x, y]!.dynamicConnections.Add(new NodeConnection(new ConnectionType.Drop(), graph[x, i]!, Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity)));
+                graph[x, y]!.dynamicConnections.Add(
+                    new NodeConnection(
+                        new ConnectionType.Drop(ignoreList.Clone()),
+                        graph[x, i]!,
+                        Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity)
+                    )
+                );
+                ignoreList.Add(new IVec2(x, i));
+            } else {
+                ignoreList.Add(new IVec2(x, i));
             }
         }
     }
@@ -638,7 +699,7 @@ class Pathfinder {
                     v0.x = -v0.x;
                     TraceJump(graphNode, currentPos, v0, new ConnectionType.Jump(-1));
                 }
-                if (!graphNode.dynamicConnections.Any(c => c.type == new ConnectionType.Drop())) {
+                if (!graphNode.dynamicConnections.Any(c => c.type is ConnectionType.Drop)) {
                     TraceDrop(currentPos.x, currentPos.y);
                 }
             }
@@ -655,7 +716,7 @@ class Pathfinder {
                     TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(-1));
                 }
 
-                if (!graphNode.dynamicConnections.Any(c => c.type == new ConnectionType.Drop())) {
+                if (!graphNode.dynamicConnections.Any(c => c.type is ConnectionType.Drop)) {
                     TraceDrop(currentPos.x, currentPos.y);
                 }
             }

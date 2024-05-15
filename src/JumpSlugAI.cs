@@ -98,8 +98,8 @@ class JumpSlugAI : ArtificialIntelligence {
             return;
         }
         var currentPathPos = currentPathPosNullable.Value;
+        var currentConnection = path.CurrentConnection();
         if (currentNode.gridPos == currentPathPos) {
-            var currentConnection = path.CurrentConnection();
             if (currentConnection is null) {
                 Plugin.Logger!.LogDebug("path ended");
                 path = null;
@@ -170,8 +170,19 @@ class JumpSlugAI : ArtificialIntelligence {
                 } else {
                     Plugin.Logger!.LogWarning("trying to climb on node without pole");
                 }
+            } else if (currentConnection is Pathfinder.ConnectionType.Drop) {
+                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                    input.y = -1;
+                    input.jmp = true;
+                } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb) {
+                    input.y = -1;
+                }
             }
-        } else {
+        } else if (
+            !(currentConnection
+            is Pathfinder.ConnectionType.Drop(var ignoreList)
+            && ignoreList.ShouldIgnore(currentNode.gridPos))
+        ) {
             path.Advance();
             IVec2? current;
             while ((current = path.CurrentNode()) is not null) {
