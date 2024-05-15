@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Security.Policy;
 
 using MoreSlugcats;
 
@@ -19,14 +20,47 @@ class Pathfinder {
         public readonly List<IVec2> nodes;
         public readonly List<ConnectionType> connections;
 
-        public Path(PathNode startNode) {
+        public Path(PathNode startNode, Pathfinder pathfinder) {
             nodes = new();
             connections = new();
             var currentNode = startNode;
             while (currentNode is not null) {
                 nodes.Add(currentNode.gridPos);
                 if (currentNode.connection is not null) {
-                    connections.Add(currentNode.connection.Value.type);
+                    // this is necessary because the pathfinder can't account for the slugcat taking up more than one tile
+                    // and the AI movement code can't account for missing sections of the path
+                    // any non-hacky way of dealing with this requires sweeping code changes that complicate everything
+                    var nextConnection = connections.Count > 0 ? connections[connections.Count - 1] : null;
+                    var previousConnection = currentNode.connection.Value.type;
+                    if (previousConnection is ConnectionType.Climb(IVec2 dir)) {
+                        if (currentNode.connection.Value.next.connection?.type is ConnectionType.Walk) {
+                            connections.Add(new ConnectionType.GrabPole());
+                        } else if (nextConnection is ConnectionType.Walk) {
+                            if (dir.y == 1) {
+                                connections.Add(new ConnectionType.Drop());
+                                var abovePos = currentNode.gridPos;
+                                abovePos.y += 1;
+                                if (pathfinder.GetNode(abovePos)?.verticalBeam == true) {
+                                    nodes.Add(abovePos);
+                                } else {
+                                    Plugin.Logger!.LogError("climbing up from a pole onto a platform is currently only supported when there a two poles above the platform");
+                                    return;
+                                }
+                                connections.Add(new ConnectionType.Climb(new IVec2(0, 1)));
+                                nodes.Add(currentNode.gridPos);
+                                connections.Add(previousConnection);
+                            } else if (dir.y == -1) {
+                                connections.Add(new ConnectionType.Drop());
+                            } else {
+                                Plugin.Logger!.LogError("invalid path: climb connection leading to walk connection");
+                                return;
+                            }
+                        } else {
+                            connections.Add(previousConnection);
+                        }
+                    } else {
+                        connections.Add(previousConnection);
+                    }
                 }
                 currentNode = currentNode.connection?.next;
             }
@@ -52,6 +86,7 @@ class Pathfinder {
             if (cursor < 1) {
                 return null;
             }
+            Plugin.Logger!.LogDebug($"{cursor}");
             return connections[cursor - 1];
         }
         public ConnectionType? PeekConnection(int offset) {
@@ -99,6 +134,8 @@ class Pathfinder {
             connections = new();
             dynamicConnections = new();
         }
+
+        public bool HasBeam => verticalBeam || horizontalBeam;
     }
     public record NodeType {
         public record Air() : NodeType();
@@ -130,6 +167,7 @@ class Pathfinder {
         public record Walk(int Direction) : ConnectionType();
         public record Climb(IVec2 Direction) : ConnectionType();
         public record Crawl(IVec2 Direction) : ConnectionType();
+        public record GrabPole() : ConnectionType();
         public record Jump(int Direction) : ConnectionType();
         public record WalkOffEdge(int Direction) : ConnectionType();
         public record Pounce(int Direction) : ConnectionType();
@@ -293,6 +331,9 @@ class Pathfinder {
                     if (GetNode(x + 1, y + 1)?.type is NodeType.Corridor) {
                         graph[x, y]!.connections.Add(new NodeConnection(new ConnectionType.Walk(1), graph[x + 1, y + 1]!));
                     }
+                    if (GetNode(x, y + 1)?.HasBeam == true) {
+                        graph[x, y]!.connections.Add(new NodeConnection(new ConnectionType.GrabPole(), graph[x, y + 1]!, 1.5f));
+                    }
                 }
 
                 if (graph[x, y]!.type is NodeType.Slope) {
@@ -317,6 +358,9 @@ class Pathfinder {
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
+                    }
+                    if (GetNode(x, y + 1)?.HasBeam == true) {
+                        graph[x, y]!.connections.Add(new NodeConnection(new ConnectionType.GrabPole(), graph[x, y + 1]!, 1.5f));
                     }
                 }
 
@@ -352,29 +396,30 @@ class Pathfinder {
                         );
                     }
                 } else {
-                    if (graph[x, y]!.horizontalBeam) {
-                        if (rightNode?.horizontalBeam == true) {
-                            ConnectNodes(
-                                graph[x, y]!,
-                                graph[x + 1, y]!,
-                                new ConnectionType.Climb(new IVec2(1, 0)),
-                                rightNode.type is NodeType.Corridor
-                                    ? new ConnectionType.Crawl(new IVec2(-1, 0))
-                                    : new ConnectionType.Climb(new IVec2(-1, 0))
-                            );
-                        }
+                    if (graph[x, y]!.horizontalBeam
+                        && rightNode?.horizontalBeam == true
+                    ) {
+                        ConnectNodes(
+                            graph[x, y]!,
+                            graph[x + 1, y]!,
+                            new ConnectionType.Climb(new IVec2(1, 0)),
+                            rightNode.type is NodeType.Corridor
+                                ? new ConnectionType.Crawl(new IVec2(-1, 0))
+                                : new ConnectionType.Climb(new IVec2(-1, 0))
+                        );
                     }
-                    if (graph[x, y]!.verticalBeam) {
-                        if (aboveNode?.verticalBeam == true) {
-                            ConnectNodes(
-                                graph[x, y]!,
-                                aboveNode,
-                                new ConnectionType.Climb(new IVec2(0, 1)),
-                                aboveNode.type is NodeType.Corridor
-                                    ? new ConnectionType.Crawl(new IVec2(0, -1))
-                                    : new ConnectionType.Climb(new IVec2(0, -1))
-                            );
-                        }
+                    if (graph[x, y]!.verticalBeam
+                        && aboveNode?.verticalBeam == true
+                    ) {
+                        ConnectNodes(
+                            graph[x, y]!,
+                            aboveNode,
+                            new ConnectionType.Climb(new IVec2(0, 1)),
+                            aboveNode.type is NodeType.Corridor
+                                ? new ConnectionType.Crawl(new IVec2(0, -1))
+                                : new ConnectionType.Climb(new IVec2(0, -1))
+                        );
+
                     }
                 }
                 if (graph[x, y]!.type is NodeType.ShortcutEntrance) {
@@ -423,10 +468,10 @@ class Pathfinder {
             if (graph[x, i]!.type is NodeType.Floor or NodeType.Slope) {
                 // t = sqrt(2 * d / g)
                 // weight might have inaccurate units
-                graph[x, y]!.connections.Add(new NodeConnection(new ConnectionType.Drop(), graph[x, i]!, Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity) * 4.2f / 20));
+                graph[x, y]!.dynamicConnections.Add(new NodeConnection(new ConnectionType.Drop(), graph[x, i]!, Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity) * 4.2f / 20));
                 break;
             } else if (graph[x, i]!.horizontalBeam) {
-                graph[x, y]!.connections.Add(new NodeConnection(new ConnectionType.Drop(), graph[x, i]!, Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity)));
+                graph[x, y]!.dynamicConnections.Add(new NodeConnection(new ConnectionType.Drop(), graph[x, i]!, Mathf.Sqrt(2 * 20 * (y - i) / player.room.gravity)));
             }
         }
     }
@@ -549,7 +594,7 @@ class Pathfinder {
                 if (Timers.active) {
                     Timers.findPath.Stop();
                 }
-                return new Path(currentNode);
+                return new Path(currentNode, this);
             }
 
             openNodes.RemoveAt(currentIndex);

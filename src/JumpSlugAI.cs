@@ -161,14 +161,14 @@ class JumpSlugAI : ArtificialIntelligence {
                     } else {
                         input.y = climbDir.y;
                     }
+                }
+            } else if (currentConnection is Pathfinder.ConnectionType.GrabPole) {
+                if (currentNode.verticalBeam) {
+                    input.y = 1;
+                } else if (currentNode.horizontalBeam) {
+                    input.x = Player.flipDirection;
                 } else {
-                    if (currentNode.verticalBeam) {
-                        input.y = 1;
-                    } else if (currentNode.horizontalBeam) {
-                        input.x = Player.flipDirection;
-                    } else {
-                        Plugin.Logger!.LogWarning("trying to climb on node without pole");
-                    }
+                    Plugin.Logger!.LogWarning("trying to climb on node without pole");
                 }
             }
         } else {

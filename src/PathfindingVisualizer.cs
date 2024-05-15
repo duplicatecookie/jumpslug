@@ -115,6 +115,7 @@ class PathfindingVisualizer {
                 ConnectionType.Crawl => Color.green,
                 ConnectionType.Climb => Color.magenta,
                 ConnectionType.Walk => Color.white,
+                ConnectionType.GrabPole => Color.grey,
                 _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
             };
             int direction = startTile.x < endTile.x ? 1 : -1;
