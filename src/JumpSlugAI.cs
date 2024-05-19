@@ -196,13 +196,22 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
                 path.Advance();
             }
-            path = destination is null
-                ? null
-                : pathfinder.FindPath(
+            if (destination is null) {
+                path = null;
+            } else if (Timers.active) {
+                Timers.followPath.Stop();
+                pathfinder.FindPath(
                     currentNode.gridPos,
                     destination.Value,
                     new SlugcatDescriptor(Player)
                 );
+            } else {
+                pathfinder.FindPath(
+                    currentNode.gridPos,
+                    destination.Value,
+                    new SlugcatDescriptor(Player)
+                );
+            }
             if (visualizer.visualizingPath) {
                 visualizer.TogglePath(path, new SlugcatDescriptor(Player));
                 if (path is not null) {
