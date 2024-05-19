@@ -19,3 +19,10 @@ static class Vector2Extension {
         return self.x * other.x + self.y * other.y;
     }
 }
+
+static class RoomHelper {
+    public static Vector2 MiddleOfTile(int x, int y) => new Vector2(20 * x + 10, 20 * y + 10);
+    public static Vector2 MiddleOfTile(IVec2 pos) => MiddleOfTile(pos.x ,pos.y);
+    public static IVec2 TilePosition(float x, float y) => new IVec2((int)Mathf.Floor(x / 20), (int)Mathf.Floor(y / 20));
+    public static IVec2 TilePosition(Vector2 pos) => TilePosition(pos.x, pos.y);
+}

@@ -26,9 +26,10 @@ class Plugin : BaseUnityPlugin {
         //TemplateType.RegisterValues();
         //TemplateHooks.RegisterHooks();
 
-        PathfinderHooks.RegisterHooks();
+        Pathfinding.PathfinderHooks.RegisterHooks();
         AIHooks.RegisterHooks();
         TimerHooks.RegisterHooks();
+        RoomHooks.RegisterHooks();
     }
 
     public void OnDisable() {
@@ -37,8 +38,9 @@ class Plugin : BaseUnityPlugin {
         //TemplateType.UnregisterValues();
         //TemplateHooks.UnregisterHooks();
 
-        PathfinderHooks.UnregisterHooks();
+        Pathfinding.PathfinderHooks.UnregisterHooks();
         AIHooks.UnregisterHooks();
+        RoomHooks.UnregisterHooks();
     }
 
     // Load any resources, such as sprites or sounds

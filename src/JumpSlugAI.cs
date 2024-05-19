@@ -8,6 +8,8 @@ using IVec2 = RWCustom.IntVector2;
 
 using UnityEngine;
 
+using JumpSlug.Pathfinding;
+
 namespace JumpSlug;
 
 class JumpSlugAbstractAI : AbstractCreatureAI {
@@ -15,16 +17,16 @@ class JumpSlugAbstractAI : AbstractCreatureAI {
 }
 
 class JumpSlugAI : ArtificialIntelligence {
+    private Player Player => (Player)creature.realizedCreature;
     private readonly DebugSprite inputDirSprite;
     private bool waitOneTick;
     private IVec2? destination;
     private readonly Pathfinder pathfinder;
-    private readonly PathfindingVisualizer visualizer;
-    private Pathfinder.Path? path;
-    private Player Player => (Player)creature.realizedCreature;
+    private readonly PathVisualizer visualizer;
+    private Path? path;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
-        pathfinder = new Pathfinder(Player);
-        visualizer = new PathfindingVisualizer(pathfinder);
+        pathfinder = new Pathfinder(Player.room, new SlugcatDescriptor(Player));
+        visualizer = new PathVisualizer(Player.room);
         inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Player.room);
         inputDirSprite.sprite.color = Color.red;
         inputDirSprite.sprite.isVisible = false;
@@ -33,31 +35,31 @@ class JumpSlugAI : ArtificialIntelligence {
 
     public override void NewRoom(Room room) {
         base.NewRoom(room);
-        pathfinder.NewRoom();
+        pathfinder.NewRoom(room);
+        visualizer.NewRoom(room);
         Player.room.AddObject(inputDirSprite);
     }
 
     public override void Update() {
         base.Update();
-        pathfinder.Update();
-        var mousePos = (Vector2)Input.mousePosition + Player.room.game.cameras[0].pos;
-        if (InputHelper.JustPressed(KeyCode.N)) {
-            visualizer.ToggleNodes();
-        }
-        if (InputHelper.JustPressed(KeyCode.C)) {
-            visualizer.ToggleConnections();
-        }
         if (InputHelper.JustPressedMouseButton(0)) {
-            IVec2? start = pathfinder.CurrentNode()?.gridPos;
+            IVec2? start = Player.room.GetCWT().sharedGraph!.CurrentNode(Player)?.gridPos;
+            var mousePos = (Vector2)Input.mousePosition + Player.room.game.cameras[0].pos;
             destination = Player.room.GetTilePosition(mousePos);
-            path = start is null || destination is null ? null : pathfinder.FindPath(start.Value, destination.Value);
+            path = start is null || destination is null
+                ? null
+                : pathfinder.FindPath(
+                    start.Value,
+                    destination.Value,
+                    new SlugcatDescriptor(Player)
+                );
             if (visualizer.visualizingPath) {
-                visualizer.TogglePath(path);
+                visualizer.TogglePath(path, new SlugcatDescriptor(Player));
                 if (path is not null) {
-                    visualizer.TogglePath(path);
+                    visualizer.TogglePath(path, new SlugcatDescriptor(Player));
                 }
             } else if (path is not null) {
-                visualizer.TogglePath(path);
+                visualizer.TogglePath(path, new SlugcatDescriptor(Player));
             }
         }
         FollowPath();
@@ -87,7 +89,8 @@ class JumpSlugAI : ArtificialIntelligence {
         if (Timers.active) {
             Timers.followPath.Start();
         }
-        var currentNode = pathfinder.CurrentNode();
+        var staticGraph = Player.room.GetCWT().sharedGraph;
+        var currentNode = staticGraph!.CurrentNode(Player);
         var currentPathPosNullable = path.CurrentNode();
         if (currentNode is null || currentPathPosNullable is null) {
             Player.input[0] = input;
@@ -101,15 +104,14 @@ class JumpSlugAI : ArtificialIntelligence {
         var currentConnection = path.CurrentConnection();
         if (currentNode.gridPos == currentPathPos) {
             if (currentConnection is null) {
-                Plugin.Logger!.LogDebug("path ended");
                 path = null;
-            } else if (currentConnection is Pathfinder.ConnectionType.Walk(int direction)) {
+            } else if (currentConnection is ConnectionType.Walk(int direction)) {
                 input.x = direction;
-                if (currentNode.type is Pathfinder.NodeType.Floor) {
+                if (currentNode.type is NodeType.Floor) {
                     var second = path.PeekNode(2);
                     if (second is not null
-                        && pathfinder.GetNode(second.Value)?.type
-                        is Pathfinder.NodeType.Corridor
+                        && staticGraph.GetNode(second.Value)?.type
+                        is NodeType.Corridor
                     ) {
                         var first = path.PeekNode(1);
                         if (Player.bodyMode != Player.BodyModeIndex.Crawl
@@ -125,10 +127,10 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.y = 1;
                     }
                 }
-            } else if (currentConnection is Pathfinder.ConnectionType.Crawl(IVec2 dir)) {
+            } else if (currentConnection is ConnectionType.Crawl(IVec2 dir)) {
                 input.x = dir.x;
                 input.y = dir.y;
-                if (path.PeekConnection(1) is Pathfinder.ConnectionType.Crawl(IVec2 nextDir)) {
+                if (path.PeekConnection(1) is ConnectionType.Crawl(IVec2 nextDir)) {
                     if ((Player.mainBodyChunk.pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0) {
                         // turn around if going backwards
                         // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
@@ -141,7 +143,7 @@ class JumpSlugAI : ArtificialIntelligence {
                         }
                     }
                 }
-            } else if (currentConnection is Pathfinder.ConnectionType.Climb(IVec2 climbDir)) {
+            } else if (currentConnection is ConnectionType.Climb(IVec2 climbDir)) {
                 if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
                     if (climbDir.x != 0) {
                         input.x = climbDir.x;
@@ -151,7 +153,7 @@ class JumpSlugAI : ArtificialIntelligence {
                         }
                     }
                     if (Player.animation != Player.AnimationIndex.StandOnBeam
-                        && pathfinder.GetNode(currentPathPos)?.verticalBeam == false
+                        && staticGraph.GetNode(currentPathPos)?.verticalBeam == false
                         && Player.room
                             .GetTile(currentPathPos.x, currentPathPos.y + 1)
                             .Terrain == Room.Tile.TerrainType.Air
@@ -162,7 +164,7 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.y = climbDir.y;
                     }
                 }
-            } else if (currentConnection is Pathfinder.ConnectionType.GrabPole) {
+            } else if (currentConnection is ConnectionType.GrabPole) {
                 if (currentNode.verticalBeam) {
                     input.y = 1;
                 } else if (currentNode.horizontalBeam) {
@@ -170,7 +172,7 @@ class JumpSlugAI : ArtificialIntelligence {
                 } else {
                     Plugin.Logger!.LogWarning("trying to climb on node without pole");
                 }
-            } else if (currentConnection is Pathfinder.ConnectionType.Drop) {
+            } else if (currentConnection is ConnectionType.Drop) {
                 if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
                     input.y = -1;
                     input.jmp = true;
@@ -180,7 +182,7 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         } else if (
             !(currentConnection
-            is Pathfinder.ConnectionType.Drop(var ignoreList)
+            is ConnectionType.Drop(var ignoreList)
             && ignoreList.ShouldIgnore(currentNode.gridPos))
         ) {
             path.Advance();
@@ -194,14 +196,20 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
                 path.Advance();
             }
-            path = destination is null ? null : pathfinder.FindPath(currentNode.gridPos, destination.Value);
+            path = destination is null
+                ? null
+                : pathfinder.FindPath(
+                    currentNode.gridPos,
+                    destination.Value,
+                    new SlugcatDescriptor(Player)
+                );
             if (visualizer.visualizingPath) {
-                visualizer.TogglePath(path);
+                visualizer.TogglePath(path, new SlugcatDescriptor(Player));
                 if (path is not null) {
-                    visualizer.TogglePath(path);
+                    visualizer.TogglePath(path, new SlugcatDescriptor(Player));
                 }
             } else if (path is not null) {
-                visualizer.TogglePath(path);
+                visualizer.TogglePath(path, new SlugcatDescriptor(Player));
             }
         }
         Player.input[0] = input;
