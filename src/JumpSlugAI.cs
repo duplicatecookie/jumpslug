@@ -18,6 +18,7 @@ class JumpSlugAbstractAI : AbstractCreatureAI {
 
 class JumpSlugAI : ArtificialIntelligence {
     private Player Player => (Player)creature.realizedCreature;
+    private Room? Room => creature.Room.realizedRoom;
     private readonly DebugSprite inputDirSprite;
     private bool waitOneTick;
     private IVec2? destination;
@@ -25,27 +26,30 @@ class JumpSlugAI : ArtificialIntelligence {
     private readonly PathVisualizer visualizer;
     private Path? path;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
-        pathfinder = new Pathfinder(Player.room, new SlugcatDescriptor(Player));
-        visualizer = new PathVisualizer(Player.room);
-        inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Player.room);
+        pathfinder = new Pathfinder(Room!, new SlugcatDescriptor(Player));
+        visualizer = new PathVisualizer(Room!);
+        inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Room);
         inputDirSprite.sprite.color = Color.red;
         inputDirSprite.sprite.isVisible = false;
-        Player.room.AddObject(inputDirSprite);
+        Room!.AddObject(inputDirSprite);
     }
 
     public override void NewRoom(Room room) {
         base.NewRoom(room);
         pathfinder.NewRoom(room);
         visualizer.NewRoom(room);
-        Player.room.AddObject(inputDirSprite);
+        room.AddObject(inputDirSprite);
     }
 
     public override void Update() {
         base.Update();
+        if (Room is null) {
+            return;
+        }
         if (InputHelper.JustPressedMouseButton(0)) {
-            IVec2? start = Player.room.GetCWT().sharedGraph!.CurrentNode(Player)?.gridPos;
-            var mousePos = (Vector2)Input.mousePosition + Player.room.game.cameras[0].pos;
-            destination = Player.room.GetTilePosition(mousePos);
+            IVec2? start = Room.GetCWT().sharedGraph!.CurrentNode(Player)?.gridPos;
+            var mousePos = (Vector2)Input.mousePosition + Room!.game.cameras[0].pos;
+            destination = Room.GetTilePosition(mousePos);
             path = start is null || destination is null
                 ? null
                 : pathfinder.FindPath(
@@ -89,7 +93,8 @@ class JumpSlugAI : ArtificialIntelligence {
         if (Timers.active) {
             Timers.followPath.Start();
         }
-        var staticGraph = Player.room.GetCWT().sharedGraph;
+        // checked in outher scope
+        var staticGraph = Room!.GetCWT().sharedGraph;
         var currentNode = staticGraph!.CurrentNode(Player);
         var currentPathPosNullable = path.CurrentNode();
         if (currentNode is null || currentPathPosNullable is null) {
@@ -154,7 +159,7 @@ class JumpSlugAI : ArtificialIntelligence {
                     }
                     if (Player.animation != Player.AnimationIndex.StandOnBeam
                         && staticGraph.GetNode(currentPathPos)?.verticalBeam == false
-                        && Player.room
+                        && Room!
                             .GetTile(currentPathPos.x, currentPathPos.y + 1)
                             .Terrain == Room.Tile.TerrainType.Air
                         && Player.input[1].y != 1
