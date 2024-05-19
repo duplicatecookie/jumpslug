@@ -42,6 +42,7 @@ static class Timers {
     public static bool active = false;
     public static FunctionTimer findPath = new FunctionTimer("Pathfinder.FindPath");
     public static FunctionTimer followPath = new FunctionTimer("JumpSlugAI.FollowPath");
+    public static FunctionTimer traceFromNode = new FunctionTimer("DynamicGraph.TraceFromNode");
 }
 
 static class TimerHooks {
@@ -57,6 +58,7 @@ static class TimerHooks {
                 if (Timers.active) {
                     Timers.findPath.Report();
                     Timers.followPath.Report();
+                    Timers.traceFromNode.Report();
                 }
                 break;
             case (false, true):

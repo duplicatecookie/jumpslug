@@ -525,9 +525,15 @@ public class DynamicGraph {
     }
 
     public void TraceFromNode(IVec2 pos, SlugcatDescriptor slugcat) {
+        if (Timers.active) {
+            Timers.traceFromNode.Start();
+        }
         var sharedGraph = room.GetCWT().sharedGraph!;
         var graphNode = sharedGraph.GetNode(pos);
         if (graphNode is null) {
+            if (Timers.active) {
+                Timers.traceFromNode.Stop();
+            }
             return;
         }
         bool goLeft = true;
@@ -608,6 +614,9 @@ public class DynamicGraph {
         } else if (graphNode.type is NodeType.Wall jumpWall) {
             var v0 = slugcat.WallJumpVector(jumpWall.Direction);
             TraceJump(pos, pos, v0, new ConnectionType.Jump(-jumpWall.Direction));
+        }
+        if (Timers.active) {
+            Timers.traceFromNode.Stop();
         }
     }
 
@@ -896,14 +905,14 @@ public class Pathfinder {
 
             var graphNode = sharedGraph.nodes[currentPos.x, currentPos.y]!;
             var adjacencyList = dynamicGraph.adjacencyLists[currentPos.x, currentPos.y]!;
-            
+
             if (adjacencyList.Count == 0) {
                 dynamicGraph.TraceFromNode(currentPos, descriptor);
             } else if (lastDescriptor != descriptor) {
                 adjacencyList.Clear();
                 dynamicGraph.TraceFromNode(currentPos, descriptor);
             }
-                
+
             void CheckConnection(NodeConnection connection) {
                 PathNode? currentNeighbour = null;
                 foreach (var node in openNodes) {
