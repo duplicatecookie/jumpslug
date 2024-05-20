@@ -8,7 +8,7 @@ static class RoomCWT {
     public class RoomExtension {
         public Pathfinding.SharedGraph? sharedGraph;
         public Pathfinding.SharedGraphVisualizer? visualizer;
-        public Pathfinding.PathNode?[,]? pathNodePool;
+        public Pathfinding.PathNodePool? pathNodePool;
         public Pathfinding.BitGrid? openNodes;
         public Pathfinding.BitGrid? closedNodes;
         public RoomExtension() {
@@ -39,14 +39,7 @@ static class RoomHooks {
             int height = roomExt.sharedGraph.height;
             roomExt.openNodes = new Pathfinding.BitGrid(width, height);
             roomExt.closedNodes = new Pathfinding.BitGrid(width, height);
-            roomExt.pathNodePool = new Pathfinding.PathNode[width, height];
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    if (roomExt.sharedGraph.nodes[x, y] is not null) {
-                        roomExt.pathNodePool[x, y] = new Pathfinding.PathNode(x, y);
-                    }
-                }
-            }
+            roomExt.pathNodePool = new Pathfinding.PathNodePool(roomExt.sharedGraph);
         }
     }
 

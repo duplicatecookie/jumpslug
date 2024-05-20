@@ -1,4 +1,5 @@
 using System;
+using System.CodeDom;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
@@ -891,6 +892,9 @@ public struct PathNodePool {
             }
         }
     }
+
+    public readonly PathNode? this[int x, int y] => array[x, y];
+    public readonly PathNode? this[IVec2 pos] => array[pos.x, pos.y];
 }
 
 public class Pathfinder {
@@ -926,12 +930,12 @@ public class Pathfinder {
         if (Timers.active) {
             Timers.findPath.Start();
         }
-        var pathNodePool = room.GetCWT().pathNodePool!;
+        var pathNodePool = room.GetCWT().pathNodePool!.Value;
         var openNodes = room.GetCWT().openNodes!;
         openNodes.Reset();
         var closedNodes = room.GetCWT().closedNodes!;
         closedNodes.Reset();
-        var startNode = pathNodePool[start.x, start.y]!;
+        var startNode = pathNodePool[start]!;
         startNode.Reset(destination, null, 0);
         var nodeHeap = new List<PathNode> {
             startNode
@@ -998,7 +1002,7 @@ public class Pathfinder {
 
             void CheckConnection(NodeConnection connection) {
                 IVec2 neighbourPos = connection.next.gridPos;
-                PathNode currentNeighbour = pathNodePool[neighbourPos.x, neighbourPos.y]!;
+                PathNode currentNeighbour = pathNodePool[neighbourPos]!;
                 if (closedNodes[neighbourPos]) {
                     return;
                 }
