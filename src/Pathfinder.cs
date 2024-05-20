@@ -1,6 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data;
+using System.Runtime.CompilerServices;
+using System.Threading;
 
 using MoreSlugcats;
 
@@ -100,11 +103,24 @@ public class PathNode {
     public IVec2 gridPos;
     public PathConnection? connection;
     public float pathCost;
-    public float heuristic;
-    public PathNode(IVec2 gridPos, IVec2 goalPos, float cost) {
-        this.gridPos = gridPos;
+
+    public float Heuristic { get; private set; }
+    public float FCost => pathCost + Heuristic;
+
+    public PathNode(int x, int y) {
+        gridPos = new IVec2(x, y);
+        pathCost = 0;
+        Heuristic = 0;
+    }
+
+    public void Reset(IVec2 destination, PathConnection? connection, float cost) {
         pathCost = cost;
-        heuristic = Mathf.Sqrt((gridPos.x - goalPos.x) * (gridPos.x - goalPos.x) + (gridPos.y - goalPos.y) * (gridPos.y - goalPos.y));
+        this.connection = connection;
+        IVec2 distance = gridPos - destination;
+        Heuristic = Mathf.Sqrt(
+            distance.x * distance.x
+            + distance.y * distance.y
+        );
     }
 }
 
@@ -829,6 +845,54 @@ public readonly struct SlugcatDescriptor {
     }
 }
 
+public class BitGrid {
+    private readonly BitArray array;
+
+    public int Width { get; }
+    public int Height { get; }
+
+    public BitGrid(int width, int height) {
+        Width = width;
+        Height = height;
+        array = new BitArray(width * height);
+    }
+
+    public bool this[int x, int y] {
+        get => array[y * Width + x];
+        set {
+            array[y * Width + x] = value;
+        }
+    }
+
+    public bool this[IVec2 pos] {
+        get => array[pos.y * Width + pos.x];
+        set {
+            array[pos.y * Width + pos.x] = value;
+        }
+    }
+
+    public void Reset() {
+        array.SetAll(false);
+    }
+}
+
+public struct PathNodePool {
+    private readonly PathNode?[,] array;
+    public readonly int Width => array.GetLength(0);
+    public readonly int Height => array.GetLength(1);
+
+    public PathNodePool(SharedGraph graph) {
+        array = new PathNode[graph.width, graph.height];
+        for (int y = 0; y < Height; y++) {
+            for (int x = 0; x < Width; x++) {
+                if (graph.nodes[x, y] is not null) {
+                    array[x, y] = new PathNode(x, y);
+                }
+            }
+        }
+    }
+}
+
 public class Pathfinder {
     private Room room;
     private SlugcatDescriptor lastDescriptor;
@@ -849,7 +913,6 @@ public class Pathfinder {
 
     public Path? FindPath(IVec2 start, IVec2 destination, SlugcatDescriptor descriptor) {
         var sharedGraph = room.GetCWT().sharedGraph!;
-        // TODO: optimize this entire function, it's probably really inefficient
         if (sharedGraph.GetNode(start) is null) {
             Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
             lastDescriptor = descriptor;
@@ -863,35 +926,20 @@ public class Pathfinder {
         if (Timers.active) {
             Timers.findPath.Start();
         }
-        var openNodes = new List<PathNode>()
-        {
-            new(start, destination, 0),
+        var pathNodePool = room.GetCWT().pathNodePool!;
+        var openNodes = room.GetCWT().openNodes!;
+        openNodes.Reset();
+        var closedNodes = room.GetCWT().closedNodes!;
+        closedNodes.Reset();
+        var startNode = pathNodePool[start.x, start.y]!;
+        startNode.Reset(destination, null, 0);
+        var nodeHeap = new List<PathNode> {
+            startNode
         };
-        var closedNodes = new List<PathNode>();
-        while (openNodes.Count > 0) {
-            float currentF = float.MaxValue;
-            PathNode? currentNode = null;
-            int currentIndex = 0;
-            for (int i = 0; i < openNodes.Count; i++) {
-                if (openNodes[i].pathCost + openNodes[i].heuristic < currentF) {
-                    currentNode = openNodes[i];
-                    currentIndex = i;
-                    currentF = openNodes[i].pathCost + openNodes[i].heuristic;
-                }
-            }
-
-            // might be redundant
-            if (currentNode is null) {
-                Plugin.Logger!.LogError($"current node was null");
-                if (Timers.active) {
-                    Timers.findPath.Stop();
-                }
-                lastDescriptor = descriptor;
-                return null;
-            }
-
+        openNodes[start.x, start.y] = true;
+        while (nodeHeap.Count > 0) {
+            PathNode currentNode = nodeHeap[0];
             var currentPos = currentNode.gridPos;
-
             if (currentPos == destination) {
                 if (Timers.active) {
                     Timers.findPath.Stop();
@@ -900,8 +948,43 @@ public class Pathfinder {
                 return new Path(currentNode, sharedGraph);
             }
 
-            openNodes.RemoveAt(currentIndex);
-            closedNodes.Add(currentNode);
+            nodeHeap[0] = nodeHeap[nodeHeap.Count - 1];
+            nodeHeap.RemoveAt(nodeHeap.Count - 1);
+            int index = 0;
+            int leftIndex = 2 * index + 1;
+            int rightIndex = 2 * index + 2;
+            while (true) {
+                if (rightIndex >= nodeHeap.Count) {
+                    if (leftIndex >= nodeHeap.Count) {
+                        break;
+                    } else {
+                        if (nodeHeap[leftIndex].FCost < nodeHeap[index].FCost) {
+                            (nodeHeap[leftIndex], nodeHeap[index]) = (nodeHeap[index], nodeHeap[leftIndex]);
+                            index = leftIndex;
+                        } else {
+                            break;
+                        }
+                    }
+                } else {
+                    if (nodeHeap[leftIndex].FCost < nodeHeap[index].FCost
+                        || nodeHeap[rightIndex].FCost < nodeHeap[index].FCost
+                    ) {
+                        if (nodeHeap[leftIndex].FCost < nodeHeap[rightIndex].FCost) {
+                            (nodeHeap[leftIndex], nodeHeap[index]) = (nodeHeap[index], nodeHeap[leftIndex]);
+                            index = leftIndex;
+                        } else {
+                            (nodeHeap[rightIndex], nodeHeap[index]) = (nodeHeap[index], nodeHeap[rightIndex]);
+                            index = rightIndex;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                leftIndex = 2 * index + 1;
+                rightIndex = 2 * index + 2;
+            }
+            openNodes[currentPos] = false;
+            closedNodes[currentPos] = true;
 
             var graphNode = sharedGraph.nodes[currentPos.x, currentPos.y]!;
             var adjacencyList = dynamicGraph.adjacencyLists[currentPos.x, currentPos.y]!;
@@ -914,23 +997,26 @@ public class Pathfinder {
             }
 
             void CheckConnection(NodeConnection connection) {
-                PathNode? currentNeighbour = null;
-                foreach (var node in openNodes) {
-                    if (connection.next.gridPos == node.gridPos) {
-                        currentNeighbour = node;
-                    }
+                IVec2 neighbourPos = connection.next.gridPos;
+                PathNode currentNeighbour = pathNodePool[neighbourPos.x, neighbourPos.y]!;
+                if (closedNodes[neighbourPos]) {
+                    return;
                 }
-
-                if (currentNeighbour is null) {
-                    foreach (var node in closedNodes) {
-                        if (connection.next.gridPos == node.gridPos) {
-                            return;
-                        }
+                if (!openNodes[neighbourPos]) {
+                    currentNeighbour.Reset(
+                        destination,
+                        new PathConnection(connection.type, currentNode),
+                        currentNode.pathCost + connection.weight
+                    );
+                    nodeHeap.Add(currentNeighbour);
+                    int index = nodeHeap.Count - 1;
+                    while (index > 0 && currentNeighbour.FCost < nodeHeap[(index - 1) / 2].FCost) {
+                        PathNode temp = nodeHeap[(index - 1) / 2];
+                        nodeHeap[(index - 1) / 2] = currentNeighbour;
+                        nodeHeap[index] = temp;
+                        index = (index - 1) / 2;
                     }
-                    currentNeighbour = new PathNode(connection.next.gridPos, destination, currentNode.pathCost + connection.weight) {
-                        connection = new PathConnection(connection.type, currentNode),
-                    };
-                    openNodes.Add(currentNeighbour);
+                    openNodes[neighbourPos] = true;
                 }
                 if (currentNode.pathCost + connection.weight < currentNeighbour.pathCost) {
                     currentNeighbour.pathCost = currentNode.pathCost + connection.weight;
