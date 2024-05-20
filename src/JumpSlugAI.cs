@@ -19,26 +19,26 @@ class JumpSlugAbstractAI : AbstractCreatureAI {
 class JumpSlugAI : ArtificialIntelligence {
     private Player Player => (Player)creature.realizedCreature;
     private Room? Room => creature.Room.realizedRoom;
-    private readonly DebugSprite inputDirSprite;
-    private bool waitOneTick;
-    private IVec2? destination;
-    private readonly Pathfinder pathfinder;
-    private readonly PathVisualizer visualizer;
-    private Path? path;
+    private readonly DebugSprite _inputDirSprite;
+    private bool _waitOneTick;
+    private IVec2? _destination;
+    private readonly Pathfinder _pathfinder;
+    private readonly PathVisualizer _visualizer;
+    private Path? _path;
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
-        pathfinder = new Pathfinder(Room!, new SlugcatDescriptor(Player));
-        visualizer = new PathVisualizer(Room!);
-        inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Room);
-        inputDirSprite.sprite.color = Color.red;
-        inputDirSprite.sprite.isVisible = false;
-        Room!.AddObject(inputDirSprite);
+        _pathfinder = new Pathfinder(Room!, new SlugcatDescriptor(Player));
+        _visualizer = new PathVisualizer(Room!);
+        _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Room);
+        _inputDirSprite.sprite.color = Color.red;
+        _inputDirSprite.sprite.isVisible = false;
+        Room!.AddObject(_inputDirSprite);
     }
 
     public override void NewRoom(Room room) {
         base.NewRoom(room);
-        pathfinder.NewRoom(room);
-        visualizer.NewRoom(room);
-        room.AddObject(inputDirSprite);
+        _pathfinder.NewRoom(room);
+        _visualizer.NewRoom(room);
+        room.AddObject(_inputDirSprite);
     }
 
     public override void Update() {
@@ -47,33 +47,33 @@ class JumpSlugAI : ArtificialIntelligence {
             return;
         }
         if (InputHelper.JustPressedMouseButton(0)) {
-            IVec2? start = Room.GetCWT().sharedGraph!.CurrentNode(Player)?.gridPos;
+            IVec2? start = Room.GetCWT().sharedGraph!.CurrentNode(Player)?.GridPos;
             var mousePos = (Vector2)Input.mousePosition + Room!.game.cameras[0].pos;
-            destination = Room.GetTilePosition(mousePos);
-            path = start is null || destination is null
+            _destination = Room.GetTilePosition(mousePos);
+            _path = start is null || _destination is null
                 ? null
-                : pathfinder.FindPath(
+                : _pathfinder.FindPath(
                     start.Value,
-                    destination.Value,
+                    _destination.Value,
                     new SlugcatDescriptor(Player)
                 );
-            if (visualizer.visualizingPath) {
-                visualizer.TogglePath(path, new SlugcatDescriptor(Player));
-                if (path is not null) {
-                    visualizer.TogglePath(path, new SlugcatDescriptor(Player));
+            if (_visualizer.VisualizingPath) {
+                _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
+                if (_path is not null) {
+                    _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
                 }
-            } else if (path is not null) {
-                visualizer.TogglePath(path, new SlugcatDescriptor(Player));
+            } else if (_path is not null) {
+                _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
             }
         }
         FollowPath();
         if (Player.input[0].x == 0 && Player.input[0].y == 0) {
-            inputDirSprite.sprite.isVisible = false;
+            _inputDirSprite.sprite.isVisible = false;
         } else {
-            inputDirSprite.sprite.isVisible = true;
-            inputDirSprite.pos = Player.mainBodyChunk.pos;
+            _inputDirSprite.sprite.isVisible = true;
+            _inputDirSprite.pos = Player.mainBodyChunk.pos;
             LineHelper.ReshapeLine(
-                (TriangleMesh)inputDirSprite.sprite,
+                (TriangleMesh)_inputDirSprite.sprite,
                 Player.mainBodyChunk.pos,
                 new Vector2(
                     Player.mainBodyChunk.pos.x + Player.input[0].x * 20,
@@ -85,9 +85,9 @@ class JumpSlugAI : ArtificialIntelligence {
 
     private void FollowPath() {
         Player.InputPackage input = default;
-        if (path is null || waitOneTick) {
+        if (_path is null || _waitOneTick) {
             Player.input[0] = input;
-            waitOneTick = false;
+            _waitOneTick = false;
             return;
         }
         if (Timers.active) {
@@ -96,7 +96,7 @@ class JumpSlugAI : ArtificialIntelligence {
         // checked in outher scope
         var staticGraph = Room!.GetCWT().sharedGraph;
         var currentNode = staticGraph!.CurrentNode(Player);
-        var currentPathPosNullable = path.CurrentNode();
+        var currentPathPosNullable = _path.CurrentNode();
         if (currentNode is null || currentPathPosNullable is null) {
             Player.input[0] = input;
             // can't move on non-existent node, wait instead
@@ -106,19 +106,19 @@ class JumpSlugAI : ArtificialIntelligence {
             return;
         }
         var currentPathPos = currentPathPosNullable.Value;
-        var currentConnection = path.CurrentConnection();
-        if (currentNode.gridPos == currentPathPos) {
+        var currentConnection = _path.CurrentConnection();
+        if (currentNode.GridPos == currentPathPos) {
             if (currentConnection is null) {
-                path = null;
+                _path = null;
             } else if (currentConnection is ConnectionType.Walk(int direction)) {
                 input.x = direction;
-                if (currentNode.type is NodeType.Floor) {
-                    var second = path.PeekNode(2);
+                if (currentNode.Type is NodeType.Floor) {
+                    var second = _path.PeekNode(2);
                     if (second is not null
-                        && staticGraph.GetNode(second.Value)?.type
+                        && staticGraph.GetNode(second.Value)?.Type
                         is NodeType.Corridor
                     ) {
-                        var first = path.PeekNode(1);
+                        var first = _path.PeekNode(1);
                         if (Player.bodyMode != Player.BodyModeIndex.Crawl
                             && second.Value.y != first!.Value.y + 1
                             && Player.input[1].y != -1
@@ -135,7 +135,7 @@ class JumpSlugAI : ArtificialIntelligence {
             } else if (currentConnection is ConnectionType.Crawl(IVec2 dir)) {
                 input.x = dir.x;
                 input.y = dir.y;
-                if (path.PeekConnection(1) is ConnectionType.Crawl(IVec2 nextDir)) {
+                if (_path.PeekConnection(1) is ConnectionType.Crawl(IVec2 nextDir)) {
                     if ((Player.mainBodyChunk.pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0) {
                         // turn around if going backwards
                         // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
@@ -154,11 +154,11 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.x = climbDir.x;
                         // this is required for moving from vertical to horizontal poles
                         if (Player.flipDirection != climbDir.x) {
-                            waitOneTick = true;
+                            _waitOneTick = true;
                         }
                     }
                     if (Player.animation != Player.AnimationIndex.StandOnBeam
-                        && staticGraph.GetNode(currentPathPos)?.verticalBeam == false
+                        && staticGraph.GetNode(currentPathPos)?.VerticalBeam == false
                         && Room!
                             .GetTile(currentPathPos.x, currentPathPos.y + 1)
                             .Terrain == Room.Tile.TerrainType.Air
@@ -170,9 +170,9 @@ class JumpSlugAI : ArtificialIntelligence {
                     }
                 }
             } else if (currentConnection is ConnectionType.GrabPole) {
-                if (currentNode.verticalBeam) {
+                if (currentNode.VerticalBeam) {
                     input.y = 1;
-                } else if (currentNode.horizontalBeam) {
+                } else if (currentNode.HorizontalBeam) {
                     input.x = Player.flipDirection;
                 } else {
                     Plugin.Logger!.LogWarning("trying to climb on node without pole");
@@ -188,42 +188,42 @@ class JumpSlugAI : ArtificialIntelligence {
         } else if (
             !(currentConnection
             is ConnectionType.Drop(var ignoreList)
-            && ignoreList.ShouldIgnore(currentNode.gridPos))
+            && ignoreList.ShouldIgnore(currentNode.GridPos))
         ) {
-            path.Advance();
+            _path.Advance();
             IVec2? current;
-            while ((current = path.CurrentNode()) is not null) {
-                if (currentNode.gridPos == current) {
+            while ((current = _path.CurrentNode()) is not null) {
+                if (currentNode.GridPos == current) {
                     if (Timers.active) {
                         Timers.followPath.Stop();
                     }
                     return;
                 }
-                path.Advance();
+                _path.Advance();
             }
-            if (destination is null) {
-                path = null;
+            if (_destination is null) {
+                _path = null;
             } else if (Timers.active) {
                 Timers.followPath.Stop();
-                pathfinder.FindPath(
-                    currentNode.gridPos,
-                    destination.Value,
+                _pathfinder.FindPath(
+                    currentNode.GridPos,
+                    _destination.Value,
                     new SlugcatDescriptor(Player)
                 );
             } else {
-                pathfinder.FindPath(
-                    currentNode.gridPos,
-                    destination.Value,
+                _pathfinder.FindPath(
+                    currentNode.GridPos,
+                    _destination.Value,
                     new SlugcatDescriptor(Player)
                 );
             }
-            if (visualizer.visualizingPath) {
-                visualizer.TogglePath(path, new SlugcatDescriptor(Player));
-                if (path is not null) {
-                    visualizer.TogglePath(path, new SlugcatDescriptor(Player));
+            if (_visualizer.VisualizingPath) {
+                _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
+                if (_path is not null) {
+                    _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
                 }
-            } else if (path is not null) {
-                visualizer.TogglePath(path, new SlugcatDescriptor(Player));
+            } else if (_path is not null) {
+                _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
             }
         }
         Player.input[0] = input;

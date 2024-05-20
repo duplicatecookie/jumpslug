@@ -35,8 +35,8 @@ static class RoomHooks {
             var roomExt = self.room.GetCWT();
             roomExt.sharedGraph = new Pathfinding.SharedGraph(self.room);
             roomExt.visualizer = new Pathfinding.SharedGraphVisualizer(self.room);
-            int width = roomExt.sharedGraph.width;
-            int height = roomExt.sharedGraph.height;
+            int width = roomExt.sharedGraph.Width;
+            int height = roomExt.sharedGraph.Height;
             roomExt.openNodes = new Pathfinding.BitGrid(width, height);
             roomExt.closedNodes = new Pathfinding.BitGrid(width, height);
             roomExt.pathNodePool = new Pathfinding.PathNodePool(roomExt.sharedGraph);

@@ -1,10 +1,7 @@
 using System;
-using System.CodeDom;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
-using System.Runtime.CompilerServices;
-using System.Threading;
 
 using MoreSlugcats;
 
@@ -17,107 +14,107 @@ namespace JumpSlug.Pathfinding;
 public class Path {
     // these aren't private because it's more straightforward for the visualizer to use manual indexing
     // and the accessors can't be made const correct
-    public int cursor;
-    public readonly List<IVec2> nodes;
-    public readonly List<ConnectionType> connections;
+    public int Cursor;
+    public readonly List<IVec2> Nodes;
+    public readonly List<ConnectionType> Connections;
+
+    public int NodeCount => Nodes.Count;
+    public int ConnectionCount => Connections.Count;
 
     public Path(PathNode startNode, SharedGraph staticGraph) {
-        nodes = new();
-        connections = new();
+        Nodes = new();
+        Connections = new();
         var currentNode = startNode;
         while (currentNode is not null) {
-            nodes.Add(currentNode.gridPos);
-            if (currentNode.connection is not null) {
+            Nodes.Add(currentNode.GridPos);
+            if (currentNode.Connection is not null) {
                 // this is necessary because the pathfinder can't account for the slugcat taking up more than one tile
                 // and the AI movement code can't account for missing sections of the path
                 // any non-hacky way of dealing with this requires sweeping code changes that complicate everything
-                var nextConnection = connections.Count > 0 ? connections[connections.Count - 1] : null;
-                var previousConnection = currentNode.connection.Value.type;
+                var nextConnection = Connections.Count > 0 ? Connections[Connections.Count - 1] : null;
+                var previousConnection = currentNode.Connection.Value.Type;
                 if (previousConnection is ConnectionType.Climb(IVec2 dir)) {
-                    if (currentNode.connection.Value.next.connection?.type is ConnectionType.Walk) {
-                        connections.Add(new ConnectionType.GrabPole());
+                    if (currentNode.Connection.Value.Next.Connection?.Type is ConnectionType.Walk) {
+                        Connections.Add(new ConnectionType.GrabPole());
                     } else if (nextConnection is ConnectionType.Walk) {
                         if (dir.y == 1) {
-                            connections.Add(new ConnectionType.Drop(new IgnoreList()));
-                            var abovePos = currentNode.gridPos;
+                            Connections.Add(new ConnectionType.Drop(new IgnoreList()));
+                            var abovePos = currentNode.GridPos;
                             abovePos.y += 1;
-                            if (staticGraph.GetNode(abovePos)?.verticalBeam == true) {
-                                nodes.Add(abovePos);
+                            if (staticGraph.GetNode(abovePos)?.VerticalBeam == true) {
+                                Nodes.Add(abovePos);
                             } else {
                                 Plugin.Logger!.LogError("climbing up from a pole onto a platform is currently only supported when there a two poles above the platform");
                                 return;
                             }
-                            connections.Add(new ConnectionType.Climb(new IVec2(0, 1)));
-                            nodes.Add(currentNode.gridPos);
-                            connections.Add(previousConnection);
+                            Connections.Add(new ConnectionType.Climb(new IVec2(0, 1)));
+                            Nodes.Add(currentNode.GridPos);
+                            Connections.Add(previousConnection);
                         } else if (dir.y == -1) {
-                            connections.Add(new ConnectionType.Drop(new IgnoreList()));
+                            Connections.Add(new ConnectionType.Drop(new IgnoreList()));
                         } else {
                             Plugin.Logger!.LogError("invalid path: climb connection leading to walk connection");
                             return;
                         }
                     } else {
-                        connections.Add(previousConnection);
+                        Connections.Add(previousConnection);
                     }
                 } else {
-                    connections.Add(previousConnection);
+                    Connections.Add(previousConnection);
                 }
             }
-            currentNode = currentNode.connection?.next;
+            currentNode = currentNode.Connection?.Next;
         }
-        cursor = nodes.Count - 1;
+        Cursor = Nodes.Count - 1;
     }
-
-    public int NodeCount => nodes.Count;
-    public int ConnectionCount => connections.Count;
 
     public IVec2? CurrentNode() {
-        if (cursor < 0) {
+        if (Cursor < 0) {
             return null;
         }
-        return nodes[cursor];
+        return Nodes[Cursor];
     }
     public IVec2? PeekNode(int offset) {
-        if (cursor - offset < 0) {
+        if (Cursor - offset < 0) {
             return null;
         }
-        return nodes[cursor - offset];
+        return Nodes[Cursor - offset];
     }
     public ConnectionType? CurrentConnection() {
-        if (cursor < 1) {
+        if (Cursor < 1) {
             return null;
         }
-        return connections[cursor - 1];
+        return Connections[Cursor - 1];
     }
     public ConnectionType? PeekConnection(int offset) {
-        if (cursor - offset < 1) {
+        if (Cursor - offset < 1) {
             return null;
         }
-        return connections[cursor - offset - 1];
+        return Connections[Cursor - offset - 1];
     }
     public void Advance() {
-        cursor -= 1;
+        Cursor -= 1;
     }
 }
 
 public class PathNode {
-    public IVec2 gridPos;
-    public PathConnection? connection;
-    public float pathCost;
+    public IVec2 GridPos { get; }
+    public PathConnection? Connection;
+    public float PathCost;
 
     public float Heuristic { get; private set; }
-    public float FCost => pathCost + Heuristic;
+    public float FCost => PathCost + Heuristic;
 
     public PathNode(int x, int y) {
-        gridPos = new IVec2(x, y);
-        pathCost = 0;
+        GridPos = new IVec2(x, y);
+        PathCost = 0;
         Heuristic = 0;
     }
 
     public void Reset(IVec2 destination, PathConnection? connection, float cost) {
-        pathCost = cost;
-        this.connection = connection;
-        IVec2 distance = gridPos - destination;
+        PathCost = cost;
+        Connection = connection;
+        IVec2 distance = GridPos - destination;
         Heuristic = Mathf.Sqrt(
             distance.x * distance.x
             + distance.y * distance.y
@@ -126,29 +123,29 @@ public class PathNode {
 }
 
 public struct PathConnection {
-    public ConnectionType type;
-    public PathNode next;
+    public ConnectionType Type;
+    public PathNode Next;
     public PathConnection(ConnectionType type, PathNode next) {
-        this.type = type;
-        this.next = next;
+        Type = type;
+        Next = next;
     }
 }
 
 public class Node {
-    public NodeType type;
-    public bool verticalBeam;
-    public bool horizontalBeam;
-    public bool hasPlatform;
-    public List<NodeConnection> connections;
-    public IVec2 gridPos;
+    public NodeType Type;
+    public bool VerticalBeam;
+    public bool HorizontalBeam;
+    public bool HasPlatform;
+    public List<NodeConnection> Connections;
+    public IVec2 GridPos;
 
     public Node(NodeType type, int x, int y) {
-        this.type = type;
-        gridPos = new IVec2(x, y);
-        connections = new();
+        Type = type;
+        GridPos = new IVec2(x, y);
+        Connections = new();
     }
 
-    public bool HasBeam => verticalBeam || horizontalBeam;
+    public bool HasBeam => VerticalBeam || HorizontalBeam;
 }
 
 public record NodeType {
@@ -163,50 +160,49 @@ public record NodeType {
 }
 
 public class NodeConnection {
-    public ConnectionType type;
-    public Node next;
-    public float weight;
+    public ConnectionType Type;
+    public Node Next;
+    public float Weight;
 
     public NodeConnection(ConnectionType type, Node next, float weight = 1f) {
         if (next is null) {
             throw new NoNullAllowedException();
         }
-        this.next = next;
-        this.weight = weight;
-        this.type = type;
+        Next = next;
+        Weight = weight;
+        Type = type;
     }
 }
 
 public class IgnoreList {
-    private int cursor;
-    private List<IVec2> ignoreList;
+    private int _cursor;
+    private List<IVec2> _ignoreList;
 
     public IgnoreList() {
-        cursor = 0;
-        ignoreList = new();
+        _cursor = 0;
+        _ignoreList = new();
     }
 
-    // builder like thing because it seems silly to implement IEnumerable only for the collection initialiser
     public void Add(IVec2 node) {
-        ignoreList.Add(node);
+        _ignoreList.Add(node);
     }
 
     public bool ShouldIgnore(IVec2 node) {
-        while (cursor < ignoreList.Count) {
-            if (node == ignoreList[cursor]) {
+        while (_cursor < _ignoreList.Count) {
+            if (node == _ignoreList[_cursor]) {
                 return true;
             }
-            cursor++;
+            _cursor++;
         }
         return false;
     }
 
     public IgnoreList Clone() {
         var cloneList = new List<IVec2>();
-        cloneList.AddRange(ignoreList);
+        cloneList.AddRange(_ignoreList);
         var clone = new IgnoreList() {
-            cursor = cursor,
-            ignoreList = cloneList,
+            _cursor = _cursor,
+            _ignoreList = cloneList,
         };
         return clone;
     }
@@ -221,7 +217,7 @@ public record ConnectionType {
     public record WalkOffEdge(int Direction) : ConnectionType();
     public record Pounce(int Direction) : ConnectionType();
     public record Shortcut() : ConnectionType();
-    public record Drop(IgnoreList ignoreList) : ConnectionType();
+    public record Drop(IgnoreList IgnoreList) : ConnectionType();
 
     private ConnectionType() { }
 }
@@ -232,23 +228,23 @@ public record ConnectionType {
 /// slugcat-specific connections like jumps should be stored in <see cref="DynamicGraph">DynamicGraphs</see> instead.
 /// </summary>
 public class SharedGraph {
-    public Node?[,] nodes;
-    public int width;
-    public int height;
+    public Node?[,] Nodes;
+    public int Width;
+    public int Height;
 
     public SharedGraph(Room room) {
-        width = room.Tiles.GetLength(0);
-        height = room.Tiles.GetLength(1);
-        nodes = new Node[width, height];
+        Width = room.Tiles.GetLength(0);
+        Height = room.Tiles.GetLength(1);
+        Nodes = new Node[Width, Height];
         GenerateNodes(room);
         GenerateConnections(room);
     }
 
     public Node? GetNode(int x, int y) {
-        if (nodes is null || x < 0 || y < 0 || x >= width || y >= height) {
+        if (Nodes is null || x < 0 || y < 0 || x >= Width || y >= Height) {
             return null;
         }
-        return nodes[x, y];
+        return Nodes[x, y];
     }
 
     public Node? GetNode(IVec2 pos) {
@@ -268,17 +264,17 @@ public class SharedGraph {
     }
 
     private void GenerateNodes(Room room) {
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                if (x - 1 < 0 || x + 1 >= width || y - 1 < 0 || y + 1 >= height) {
+        for (int y = 0; y < Height; y++) {
+            for (int x = 0; x < Width; x++) {
+                if (x - 1 < 0 || x + 1 >= Width || y - 1 < 0 || y + 1 >= Height) {
                     continue;
                 }
                 if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid) {
                     continue;
                 } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Floor) {
                     if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid) {
-                        nodes[x, y] = new Node(new NodeType.Corridor(), x, y) {
-                            hasPlatform = true,
+                        Nodes[x, y] = new Node(new NodeType.Corridor(), x, y) {
+                            HasPlatform = true,
                         };
                     }
                 } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Air) {
@@ -295,7 +291,7 @@ public class SharedGraph {
                             && room.Tiles[x + 1, y - 1].Terrain == Room.Tile.TerrainType.Air
                             && room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Air)
                     ) {
-                        nodes[x, y] = new Node(new NodeType.Corridor(), x, y);
+                        Nodes[x, y] = new Node(new NodeType.Corridor(), x, y);
                     } else if (
                           room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Solid
                           || room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.ShortcutEntrance
@@ -304,190 +300,190 @@ public class SharedGraph {
                           && room.Tiles[x - 1, y - 1].Terrain == Room.Tile.TerrainType.Solid
                           && room.Tiles[x + 1, y - 1].Terrain == Room.Tile.TerrainType.Solid
                     ) {
-                        nodes[x, y] = new Node(new NodeType.Floor(), x, y);
+                        Nodes[x, y] = new Node(new NodeType.Floor(), x, y);
                     } else if (room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Floor) {
-                        nodes[x, y] = new Node(new NodeType.Floor(), x, y);
+                        Nodes[x, y] = new Node(new NodeType.Floor(), x, y);
                     } else if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
                           && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid) {
-                        nodes[x, y] = new Node(new NodeType.Wall(1), x, y);
+                        Nodes[x, y] = new Node(new NodeType.Wall(1), x, y);
                     } else if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
                           && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air) {
-                        nodes[x, y] = new Node(new NodeType.Wall(-1), x, y);
+                        Nodes[x, y] = new Node(new NodeType.Wall(-1), x, y);
                     }
                 } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope
                       && room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Air
                       && !(room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
                           && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid)) {
-                    nodes[x, y] = new Node(new NodeType.Slope(), x, y);
+                    Nodes[x, y] = new Node(new NodeType.Slope(), x, y);
                 } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.ShortcutEntrance) {
                     int index = Array.IndexOf(room.shortcutsIndex, new IVec2(x, y));
                     if (index > -1 && room.shortcuts[index].shortCutType == ShortcutData.Type.Normal) {
-                        nodes[x, y] = new Node(new NodeType.ShortcutEntrance(index), x, y);
+                        Nodes[x, y] = new Node(new NodeType.ShortcutEntrance(index), x, y);
                     }
                 }
 
                 if (room.Tiles[x, y].verticalBeam) {
-                    if (nodes[x, y] is null) {
-                        nodes[x, y] = new Node(new NodeType.Air(), x, y);
+                    if (Nodes[x, y] is null) {
+                        Nodes[x, y] = new Node(new NodeType.Air(), x, y);
                     }
-                    nodes[x, y]!.verticalBeam = true;
+                    Nodes[x, y]!.VerticalBeam = true;
                 }
 
                 if (room.Tiles[x, y].horizontalBeam) {
-                    if (nodes[x, y] is null) {
-                        nodes[x, y] = new Node(new NodeType.Air(), x, y);
+                    if (Nodes[x, y] is null) {
+                        Nodes[x, y] = new Node(new NodeType.Air(), x, y);
                     }
-                    nodes[x, y]!.horizontalBeam = true;
+                    Nodes[x, y]!.HorizontalBeam = true;
                 }
             }
         }
     }
 
     private void GenerateConnections(Room room) {
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                if (nodes[x, y] is null) {
+        for (int y = 0; y < Height; y++) {
+            for (int x = 0; x < Width; x++) {
+                if (Nodes[x, y] is null) {
                     continue;
                 }
-                if (nodes[x, y]!.type is NodeType.Floor) {
-                    if (GetNode(x + 1, y)?.type is NodeType.Floor or NodeType.Slope) {
+                if (Nodes[x, y]!.Type is NodeType.Floor) {
+                    if (GetNode(x + 1, y)?.Type is NodeType.Floor or NodeType.Slope) {
                         ConnectNodes(
-                            nodes[x, y]!,
-                            nodes[x + 1, y]!,
+                            Nodes[x, y]!,
+                            Nodes[x + 1, y]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
-                    } else if (GetNode(x + 1, y)?.type is NodeType.Corridor) {
+                    } else if (GetNode(x + 1, y)?.Type is NodeType.Corridor) {
                         ConnectNodes(
-                            nodes[x, y]!,
-                            nodes[x + 1, y]!,
+                            Nodes[x, y]!,
+                            Nodes[x + 1, y]!,
                             new ConnectionType.Crawl(new IVec2(1, 0)),
                             new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     }
-                    if (GetNode(x + 1, y - 1)?.type is NodeType.Slope) {
+                    if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
                         ConnectNodes(
-                            nodes[x, y]!,
-                            nodes[x + 1, y - 1]!,
+                            Nodes[x, y]!,
+                            Nodes[x + 1, y - 1]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
                     }
-                    if (GetNode(x + 1, y + 1)?.type is NodeType.Corridor) {
-                        nodes[x, y]!.connections.Add(new NodeConnection(new ConnectionType.Walk(1), nodes[x + 1, y + 1]!));
+                    if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor) {
+                        Nodes[x, y]!.Connections.Add(new NodeConnection(new ConnectionType.Walk(1), Nodes[x + 1, y + 1]!));
                     }
                     if (GetNode(x, y + 1)?.HasBeam == true) {
-                        nodes[x, y]!.connections.Add(new NodeConnection(new ConnectionType.GrabPole(), nodes[x, y + 1]!, 1.5f));
+                        Nodes[x, y]!.Connections.Add(new NodeConnection(new ConnectionType.GrabPole(), Nodes[x, y + 1]!, 1.5f));
                     }
                 }
 
-                if (nodes[x, y]!.type is NodeType.Slope) {
-                    if (GetNode(x + 1, y)?.type is NodeType.Floor or NodeType.Slope) {
+                if (Nodes[x, y]!.Type is NodeType.Slope) {
+                    if (GetNode(x + 1, y)?.Type is NodeType.Floor or NodeType.Slope) {
                         ConnectNodes(
-                            nodes[x, y]!,
-                            nodes[x + 1, y]!,
+                            Nodes[x, y]!,
+                            Nodes[x + 1, y]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
-                    } else if (GetNode(x + 1, y - 1)?.type is NodeType.Slope) {
+                    } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
                         ConnectNodes(
-                            nodes[x, y]!,
-                            nodes[x + 1, y - 1]!,
+                            Nodes[x, y]!,
+                            Nodes[x + 1, y - 1]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
-                    } else if (GetNode(x + 1, y + 1)?.type is NodeType.Slope or NodeType.Floor) {
+                    } else if (GetNode(x + 1, y + 1)?.Type is NodeType.Slope or NodeType.Floor) {
                         ConnectNodes(
-                            nodes[x, y]!,
-                            nodes[x + 1, y + 1]!,
+                            Nodes[x, y]!,
+                            Nodes[x + 1, y + 1]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
                     }
                     if (GetNode(x, y + 1)?.HasBeam == true) {
-                        nodes[x, y]!.connections.Add(new NodeConnection(new ConnectionType.GrabPole(), nodes[x, y + 1]!, 1.5f));
+                        Nodes[x, y]!.Connections.Add(new NodeConnection(new ConnectionType.GrabPole(), Nodes[x, y + 1]!, 1.5f));
                     }
                 }
 
                 var rightNode = GetNode(x + 1, y);
                 var aboveNode = GetNode(x, y + 1);
-                if (nodes[x, y]!.type is NodeType.Corridor) {
-                    if (rightNode?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
+                if (Nodes[x, y]!.Type is NodeType.Corridor) {
+                    if (rightNode?.Type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
                         ConnectNodes(
-                            nodes[x, y]!,
+                            Nodes[x, y]!,
                             rightNode,
                             new ConnectionType.Crawl(new IVec2(1, 0)),
                             new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
-                    } else if (rightNode?.horizontalBeam == true) {
+                    } else if (rightNode?.HorizontalBeam == true) {
                         ConnectNodes(
-                            nodes[x, y]!,
+                            Nodes[x, y]!,
                             rightNode,
                             new ConnectionType.Crawl(new IVec2(1, 0)),
-                            rightNode.horizontalBeam
+                            rightNode.HorizontalBeam
                                 ? new ConnectionType.Climb(new IVec2(-1, 0))
                                 : new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     }
-                    if (GetNode(x + 1, y - 1)?.type is NodeType.Floor) {
-                        nodes[x + 1, y - 1]!.connections.Add(new NodeConnection(new ConnectionType.Walk(-1), nodes[x, y]!));
+                    if (GetNode(x + 1, y - 1)?.Type is NodeType.Floor) {
+                        Nodes[x + 1, y - 1]!.Connections.Add(new NodeConnection(new ConnectionType.Walk(-1), Nodes[x, y]!));
                     }
-                    if (aboveNode?.type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
+                    if (aboveNode?.Type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
                         ConnectNodes(
-                            nodes[x, y]!,
+                            Nodes[x, y]!,
                             aboveNode,
                             new ConnectionType.Crawl(new IVec2(0, 1)),
                             new ConnectionType.Crawl(new IVec2(0, -1))
                         );
                     }
                 } else {
-                    if (nodes[x, y]!.horizontalBeam
-                        && rightNode?.horizontalBeam == true
+                    if (Nodes[x, y]!.HorizontalBeam
+                        && rightNode?.HorizontalBeam == true
                     ) {
                         ConnectNodes(
-                            nodes[x, y]!,
-                            nodes[x + 1, y]!,
+                            Nodes[x, y]!,
+                            Nodes[x + 1, y]!,
                             new ConnectionType.Climb(new IVec2(1, 0)),
-                            rightNode.type is NodeType.Corridor
+                            rightNode.Type is NodeType.Corridor
                                 ? new ConnectionType.Crawl(new IVec2(-1, 0))
                                 : new ConnectionType.Climb(new IVec2(-1, 0))
                         );
                     }
-                    if (nodes[x, y]!.verticalBeam
-                        && aboveNode?.verticalBeam == true
+                    if (Nodes[x, y]!.VerticalBeam
+                        && aboveNode?.VerticalBeam == true
                     ) {
                         ConnectNodes(
-                            nodes[x, y]!,
+                            Nodes[x, y]!,
                             aboveNode,
                             new ConnectionType.Climb(new IVec2(0, 1)),
-                            aboveNode.type is NodeType.Corridor
+                            aboveNode.Type is NodeType.Corridor
                                 ? new ConnectionType.Crawl(new IVec2(0, -1))
                                 : new ConnectionType.Climb(new IVec2(0, -1))
                         );
 
                     }
                 }
-                if (nodes[x, y]!.type is NodeType.ShortcutEntrance) {
-                    var entrance = nodes[x, y]!.type as NodeType.ShortcutEntrance;
+                if (Nodes[x, y]!.Type is NodeType.ShortcutEntrance) {
+                    var entrance = Nodes[x, y]!.Type as NodeType.ShortcutEntrance;
                     var shortcutData = room.shortcuts[entrance!.Index];
-                    var destNode = nodes[shortcutData.destinationCoord.x, shortcutData.destinationCoord.y];
-                    if (destNode is null || destNode.type is not NodeType.ShortcutEntrance) {
+                    var destNode = Nodes[shortcutData.destinationCoord.x, shortcutData.destinationCoord.y];
+                    if (destNode is null || destNode.Type is not NodeType.ShortcutEntrance) {
                         Plugin.Logger!.LogError($"Shortcut entrance has no valid exit, pos: ({x}, {y}), index: {entrance.Index}");
                         return;
                     }
-                    nodes[x, y]!.connections.Add(new NodeConnection(new ConnectionType.Shortcut(), destNode, shortcutData.length));
-                    if (GetNode(x + 1, y)?.type is NodeType.Corridor) {
+                    Nodes[x, y]!.Connections.Add(new NodeConnection(new ConnectionType.Shortcut(), destNode, shortcutData.length));
+                    if (GetNode(x + 1, y)?.Type is NodeType.Corridor) {
                         ConnectNodes(
-                            nodes[x, y]!,
-                            nodes[x + 1, y]!,
+                            Nodes[x, y]!,
+                            Nodes[x + 1, y]!,
                             new ConnectionType.Crawl(new IVec2(1, 0)),
                             new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     }
-                    if (GetNode(x, y + 1)?.type is NodeType.Corridor) {
+                    if (GetNode(x, y + 1)?.Type is NodeType.Corridor) {
                         ConnectNodes(
-                            nodes[x, y]!,
-                            nodes[x, y + 1]!,
+                            Nodes[x, y]!,
+                            Nodes[x, y + 1]!,
                             new ConnectionType.Crawl(new IVec2(0, 1)),
                             new ConnectionType.Crawl(new IVec2(0, -1))
                         );
@@ -498,43 +494,44 @@ public class SharedGraph {
     }
 
     private void ConnectNodes(Node start, Node end, ConnectionType startToEndType, ConnectionType endToStartType, float weight = 1f) {
-        start.connections.Add(new NodeConnection(startToEndType, end, weight));
-        end.connections.Add(new NodeConnection(endToStartType, start, weight));
+        start.Connections.Add(new NodeConnection(startToEndType, end, weight));
+        end.Connections.Add(new NodeConnection(endToStartType, start, weight));
     }
 }
 
 public class DynamicGraph {
-    private Room room;
-    public List<NodeConnection>[,] adjacencyLists;
-    public int width;
-    public int height;
+    private Room _room;
+
+    public List<NodeConnection>[,] AdjacencyLists;
+    public int Width;
+    public int Height;
 
     public DynamicGraph(Room room) {
-        this.room = room;
+        _room = room;
         var sharedGraph = room.GetCWT().sharedGraph!;
-        width = sharedGraph.width;
-        height = sharedGraph.height;
-        adjacencyLists = new List<NodeConnection>[width, height];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                if (sharedGraph.nodes[x, y] is not null) {
-                    adjacencyLists[x, y] = new();
+        Width = sharedGraph.Width;
+        Height = sharedGraph.Height;
+        AdjacencyLists = new List<NodeConnection>[Width, Height];
+        for (int y = 0; y < Height; y++) {
+            for (int x = 0; x < Width; x++) {
+                if (sharedGraph.Nodes[x, y] is not null) {
+                    AdjacencyLists[x, y] = new();
                 }
             }
         }
     }
 
     public void NewRoom(Room room) {
-        if (room != this.room) {
-            this.room = room;
+        if (room != _room) {
+            _room = room;
             var sharedGraph = room.GetCWT().sharedGraph!;
-            width = sharedGraph.width;
-            height = sharedGraph.height;
-            adjacencyLists = new List<NodeConnection>[width, height];
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    if (sharedGraph.nodes[x, y] is not null) {
-                        adjacencyLists[x, y] = new();
+            Width = sharedGraph.Width;
+            Height = sharedGraph.Height;
+            AdjacencyLists = new List<NodeConnection>[Width, Height];
+            for (int y = 0; y < Height; y++) {
+                for (int x = 0; x < Width; x++) {
+                    if (sharedGraph.Nodes[x, y] is not null) {
+                        AdjacencyLists[x, y] = new();
                     }
                 }
             }
@@ -545,7 +542,7 @@ public class DynamicGraph {
         if (Timers.active) {
             Timers.traceFromNode.Start();
         }
-        var sharedGraph = room.GetCWT().sharedGraph!;
+        var sharedGraph = _room.GetCWT().sharedGraph!;
         var graphNode = sharedGraph.GetNode(pos);
         if (graphNode is null) {
             if (Timers.active) {
@@ -555,23 +552,23 @@ public class DynamicGraph {
         }
         bool goLeft = true;
         bool goRight = true;
-        if (graphNode.type is NodeType.Wall(int direction)) {
+        if (graphNode.Type is NodeType.Wall(int direction)) {
             if (direction == -1) {
                 goLeft = false;
             } else {
                 goRight = false;
             }
         }
-        if (sharedGraph.GetNode(pos.x, pos.y - 1)?.type is NodeType.Wall footWall) {
+        if (sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is NodeType.Wall footWall) {
             if (footWall.Direction == -1) {
                 goLeft = false;
             } else {
                 goRight = false;
             }
         }
-        if (graphNode.verticalBeam && !graphNode.horizontalBeam
-            && graphNode.type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)
-            && sharedGraph.GetNode(pos.x, pos.y - 1)?.type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
+        if (graphNode.VerticalBeam && !graphNode.HorizontalBeam
+            && graphNode.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)
+            && sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
             Vector2 v0 = slugcat.VerticalPoleJumpVector();
             if (goRight) {
                 TraceJump(pos, pos, v0, new ConnectionType.Jump(1));
@@ -582,7 +579,7 @@ public class DynamicGraph {
             }
             TraceDrop(pos.x, pos.y);
         }
-        if (graphNode.horizontalBeam && graphNode.type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
+        if (graphNode.HorizontalBeam && graphNode.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
             var headPos = new IVec2(pos.x, pos.y + 1);
             var v0 = slugcat.HorizontalPoleJumpVector();
             if (goRight) {
@@ -594,12 +591,12 @@ public class DynamicGraph {
             }
             TraceDrop(pos.x, pos.y);
         }
-        if (graphNode.type is NodeType.Floor) {
+        if (graphNode.Type is NodeType.Floor) {
             var headPos = new IVec2(pos.x, pos.y + 1);
             var v0 = slugcat.FloorJumpVector();
             if (goRight) {
                 TraceJump(pos, headPos, v0, new ConnectionType.Jump(1));
-                if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.type is NodeType.Wall) {
+                if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
                     v0.y = 0f;
                     TraceJump(pos, headPos, v0, new ConnectionType.WalkOffEdge(1));
                 }
@@ -607,13 +604,13 @@ public class DynamicGraph {
             if (goLeft) {
                 v0.x = -v0.x;
                 TraceJump(pos, headPos, v0, new ConnectionType.Jump(-1));
-                if (sharedGraph.GetNode(pos.x - 1, pos.y - 1)?.type is NodeType.Wall) {
+                if (sharedGraph.GetNode(pos.x - 1, pos.y - 1)?.Type is NodeType.Wall) {
                     v0.y = 0f;
                     TraceJump(pos, headPos, v0, new ConnectionType.WalkOffEdge(-1));
                 }
             }
 
-        } else if (graphNode.type is NodeType.Corridor) {
+        } else if (graphNode.Type is NodeType.Corridor) {
             var v0 = slugcat.HorizontalCorridorFallVector();
             // v0.x might be too large
             if (sharedGraph.GetNode(pos.x + 1, pos.y) is null) {
@@ -624,11 +621,11 @@ public class DynamicGraph {
                 TraceJump(pos, pos, v0, new ConnectionType.WalkOffEdge(-1), upright: false);
             }
             if (sharedGraph.GetNode(pos.x, pos.y - 1) is null
-                && room.Tiles[pos.x, pos.y - 1].Terrain == Room.Tile.TerrainType.Air
+                && _room.Tiles[pos.x, pos.y - 1].Terrain == Room.Tile.TerrainType.Air
             ) {
                 TraceDrop(pos.x, pos.y);
             }
-        } else if (graphNode.type is NodeType.Wall jumpWall) {
+        } else if (graphNode.Type is NodeType.Wall jumpWall) {
             var v0 = slugcat.WallJumpVector(jumpWall.Direction);
             TraceJump(pos, pos, v0, new ConnectionType.Jump(-jumpWall.Direction));
         }
@@ -651,8 +648,8 @@ public class DynamicGraph {
     ) {
         int x = headPos.x;
         int y = headPos.y;
-        var staticGraph = room.GetCWT().sharedGraph;
-        if (x < 0 || y < 0 || x >= width || y >= height || staticGraph is null) {
+        var staticGraph = _room.GetCWT().sharedGraph;
+        if (x < 0 || y < 0 || x >= Width || y >= Height || staticGraph is null) {
             return;
         }
         int direction = v0.x switch {
@@ -663,21 +660,21 @@ public class DynamicGraph {
         int xOffset = (direction + 1) / 2;
         var pathOffset = RoomHelper.MiddleOfTile(headPos);
 
-        var startConnectionList = adjacencyLists[startPos.x, startPos.y];
+        var startConnectionList = AdjacencyLists[startPos.x, startPos.y];
         while (true) {
             float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
-            float result = Parabola(pathOffset.y, v0, room.gravity, t) / 20;
+            float result = Parabola(pathOffset.y, v0, _room.gravity, t) / 20;
             if (result > y + 1) {
                 y++;
             } else if (result < y) {
                 if (y - 2 < 0) {
                     break;
                 }
-                var currentNode = staticGraph.nodes[x, upright ? y - 1 : y];
-                if (currentNode?.type is NodeType.Floor or NodeType.Slope) {
+                var currentNode = staticGraph.Nodes[x, upright ? y - 1 : y];
+                if (currentNode?.Type is NodeType.Floor or NodeType.Slope) {
                     startConnectionList.Add(new NodeConnection(type, currentNode, t * 20 / 4.2f + 1));
                 }
-                if (room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
+                if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
                     break;
                 }
                 y--;
@@ -685,74 +682,74 @@ public class DynamicGraph {
                 x += direction;
             }
 
-            if (x < 0 || y < 0 || x >= width || y >= height
-                || room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid
-                || room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope) {
+            if (x < 0 || y < 0 || x >= Width || y >= Height
+                || _room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid
+                || _room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope) {
                 break;
             }
 
-            var shiftedNode = staticGraph.nodes[x, y];
+            var shiftedNode = staticGraph.Nodes[x, y];
             if (shiftedNode is null) {
                 continue;
             }
-            if (shiftedNode.type is NodeType.Corridor) {
+            if (shiftedNode.Type is NodeType.Corridor) {
                 break;
             }
-            if (shiftedNode.type is NodeType.Wall wall && wall.Direction == direction) {
+            if (shiftedNode.Type is NodeType.Wall wall && wall.Direction == direction) {
                 startConnectionList.Add(new NodeConnection(type, shiftedNode, t * 4.2f / 20));
                 break;
-            } else if (shiftedNode.verticalBeam) {
-                float poleResult = Parabola(pathOffset.y, v0, room.gravity, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
+            } else if (shiftedNode.VerticalBeam) {
+                float poleResult = Parabola(pathOffset.y, v0, _room.gravity, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
                 if (poleResult > y && poleResult < y + 1) {
                     startConnectionList.Add(new NodeConnection(type, shiftedNode, t * 4.2f / 20 + 5));
                 }
-            } else if (shiftedNode.horizontalBeam) {
+            } else if (shiftedNode.HorizontalBeam) {
                 startConnectionList.Add(new NodeConnection(type, shiftedNode, t * 4.2f / 20 + 10));
             }
         }
     }
 
     private void TraceDrop(int x, int y) {
-        var sharedGraph = room.GetCWT().sharedGraph!;
-        if (sharedGraph.GetNode(x, y)?.type is NodeType.Floor or NodeType.Slope
-            || y >= sharedGraph.height
+        var sharedGraph = _room.GetCWT().sharedGraph!;
+        if (sharedGraph.GetNode(x, y)?.Type is NodeType.Floor or NodeType.Slope
+            || y >= sharedGraph.Height
         ) {
             return;
         }
-        var adjacencyList = adjacencyLists[x, y]!;
+        var adjacencyList = AdjacencyLists[x, y]!;
         var ignoreList = new IgnoreList();
         for (int i = y - 1; i >= 0; i--) {
-            if (sharedGraph.nodes[x, i] is null) {
+            if (sharedGraph.Nodes[x, i] is null) {
                 continue;
             }
-            var currentNode = sharedGraph.nodes[x, i]!;
-            if (sharedGraph.nodes[x, i]!.type is NodeType.Floor) {
+            var currentNode = sharedGraph.Nodes[x, i]!;
+            if (sharedGraph.Nodes[x, i]!.Type is NodeType.Floor) {
                 // t = sqrt(2 * d / g)
                 // weight might have inaccurate units
                 adjacencyList.Add(
                     new NodeConnection(
                         new ConnectionType.Drop(ignoreList),
                         currentNode,
-                        Mathf.Sqrt(2 * 20 * (y - i) / room.gravity) * 4.2f / 20
+                        Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
                     )
                 );
-                if (sharedGraph.GetNode(x, i - 1)?.hasPlatform == false) {
+                if (sharedGraph.GetNode(x, i - 1)?.HasPlatform == false) {
                     break;
                 }
-            } else if (currentNode.type is NodeType.Slope) {
+            } else if (currentNode.Type is NodeType.Slope) {
                 adjacencyList.Add(
                     new NodeConnection(
                         new ConnectionType.Drop(ignoreList),
                         currentNode,
-                        Mathf.Sqrt(2 * 20 * (y - i) / room.gravity) * 4.2f / 20
+                        Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
                     )
                 );
-            } else if (currentNode.horizontalBeam) {
+            } else if (currentNode.HorizontalBeam) {
                 adjacencyList.Add(
                     new NodeConnection(
                         new ConnectionType.Drop(ignoreList.Clone()),
                         currentNode,
-                        Mathf.Sqrt(2 * 20 * (y - i) / room.gravity)
+                        Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity)
                     )
                 );
                 ignoreList.Add(new IVec2(x, i));
@@ -764,15 +761,15 @@ public class DynamicGraph {
 }
 
 public readonly struct SlugcatDescriptor {
-    public readonly bool isRivulet;
-    public readonly bool isPup;
-    public readonly float adrenaline;
-    public readonly float runspeed;
+    public readonly bool IsRivulet;
+    public readonly bool IsPup;
+    public readonly float Adrenaline;
+    public readonly float Runspeed;
     public SlugcatDescriptor(Player player) {
-        isRivulet = player.isRivulet;
-        isPup = player.isSlugpup;
-        adrenaline = player.Adrenaline;
-        runspeed = player.slugcatStats.runspeedFac;
+        IsRivulet = player.isRivulet;
+        IsPup = player.isSlugpup;
+        Adrenaline = player.Adrenaline;
+        Runspeed = player.slugcatStats.runspeedFac;
     }
 
     public override readonly bool Equals(object obj) {
@@ -784,17 +781,17 @@ public readonly struct SlugcatDescriptor {
     }
 
     public static bool operator ==(SlugcatDescriptor self, SlugcatDescriptor other) {
-        return self.isRivulet == other.isRivulet
-            && self.isPup == other.isPup
-            && self.adrenaline == other.adrenaline
-            && self.runspeed == other.runspeed;
+        return self.IsRivulet == other.IsRivulet
+            && self.IsPup == other.IsPup
+            && self.Adrenaline == other.Adrenaline
+            && self.Runspeed == other.Runspeed;
     }
 
     public static bool operator !=(SlugcatDescriptor self, SlugcatDescriptor other) {
-        return self.isRivulet != other.isRivulet
-            || self.isPup != other.isPup
-            || self.adrenaline != other.adrenaline
-            || self.runspeed != other.runspeed;
+        return self.IsRivulet != other.IsRivulet
+            || self.IsPup != other.IsPup
+            || self.Adrenaline != other.Adrenaline
+            || self.Runspeed != other.Runspeed;
     }
 
     public static float JumpBoost(float boost) {
@@ -804,50 +801,50 @@ public readonly struct SlugcatDescriptor {
 
     public readonly Vector2 FloorJumpVector() {
         return new Vector2(
-            4.2f * runspeed * Mathf.Lerp(1, 1.5f, adrenaline),
-            (isRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, adrenaline) + JumpBoost(isPup ? 7 : 8));
+            4.2f * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
+            (IsRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, Adrenaline) + JumpBoost(IsPup ? 7 : 8));
     }
 
     public readonly Vector2 HorizontalPoleJumpVector() {
         Vector2 v0;
-        if (isRivulet) {
-            v0 = new Vector2(9f, 9f) * Mathf.Lerp(1, 1.15f, adrenaline);
-        } else if (isPup) {
-            v0 = new Vector2(5f, 7f) * Mathf.Lerp(1, 1.15f, adrenaline);
+        if (IsRivulet) {
+            v0 = new Vector2(9f, 9f) * Mathf.Lerp(1, 1.15f, Adrenaline);
+        } else if (IsPup) {
+            v0 = new Vector2(5f, 7f) * Mathf.Lerp(1, 1.15f, Adrenaline);
         } else {
-            v0 = new Vector2(6f, 8f) * Mathf.Lerp(1, 1.15f, adrenaline);
+            v0 = new Vector2(6f, 8f) * Mathf.Lerp(1, 1.15f, Adrenaline);
         }
         return v0;
     }
 
     public readonly Vector2 VerticalPoleJumpVector() {
         return new Vector2(
-            4.2f * runspeed * Mathf.Lerp(1, 1.5f, adrenaline),
-            (isRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, adrenaline) + JumpBoost(isPup ? 7 : 8)
+            4.2f * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
+            (IsRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, Adrenaline) + JumpBoost(IsPup ? 7 : 8)
         );
     }
 
     public readonly Vector2 HorizontalCorridorFallVector() {
         return new Vector2(
-            4.2f * runspeed * Mathf.Lerp(1, 1.5f, adrenaline),
+            4.2f * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
             0);
     }
 
     public readonly Vector2 WallJumpVector(int wallDirection) {
         Vector2 v0;
-        if (isRivulet) {
-            v0 = new Vector2(-wallDirection * 9, 10) * Mathf.Lerp(1, 1.15f, adrenaline);
-        } else if (isPup) {
-            v0 = new Vector2(-wallDirection * 5, 6) * Mathf.Lerp(1, 1.15f, adrenaline);
+        if (IsRivulet) {
+            v0 = new Vector2(-wallDirection * 9, 10) * Mathf.Lerp(1, 1.15f, Adrenaline);
+        } else if (IsPup) {
+            v0 = new Vector2(-wallDirection * 5, 6) * Mathf.Lerp(1, 1.15f, Adrenaline);
         } else {
-            v0 = new Vector2(-wallDirection * 6, 8) * Mathf.Lerp(1, 1.15f, adrenaline);
+            v0 = new Vector2(-wallDirection * 6, 8) * Mathf.Lerp(1, 1.15f, Adrenaline);
         }
         return v0;
     }
 }
 
 public class BitGrid {
-    private readonly BitArray array;
+    private readonly BitArray _array;
 
     public int Width { get; }
     public int Height { get; }
@@ -855,85 +852,86 @@ public class BitGrid {
     public BitGrid(int width, int height) {
         Width = width;
         Height = height;
-        array = new BitArray(width * height);
+        _array = new BitArray(width * height);
     }
 
     public bool this[int x, int y] {
-        get => array[y * Width + x];
+        get => _array[y * Width + x];
         set {
-            array[y * Width + x] = value;
+            _array[y * Width + x] = value;
         }
     }
 
     public bool this[IVec2 pos] {
-        get => array[pos.y * Width + pos.x];
+        get => _array[pos.y * Width + pos.x];
         set {
-            array[pos.y * Width + pos.x] = value;
+            _array[pos.y * Width + pos.x] = value;
         }
     }
 
     public void Reset() {
-        array.SetAll(false);
+        _array.SetAll(false);
     }
 }
 
-public struct PathNodePool {
-    private readonly PathNode?[,] array;
-    public readonly int Width => array.GetLength(0);
-    public readonly int Height => array.GetLength(1);
+public readonly struct PathNodePool {
+    private readonly PathNode?[,] _array;
+
+    public readonly int Width => _array.GetLength(0);
+    public readonly int Height => _array.GetLength(1);
 
     public PathNodePool(SharedGraph graph) {
-        array = new PathNode[graph.width, graph.height];
+        _array = new PathNode[graph.Width, graph.Height];
         for (int y = 0; y < Height; y++) {
             for (int x = 0; x < Width; x++) {
-                if (graph.nodes[x, y] is not null) {
-                    array[x, y] = new PathNode(x, y);
+                if (graph.Nodes[x, y] is not null) {
+                    _array[x, y] = new PathNode(x, y);
                 }
             }
         }
     }
 
-    public readonly PathNode? this[int x, int y] => array[x, y];
-    public readonly PathNode? this[IVec2 pos] => array[pos.x, pos.y];
+    public readonly PathNode? this[int x, int y] => _array[x, y];
+    public readonly PathNode? this[IVec2 pos] => _array[pos.x, pos.y];
 }
 
 public class Pathfinder {
-    private Room room;
-    private SlugcatDescriptor lastDescriptor;
-    private readonly DynamicGraph dynamicGraph;
+    private Room _room;
+    private SlugcatDescriptor _lastDescriptor;
+    private readonly DynamicGraph _dynamicGraph;
 
     public Pathfinder(Room room, SlugcatDescriptor descriptor) {
-        this.room = room;
-        lastDescriptor = descriptor;
-        dynamicGraph = new DynamicGraph(room);
+        _room = room;
+        _lastDescriptor = descriptor;
+        _dynamicGraph = new DynamicGraph(room);
     }
 
     public void NewRoom(Room room) {
-        if (room != this.room) {
-            this.room = room;
-            dynamicGraph.NewRoom(room);
+        if (room != _room) {
+            _room = room;
+            _dynamicGraph.NewRoom(room);
         }
     }
 
     public Path? FindPath(IVec2 start, IVec2 destination, SlugcatDescriptor descriptor) {
-        var sharedGraph = room.GetCWT().sharedGraph!;
+        var sharedGraph = _room.GetCWT().sharedGraph!;
         if (sharedGraph.GetNode(start) is null) {
             Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
-            lastDescriptor = descriptor;
+            _lastDescriptor = descriptor;
             return null;
         }
         if (sharedGraph.GetNode(destination) is null) {
             Plugin.Logger!.LogDebug($"no node at destination ({destination.x}, {destination.y})");
-            lastDescriptor = descriptor;
+            _lastDescriptor = descriptor;
             return null;
         }
         if (Timers.active) {
             Timers.findPath.Start();
         }
-        var pathNodePool = room.GetCWT().pathNodePool!.Value;
-        var openNodes = room.GetCWT().openNodes!;
+        var pathNodePool = _room.GetCWT().pathNodePool!.Value;
+        var openNodes = _room.GetCWT().openNodes!;
         openNodes.Reset();
-        var closedNodes = room.GetCWT().closedNodes!;
+        var closedNodes = _room.GetCWT().closedNodes!;
         closedNodes.Reset();
         var startNode = pathNodePool[start]!;
         startNode.Reset(destination, null, 0);
@@ -943,12 +941,12 @@ public class Pathfinder {
         openNodes[start.x, start.y] = true;
         while (nodeHeap.Count > 0) {
             PathNode currentNode = nodeHeap[0];
-            var currentPos = currentNode.gridPos;
+            var currentPos = currentNode.GridPos;
             if (currentPos == destination) {
                 if (Timers.active) {
                     Timers.findPath.Stop();
                 }
-                lastDescriptor = descriptor;
+                _lastDescriptor = descriptor;
                 return new Path(currentNode, sharedGraph);
             }
 
@@ -990,18 +988,18 @@ public class Pathfinder {
             openNodes[currentPos] = false;
             closedNodes[currentPos] = true;
 
-            var graphNode = sharedGraph.nodes[currentPos.x, currentPos.y]!;
-            var adjacencyList = dynamicGraph.adjacencyLists[currentPos.x, currentPos.y]!;
+            var graphNode = sharedGraph.Nodes[currentPos.x, currentPos.y]!;
+            var adjacencyList = _dynamicGraph.AdjacencyLists[currentPos.x, currentPos.y]!;
 
             if (adjacencyList.Count == 0) {
-                dynamicGraph.TraceFromNode(currentPos, descriptor);
-            } else if (lastDescriptor != descriptor) {
+                _dynamicGraph.TraceFromNode(currentPos, descriptor);
+            } else if (_lastDescriptor != descriptor) {
                 adjacencyList.Clear();
-                dynamicGraph.TraceFromNode(currentPos, descriptor);
+                _dynamicGraph.TraceFromNode(currentPos, descriptor);
             }
 
             void CheckConnection(NodeConnection connection) {
-                IVec2 neighbourPos = connection.next.gridPos;
+                IVec2 neighbourPos = connection.Next.GridPos;
                 PathNode currentNeighbour = pathNodePool[neighbourPos]!;
                 if (closedNodes[neighbourPos]) {
                     return;
@@ -1009,8 +1007,8 @@ public class Pathfinder {
                 if (!openNodes[neighbourPos]) {
                     currentNeighbour.Reset(
                         destination,
-                        new PathConnection(connection.type, currentNode),
-                        currentNode.pathCost + connection.weight
+                        new PathConnection(connection.Type, currentNode),
+                        currentNode.PathCost + connection.Weight
                     );
                     nodeHeap.Add(currentNeighbour);
                     int index = nodeHeap.Count - 1;
@@ -1022,13 +1020,13 @@ public class Pathfinder {
                     }
                     openNodes[neighbourPos] = true;
                 }
-                if (currentNode.pathCost + connection.weight < currentNeighbour.pathCost) {
-                    currentNeighbour.pathCost = currentNode.pathCost + connection.weight;
-                    currentNeighbour.connection = new PathConnection(connection.type, currentNode);
+                if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
+                    currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
+                    currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
                 }
             }
 
-            foreach (var connection in graphNode.connections) {
+            foreach (var connection in graphNode.Connections) {
                 CheckConnection(connection);
             }
             foreach (var connection in adjacencyList) {
@@ -1038,7 +1036,7 @@ public class Pathfinder {
         if (Timers.active) {
             Timers.findPath.Stop();
         }
-        lastDescriptor = descriptor;
+        _lastDescriptor = descriptor;
         return null;
     }
 }
