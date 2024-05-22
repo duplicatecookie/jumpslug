@@ -264,7 +264,7 @@ public class IgnoreList {
 
     /// <summary>
     /// Iterate through the list to check if it contains the requested tile position.
-    /// entries during previous calls to this method are not checked again on repeated invocations.
+    /// entries checked during previous calls to this method are not checked again on repeated invocations.
     /// </summary>
     public bool ShouldIgnore(IVec2 node) {
         while (_cursor < _ignoreList.Count) {
@@ -277,7 +277,7 @@ public class IgnoreList {
     }
 
     /// <summary>
-    /// Make a deep copy.
+    /// Make a deep copy of the list.
     /// </summary>
     public IgnoreList Clone() {
         var cloneList = new List<IVec2>();
@@ -442,7 +442,7 @@ public class SharedGraph {
     }
 
     /// <summary>
-    /// Generate connections between node in the graph.
+    /// Generate connections between nodes in the graph.
     /// </summary>
     private void GenerateConnections(Room room) {
         for (int y = 0; y < Height; y++) {
@@ -599,7 +599,7 @@ public class SharedGraph {
     }
 
     /// <summary>
-    /// Make a bidirectional connection between to nodes in the graph.
+    /// Make a bidirectional connection between two nodes in the graph.
     /// </summary>
     private void ConnectNodes(Node start, Node end, ConnectionType startToEndType, ConnectionType endToStartType, float weight = 1f) {
         start.Connections.Add(new NodeConnection(startToEndType, end, weight));
@@ -763,7 +763,7 @@ public class DynamicGraph {
     /// <summary>
     /// Calculate the altitude along the traced trajectory at a specified point in time.
     /// </summary>
-    /// <param name=yOffset>
+    /// <param name="yOffset">
     /// the starting position of the trajectory.
     /// </param>
     /// <param name="v0">
@@ -775,22 +775,22 @@ public class DynamicGraph {
     public static float Parabola(float yOffset, Vector2 v0, float g, float t) => v0.y * t - 0.5f * g * t * t + yOffset;
 
     /// <summary>
-    /// Trace parabolic trajectory through the shared graph and adds any connections to the dynamic graph.
+    /// Trace parabolic trajectory through the shared graph and add any found connections to the dynamic graph.
     /// </summary>
     /// <param name="startPos">
-    /// the tile position of the node generated connections should be added to.
+    /// the tile position of the node generated connections should start from.
     /// </param>
     /// <param name="headPos">
-    /// the tile position of the first bodychunk, corresponding roughly to the head.
+    /// the tile position of the first bodychunk at the start of the jump, corresponding roughly to the head position.
     /// </param>
     /// <param name="v0">
     /// the velocity vector at the start of the jump.
     /// </param>
     /// <param name="type">
-    /// the type traced connections should have.
+    /// the type assigned to traced connections.
     /// </param>
     /// <param name="upright">
-    /// whether the slugcat should be treated as falling upright or head first during collision detection.
+    /// whether the slugcat should be treated as falling upright or head first during.
     /// </param>
     private void TraceJump(
         IVec2 startPos,
@@ -863,7 +863,7 @@ public class DynamicGraph {
     }
 
     /// <summary>
-    /// Trace vertical drop from the specified tile coordinates through the <see cref="SharedGraph">graph.</see>
+    /// Trace vertical drop from the specified tile coordinates.
     /// </summary>
     private void TraceDrop(int x, int y) {
         var sharedGraph = _room.GetCWT().sharedGraph!;
@@ -1003,7 +1003,7 @@ public readonly struct SlugcatDescriptor {
 }
 
 /// <summary>
-/// Two dimensional packed array of bits.
+/// A two dimensional packed array of bits.
 /// </summary>
 public class BitGrid {
     private readonly BitArray _array;
@@ -1040,7 +1040,7 @@ public class BitGrid {
 }
 
 /// <summary>
-/// Object pool allowing <see cref="PathNode">path nodes</see> to be reused between ticks and shared between pathfinders without deallocation.
+/// An object pool allowing <see cref="PathNode">path nodes</see> to be reused between ticks and shared between pathfinders without deallocation.
 /// </summary>
 public readonly struct PathNodePool {
     private readonly PathNode?[,] _array;
