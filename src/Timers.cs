@@ -46,26 +46,15 @@ static class Timers {
 }
 
 static class TimerHooks {
-    private static bool justPressedR = false;
     public static void RegisterHooks() {
         On.Player.Update += Player_Update;
     }
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
-        switch ((Input.GetKey(KeyCode.R), justPressedR)) {
-            case (true, false):
-                justPressedR = true;
-                if (Timers.Active) {
-                    Timers.FindPath.Report();
-                    Timers.FollowPath.Report();
-                    Timers.TraceFromNode.Report();
-                }
-                break;
-            case (false, true):
-                justPressedR = false;
-                break;
-            default:
-                break;
+        if (InputHelper.JustPressed(KeyCode.R) && Timers.Active) {
+            Timers.FindPath.Report();
+            Timers.FollowPath.Report();
+            Timers.TraceFromNode.Report();
         }
         orig(self, eu);
     }
