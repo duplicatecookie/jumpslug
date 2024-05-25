@@ -209,3 +209,305 @@ class PathVisualizer {
         _room.AddObject(postSprite);
     }
 }
+
+/// <summary>
+/// Contains copy of main pathfinder logic but only runs one loop iteration per frame while visualizing pathfinder state
+/// </summary>
+public class DebugPathfinder {
+    private Room _room;
+    private readonly DebugSprite?[,] _nodeSprites;
+    private readonly DebugSprite?[,] _connectionSprites;
+    private SlugcatDescriptor _descriptor;
+    private PathNodePool _pathNodePool;
+    private BitGrid _openNodes;
+    private BitGrid _closedNodes;
+    private List<PathNode> _nodeHeap;
+    public IVec2 Start { get; private set; }
+    public IVec2 Destination { get; private set; }
+    public bool IsInit { get; private set; }
+    private readonly DynamicGraph _dynamicGraph;
+
+    /// <summary>
+    /// Create new pathfinder in the specified room.
+    /// </summary>
+    /// <param name="room">
+    /// the room the pathfinder will try to find paths through
+    /// </param>
+    /// <param name="descriptor">
+    /// relevant information about the slugcat using this pathfinder.
+    /// </param>
+    public DebugPathfinder(Room room, SlugcatDescriptor descriptor) {
+        var sharedGraph = room.GetCWT().SharedGraph!;
+        _room = room;
+        _descriptor = descriptor;
+        _dynamicGraph = new DynamicGraph(room);
+        _pathNodePool = new PathNodePool(sharedGraph);
+        _nodeSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
+        _connectionSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
+        for (int y = 0; y < sharedGraph.Height; y++) {
+            for (int x = 0; x < sharedGraph.Width; x++) {
+                if (_pathNodePool[x, y] is not null) {
+                    var pos = RoomHelper.MiddleOfTile(x, y);
+                    var nodeSprite = new DebugSprite(
+                        pos,
+                        new FSprite("pixel") {
+                            scale = 5f,
+                            isVisible = false,
+                        },
+                        room
+                    );
+                    _nodeSprites[x, y] = nodeSprite;
+                    room.AddObject(nodeSprite);
+                    var connectionSprite = new DebugSprite(
+                        pos,
+                        TriangleMesh.MakeLongMesh(1, false, true),
+                        room
+                    );
+                    connectionSprite.sprite.isVisible = false;
+                    _connectionSprites[x, y] = connectionSprite;
+                    room.AddObject(connectionSprite);
+                }
+            }
+        }
+        _openNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
+        _closedNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
+        _nodeHeap = new();
+    }
+
+    /// <summary>
+    /// Reinitialize pathfinder for new room. Does nothing if the room has not actually changed.
+    /// </summary>
+    public void NewRoom(Room room) {
+        if (room != _room) {
+            _room = room;
+            _dynamicGraph.NewRoom(room);
+            _pathNodePool = new PathNodePool(room.GetCWT().SharedGraph!);
+            Reset();
+            foreach (var nodeSprite in _nodeSprites) {
+                if (nodeSprite is not null) {
+                    room.AddObject(nodeSprite);
+                }
+            }
+            foreach (var connectionSprite in _connectionSprites) {
+                if (connectionSprite is not null) {
+                    room.AddObject(connectionSprite);
+                }
+            }
+        }
+    }
+
+    public void Reset() {
+        IsInit = false;
+        _openNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
+        _closedNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
+        foreach (var nodeSprite in _nodeSprites) {
+            if (nodeSprite is not null) {
+                nodeSprite.sprite.color = Color.white;
+                nodeSprite.sprite.isVisible = false;
+            }
+        }
+        foreach (var connectionSprite in _connectionSprites) {
+            if (connectionSprite is not null) {
+                connectionSprite.sprite.isVisible = false;
+            }
+        }
+    }
+
+    public void InitPathfinding(IVec2 start, IVec2 destination, SlugcatDescriptor descriptor) {
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        if (sharedGraph.GetNode(start) is null) {
+            return;
+        }
+        if (sharedGraph.GetNode(destination) is null) {
+            return;
+        }
+        Start = start;
+        Destination = destination;
+        if (_descriptor != descriptor) {
+            for (int y = 0; y < _dynamicGraph.Height; y++) {
+                for (int x = 0; x < _dynamicGraph.Width; x++) {
+                    _dynamicGraph.AdjacencyLists[x, y]?.Clear();
+                }
+            }
+            _descriptor = descriptor;
+        }
+        var startNode = _pathNodePool[Start]!;
+        startNode.Reset(Destination, null, 0);
+        _nodeHeap = new List<PathNode> {
+            startNode
+        };
+        _openNodes[Start] = true;
+        var startNodeSprite = _nodeSprites[Start.x, Start.y]!.sprite;
+        startNodeSprite.isVisible = true;
+        startNodeSprite.scale = 10f;
+        startNodeSprite.color = Color.red;
+        var destNodeSprite = _nodeSprites[Destination.x, Destination.y]!.sprite;
+        destNodeSprite.isVisible = true;
+        destNodeSprite.color = Color.blue;
+        IsInit = true;
+        return;
+    }
+
+    public Path? Poll(out bool finished) {
+        if (!IsInit) {
+            finished = true;
+            return null;
+        }
+        if (_nodeHeap.Count > 0) {
+            PathNode currentNode = _nodeHeap[0];
+            var currentPos = currentNode.GridPos;
+            if (currentPos == Destination) {
+                finished = true;
+                return new Path(currentNode, _room.GetCWT().SharedGraph!);
+            }
+
+            _nodeHeap[0] = _nodeHeap[_nodeHeap.Count - 1];
+            _nodeHeap.RemoveAt(_nodeHeap.Count - 1);
+            int index = 0;
+            int leftIndex = 2 * index + 1;
+            int rightIndex = 2 * index + 2;
+            while (true) {
+                if (rightIndex >= _nodeHeap.Count) {
+                    if (leftIndex >= _nodeHeap.Count) {
+                        break;
+                    } else {
+                        if (_nodeHeap[leftIndex].FCost < _nodeHeap[index].FCost) {
+                            (_nodeHeap[leftIndex], _nodeHeap[index]) = (_nodeHeap[index], _nodeHeap[leftIndex]);
+                            index = leftIndex;
+                        } else {
+                            break;
+                        }
+                    }
+                } else {
+                    if (_nodeHeap[leftIndex].FCost < _nodeHeap[index].FCost
+                        || _nodeHeap[rightIndex].FCost < _nodeHeap[index].FCost
+                    ) {
+                        if (_nodeHeap[leftIndex].FCost < _nodeHeap[rightIndex].FCost) {
+                            (_nodeHeap[leftIndex], _nodeHeap[index]) = (_nodeHeap[index], _nodeHeap[leftIndex]);
+                            index = leftIndex;
+                        } else {
+                            (_nodeHeap[rightIndex], _nodeHeap[index]) = (_nodeHeap[index], _nodeHeap[rightIndex]);
+                            index = rightIndex;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                leftIndex = 2 * index + 1;
+                rightIndex = 2 * index + 2;
+            }
+            _openNodes[currentPos] = false;
+            _closedNodes[currentPos] = true;
+            _nodeSprites[currentPos.x, currentPos.y]!.sprite.scale = 5f;
+
+            var graphNode = _room.GetCWT().SharedGraph!.Nodes[currentPos.x, currentPos.y]!;
+            var adjacencyList = _dynamicGraph.AdjacencyLists[currentPos.x, currentPos.y]!;
+
+            if (adjacencyList.Count == 0) {
+                _dynamicGraph.TraceFromNode(currentPos, _descriptor);
+            }
+
+            void CheckConnection(NodeConnection connection) {
+                IVec2 neighbourPos = connection.Next.GridPos;
+                PathNode currentNeighbour = _pathNodePool[neighbourPos]!;
+                if (_closedNodes[neighbourPos]) {
+                    return;
+                }
+                if (!_openNodes[neighbourPos]) {
+                    currentNeighbour.Reset(
+                        Destination,
+                        new PathConnection(connection.Type, currentNode),
+                        currentNode.PathCost + connection.Weight
+                    );
+                    _nodeHeap.Add(currentNeighbour);
+                    int index = _nodeHeap.Count - 1;
+                    while (index > 0 && currentNeighbour.FCost < _nodeHeap[(index - 1) / 2].FCost) {
+                        PathNode temp = _nodeHeap[(index - 1) / 2];
+                        _nodeHeap[(index - 1) / 2] = currentNeighbour;
+                        _nodeHeap[index] = temp;
+                        index = (index - 1) / 2;
+                    }
+                    var neighbourNodeSprite = _nodeSprites[neighbourPos.x, neighbourPos.y]!.sprite;
+                    neighbourNodeSprite.isVisible = true;
+                    neighbourNodeSprite.scale = 10f;
+                    var neighbourConnectionSprite = _connectionSprites[neighbourPos.x, neighbourPos.y]!.sprite;
+                    neighbourConnectionSprite.isVisible = true;
+                    var currentScreenPos = RoomHelper.MiddleOfTile(currentPos);
+                    var neighbourScreenPos = RoomHelper.MiddleOfTile(neighbourPos);
+                    LineHelper.ReshapeLine(
+                        (TriangleMesh)neighbourConnectionSprite,
+                        neighbourScreenPos,
+                        currentScreenPos
+                    );
+                    _openNodes[neighbourPos] = true;
+                }
+                if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
+                    currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
+                    currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
+                    var neighbourConnectionSprite = _connectionSprites[neighbourPos.x, neighbourPos.y]!.sprite;
+                    neighbourConnectionSprite.isVisible = true;
+                    var currentScreenPos = RoomHelper.MiddleOfTile(currentPos);
+                    var neighbourScreenPos = RoomHelper.MiddleOfTile(neighbourPos);
+                    LineHelper.ReshapeLine(
+                        (TriangleMesh)neighbourConnectionSprite,
+                        neighbourScreenPos,
+                        currentScreenPos
+                    );
+                }
+            }
+
+            foreach (var connection in graphNode.Connections) {
+                CheckConnection(connection);
+            }
+            foreach (var connection in adjacencyList) {
+                CheckConnection(connection);
+            }
+            finished = false;
+            return null;
+        } else {
+            finished = true;
+            return null;
+        }
+    }
+}
+
+static class VisualizerHooks {
+    public static void RegisterHooks() {
+        On.Player.Update += Player_Update;
+        On.Player.NewRoom += Player_NewRoom;
+    }
+
+    public static void UnregisterHooks() {
+        On.Player.Update -= Player_Update;
+        On.Player.NewRoom -= Player_NewRoom;
+    }
+
+    private static void Player_NewRoom(On.Player.orig_NewRoom orig, Player self, Room room) {
+        orig(self, room);
+        self.GetCWT().DebugPathfinder?.NewRoom(room);
+    }
+
+    private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
+        var debugPathfinder = self.GetCWT().DebugPathfinder;
+        if (debugPathfinder is null) {
+            if (InputHelper.JustPressed(KeyCode.V)) {
+                self.GetCWT().DebugPathfinder = new DebugPathfinder(self.room, new SlugcatDescriptor(self));
+            }
+        } else {
+            bool finished = true;
+            if (debugPathfinder.IsInit) {
+                debugPathfinder.Poll(out finished);
+            }
+            if (InputHelper.JustPressedMouseButton(0) && finished) {
+                debugPathfinder.Reset();
+                var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
+                debugPathfinder.InitPathfinding(
+                    RoomHelper.TilePosition(self.bodyChunks[1].pos),
+                    RoomHelper.TilePosition(mousePos),
+                    new SlugcatDescriptor(self)
+                );
+            }
+        }
+        orig(self, eu);
+    }
+}
