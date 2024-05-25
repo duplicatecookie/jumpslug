@@ -622,7 +622,7 @@ public class DynamicGraph {
     /// </summary>
     public DynamicGraph(Room room) {
         _room = room;
-        var sharedGraph = room.GetCWT().sharedGraph!;
+        var sharedGraph = room.GetCWT().SharedGraph!;
         Width = sharedGraph.Width;
         Height = sharedGraph.Height;
         AdjacencyLists = new List<NodeConnection>[Width, Height];
@@ -641,7 +641,7 @@ public class DynamicGraph {
     public void NewRoom(Room room) {
         if (room != _room) {
             _room = room;
-            var sharedGraph = room.GetCWT().sharedGraph!;
+            var sharedGraph = room.GetCWT().SharedGraph!;
             Width = sharedGraph.Width;
             Height = sharedGraph.Height;
             AdjacencyLists = new List<NodeConnection>[Width, Height];
@@ -665,14 +665,14 @@ public class DynamicGraph {
     /// slugcat-specifc values to use.
     /// </param>
     public void TraceFromNode(IVec2 pos, SlugcatDescriptor descriptor) {
-        if (Timers.active) {
-            Timers.traceFromNode.Start();
+        if (Timers.Active) {
+            Timers.TraceFromNode.Start();
         }
-        var sharedGraph = _room.GetCWT().sharedGraph!;
+        var sharedGraph = _room.GetCWT().SharedGraph!;
         var graphNode = sharedGraph.GetNode(pos);
         if (graphNode is null) {
-            if (Timers.active) {
-                Timers.traceFromNode.Stop();
+            if (Timers.Active) {
+                Timers.TraceFromNode.Stop();
             }
             return;
         }
@@ -755,8 +755,8 @@ public class DynamicGraph {
             var v0 = descriptor.WallJumpVector(jumpWall.Direction);
             TraceJump(pos, pos, v0, new ConnectionType.Jump(-jumpWall.Direction));
         }
-        if (Timers.active) {
-            Timers.traceFromNode.Stop();
+        if (Timers.Active) {
+            Timers.TraceFromNode.Stop();
         }
     }
 
@@ -801,7 +801,7 @@ public class DynamicGraph {
     ) {
         int x = headPos.x;
         int y = headPos.y;
-        var sharedGraph = _room.GetCWT().sharedGraph;
+        var sharedGraph = _room.GetCWT().SharedGraph;
         if (x < 0 || y < 0 || x >= Width || y >= Height || sharedGraph is null) {
             return;
         }
@@ -866,7 +866,7 @@ public class DynamicGraph {
     /// Trace vertical drop from the specified tile coordinates.
     /// </summary>
     private void TraceDrop(int x, int y) {
-        var sharedGraph = _room.GetCWT().sharedGraph!;
+        var sharedGraph = _room.GetCWT().SharedGraph!;
         if (sharedGraph.GetNode(x, y)?.Type is NodeType.Floor or NodeType.Slope
             || y >= sharedGraph.Height
         ) {
@@ -1110,7 +1110,7 @@ public class Pathfinder {
     /// otherwise returns a <see cref="Path">path</see> ready for use by the AI.
     /// </returns>
     public Path? FindPath(IVec2 start, IVec2 destination, SlugcatDescriptor descriptor) {
-        var sharedGraph = _room.GetCWT().sharedGraph!;
+        var sharedGraph = _room.GetCWT().SharedGraph!;
         if (sharedGraph.GetNode(start) is null) {
             Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
             _lastDescriptor = descriptor;
@@ -1121,13 +1121,13 @@ public class Pathfinder {
             _lastDescriptor = descriptor;
             return null;
         }
-        if (Timers.active) {
-            Timers.findPath.Start();
+        if (Timers.Active) {
+            Timers.FindPath.Start();
         }
-        var pathNodePool = _room.GetCWT().pathNodePool!.Value;
-        var openNodes = _room.GetCWT().openNodes!;
+        var pathNodePool = _room.GetCWT().PathNodePool!.Value;
+        var openNodes = _room.GetCWT().OpenNodes!;
         openNodes.Reset();
-        var closedNodes = _room.GetCWT().closedNodes!;
+        var closedNodes = _room.GetCWT().ClosedNodes!;
         closedNodes.Reset();
         var startNode = pathNodePool[start]!;
         startNode.Reset(destination, null, 0);
@@ -1139,8 +1139,8 @@ public class Pathfinder {
             PathNode currentNode = nodeHeap[0];
             var currentPos = currentNode.GridPos;
             if (currentPos == destination) {
-                if (Timers.active) {
-                    Timers.findPath.Stop();
+                if (Timers.Active) {
+                    Timers.FindPath.Stop();
                 }
                 _lastDescriptor = descriptor;
                 return new Path(currentNode, sharedGraph);
@@ -1229,8 +1229,8 @@ public class Pathfinder {
                 CheckConnection(connection);
             }
         }
-        if (Timers.active) {
-            Timers.findPath.Stop();
+        if (Timers.Active) {
+            Timers.FindPath.Stop();
         }
         _lastDescriptor = descriptor;
         return null;

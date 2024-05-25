@@ -27,7 +27,7 @@ class SharedGraphVisualizer {
     }
 
     public void ToggleNodes() {
-        var graph = _room.GetCWT().sharedGraph!;
+        var graph = _room.GetCWT().SharedGraph!;
         if (VisualizingNodes) {
             ResetNodeSprites();
             return;
@@ -60,7 +60,7 @@ class SharedGraphVisualizer {
     }
 
     public void ToggleConnections() {
-        var graph = _room.GetCWT().sharedGraph!;
+        var graph = _room.GetCWT().SharedGraph!;
         if (VisualizingConnections) {
             foreach (var sprite in _connectionSprites) {
                 sprite.Destroy();
@@ -146,7 +146,7 @@ class PathVisualizer {
                 _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
             };
             var connection = path.Connections[i];
-            var sharedGraph = _room.GetCWT().sharedGraph!;
+            var sharedGraph = _room.GetCWT().SharedGraph!;
             if (connection is ConnectionType.Jump) {
                 // this node can be null only if the path is constructed incorrectly so this should throw
                 Node graphNode = sharedGraph.GetNode(startTile)!;

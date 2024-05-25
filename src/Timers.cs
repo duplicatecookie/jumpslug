@@ -6,43 +6,43 @@ using UnityEngine;
 namespace JumpSlug;
 
 class FunctionTimer {
-    public string name;
-    public Stopwatch watch;
-    public int invocations;
+    public string Name;
+    public Stopwatch Watch;
+    public int Invocations;
     public FunctionTimer(string name) {
-        this.name = name;
-        watch = new Stopwatch();
-        invocations = 0;
+        this.Name = name;
+        Watch = new Stopwatch();
+        Invocations = 0;
     }
 
     public void Start() {
-        watch.Start();
-        invocations += 1;
+        Watch.Start();
+        Invocations += 1;
     }
     public void Stop() {
-        watch.Stop();
+        Watch.Stop();
     }
 
     public void Report() {
-        double totalSeconds = ((double)watch.ElapsedTicks / (double)Stopwatch.Frequency);
+        double totalSeconds = ((double)Watch.ElapsedTicks / (double)Stopwatch.Frequency);
         Plugin.Logger!.LogInfo(
             String.Format(
                 "name: {0}, invocations: {1}, ticks: {2} total time: {3} ms, average time: {4} μs",
-                name,
-                invocations,
-                watch.ElapsedTicks,
+                Name,
+                Invocations,
+                Watch.ElapsedTicks,
                 Math.Round(totalSeconds * 1000.0),
-                Math.Round((totalSeconds * 1000_000.0) / (double)invocations)
+                Math.Round((totalSeconds * 1000_000.0) / (double)Invocations)
             )
         );
     }
 }
 
 static class Timers {
-    public static bool active = false;
-    public static FunctionTimer findPath = new FunctionTimer("Pathfinder.FindPath");
-    public static FunctionTimer followPath = new FunctionTimer("JumpSlugAI.FollowPath");
-    public static FunctionTimer traceFromNode = new FunctionTimer("DynamicGraph.TraceFromNode");
+    public static bool Active = false;
+    public static FunctionTimer FindPath = new FunctionTimer("Pathfinder.FindPath");
+    public static FunctionTimer FollowPath = new FunctionTimer("JumpSlugAI.FollowPath");
+    public static FunctionTimer TraceFromNode = new FunctionTimer("DynamicGraph.TraceFromNode");
 }
 
 static class TimerHooks {
@@ -55,10 +55,10 @@ static class TimerHooks {
         switch ((Input.GetKey(KeyCode.R), justPressedR)) {
             case (true, false):
                 justPressedR = true;
-                if (Timers.active) {
-                    Timers.findPath.Report();
-                    Timers.followPath.Report();
-                    Timers.traceFromNode.Report();
+                if (Timers.Active) {
+                    Timers.FindPath.Report();
+                    Timers.FollowPath.Report();
+                    Timers.TraceFromNode.Report();
                 }
                 break;
             case (false, true):

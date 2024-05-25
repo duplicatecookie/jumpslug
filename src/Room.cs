@@ -6,16 +6,16 @@ namespace JumpSlug;
 
 static class RoomCWT {
     public class RoomExtension {
-        public Pathfinding.SharedGraph? sharedGraph;
-        public Pathfinding.SharedGraphVisualizer? visualizer;
-        public Pathfinding.PathNodePool? pathNodePool;
-        public Pathfinding.BitGrid? openNodes;
-        public Pathfinding.BitGrid? closedNodes;
+        public Pathfinding.SharedGraph? SharedGraph;
+        public Pathfinding.SharedGraphVisualizer? Visualizer;
+        public Pathfinding.PathNodePool? PathNodePool;
+        public Pathfinding.BitGrid? OpenNodes;
+        public Pathfinding.BitGrid? ClosedNodes;
         public RoomExtension() {
         }
     }
-    public static ConditionalWeakTable<Room, RoomExtension> cwt = new();
-    public static RoomExtension GetCWT(this Room room) => cwt.GetValue(room, _ => new());
+    public static ConditionalWeakTable<Room, RoomExtension> CWT = new();
+    public static RoomExtension GetCWT(this Room room) => CWT.GetValue(room, _ => new());
 }
 
 static class RoomHooks {
@@ -33,23 +33,23 @@ static class RoomHooks {
         orig(self);
         if (self.threadFinished) {
             var roomExt = self.room.GetCWT();
-            roomExt.sharedGraph = new Pathfinding.SharedGraph(self.room);
-            roomExt.visualizer = new Pathfinding.SharedGraphVisualizer(self.room);
-            int width = roomExt.sharedGraph.Width;
-            int height = roomExt.sharedGraph.Height;
-            roomExt.openNodes = new Pathfinding.BitGrid(width, height);
-            roomExt.closedNodes = new Pathfinding.BitGrid(width, height);
-            roomExt.pathNodePool = new Pathfinding.PathNodePool(roomExt.sharedGraph);
+            roomExt.SharedGraph = new Pathfinding.SharedGraph(self.room);
+            roomExt.Visualizer = new Pathfinding.SharedGraphVisualizer(self.room);
+            int width = roomExt.SharedGraph.Width;
+            int height = roomExt.SharedGraph.Height;
+            roomExt.OpenNodes = new Pathfinding.BitGrid(width, height);
+            roomExt.ClosedNodes = new Pathfinding.BitGrid(width, height);
+            roomExt.PathNodePool = new Pathfinding.PathNodePool(roomExt.SharedGraph);
         }
     }
 
     private static void Room_Update(On.Room.orig_Update orig, Room self) {
         orig(self);
         if (InputHelper.JustPressed(KeyCode.N)) {
-            self.GetCWT().visualizer!.ToggleNodes();
+            self.GetCWT().Visualizer!.ToggleNodes();
         }
         if (InputHelper.JustPressed(KeyCode.C)) {
-            self.GetCWT().visualizer!.ToggleConnections();
+            self.GetCWT().Visualizer!.ToggleConnections();
         }
     }
 }

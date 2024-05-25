@@ -47,7 +47,7 @@ class JumpSlugAI : ArtificialIntelligence {
             return;
         }
         if (InputHelper.JustPressedMouseButton(0)) {
-            IVec2? start = Room.GetCWT().sharedGraph!.CurrentNode(Player)?.GridPos;
+            IVec2? start = Room.GetCWT().SharedGraph!.CurrentNode(Player)?.GridPos;
             var mousePos = (Vector2)Input.mousePosition + Room!.game.cameras[0].pos;
             _destination = Room.GetTilePosition(mousePos);
             _path = start is null || _destination is null
@@ -90,18 +90,18 @@ class JumpSlugAI : ArtificialIntelligence {
             _waitOneTick = false;
             return;
         }
-        if (Timers.active) {
-            Timers.followPath.Start();
+        if (Timers.Active) {
+            Timers.FollowPath.Start();
         }
         // checked in outher scope
-        var staticGraph = Room!.GetCWT().sharedGraph;
+        var staticGraph = Room!.GetCWT().SharedGraph;
         var currentNode = staticGraph!.CurrentNode(Player);
         var currentPathPosNullable = _path.CurrentNode();
         if (currentNode is null || currentPathPosNullable is null) {
             Player.input[0] = input;
             // can't move on non-existent node, wait instead
-            if (Timers.active) {
-                Timers.followPath.Stop();
+            if (Timers.Active) {
+                Timers.FollowPath.Stop();
             }
             return;
         }
@@ -194,8 +194,8 @@ class JumpSlugAI : ArtificialIntelligence {
             IVec2? current;
             while ((current = _path.CurrentNode()) is not null) {
                 if (currentNode.GridPos == current) {
-                    if (Timers.active) {
-                        Timers.followPath.Stop();
+                    if (Timers.Active) {
+                        Timers.FollowPath.Stop();
                     }
                     return;
                 }
@@ -203,8 +203,8 @@ class JumpSlugAI : ArtificialIntelligence {
             }
             if (_destination is null) {
                 _path = null;
-            } else if (Timers.active) {
-                Timers.followPath.Stop();
+            } else if (Timers.Active) {
+                Timers.FollowPath.Stop();
                 _pathfinder.FindPath(
                     currentNode.GridPos,
                     _destination.Value,
@@ -227,8 +227,8 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         }
         Player.input[0] = input;
-        if (Timers.active) {
-            Timers.followPath.Stop();
+        if (Timers.Active) {
+            Timers.FollowPath.Stop();
         }
     }
 }

@@ -18,7 +18,7 @@ class Plugin : BaseUnityPlugin {
         if (Stopwatch.IsHighResolution) {
             Logger!.LogInfo("Performance timing enabled");
             Logger!.LogInfo($"Timer Frequency: {Stopwatch.Frequency} Hz");
-            Timers.active = true;
+            Timers.Active = true;
         } else {
             Logger!.LogError("No high resolution timer available, disabling performance timing");
         }
