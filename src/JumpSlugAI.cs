@@ -205,13 +205,14 @@ class JumpSlugAI : ArtificialIntelligence {
                 _path = null;
             } else if (Timers.Active) {
                 Timers.FollowPath.Stop();
-                _pathfinder.FindPath(
+                _path = _pathfinder.FindPath(
                     currentNode.GridPos,
                     _destination.Value,
                     new SlugcatDescriptor(Player)
                 );
+                Timers.FindPath.Start();
             } else {
-                _pathfinder.FindPath(
+                _path = _pathfinder.FindPath(
                     currentNode.GridPos,
                     _destination.Value,
                     new SlugcatDescriptor(Player)
