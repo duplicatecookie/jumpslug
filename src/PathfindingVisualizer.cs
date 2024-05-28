@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 
 using UnityEngine;
 
@@ -222,10 +225,12 @@ public class DebugPathfinder {
     private BitGrid _openNodes;
     private BitGrid _closedNodes;
     private List<PathNode> _nodeHeap;
+    private readonly DynamicGraph _dynamicGraph;
     public IVec2 Start { get; private set; }
     public IVec2 Destination { get; private set; }
     public bool IsInit { get; private set; }
-    private readonly DynamicGraph _dynamicGraph;
+    public bool IsFinished { get; private set; }
+
 
     /// <summary>
     /// Create new pathfinder in the specified room.
@@ -345,22 +350,41 @@ public class DebugPathfinder {
         destNodeSprite.isVisible = true;
         destNodeSprite.color = Color.blue;
         IsInit = true;
+        IsFinished = false;
         return;
     }
 
-    public Path? Poll(out bool finished) {
+    public void Poll() {
         if (!IsInit) {
-            finished = true;
-            return null;
+            return;
         }
         if (_nodeHeap.Count > 0) {
+            for (int i = 0; i < _nodeHeap.Count; i++) {
+                var node = _nodeHeap[i];
+                if (node.FCost < _nodeHeap[0].FCost) {
+                    var validationString = new StringBuilder();
+                    for (int j = 0; j < _nodeHeap.Count; j++) {
+                        validationString.Append(_nodeHeap[j].FCost);
+                        validationString.Append(" ");
+                    }
+                    Plugin.Logger!.LogWarning($"heap validation failed: {validationString}");
+                    IsFinished = true;
+                    return;
+                }
+            }
             PathNode currentNode = _nodeHeap[0];
             var currentPos = currentNode.GridPos;
             if (currentPos == Destination) {
-                finished = true;
-                return new Path(currentNode, _room.GetCWT().SharedGraph!);
+                PathNode? cursor = _pathNodePool[Destination];
+                if (cursor is null) {
+                    return;
+                }
+                while (cursor.Connection is not null) {
+                    _connectionSprites[cursor.GridPos.x, cursor.GridPos.y]!.sprite.color = Color.red;
+                    cursor = cursor.Connection.Value.Next;
+                }
+                IsFinished = true;
             }
-
             _nodeHeap[0] = _nodeHeap[_nodeHeap.Count - 1];
             _nodeHeap.RemoveAt(_nodeHeap.Count - 1);
             int index = 0;
@@ -414,6 +438,7 @@ public class DebugPathfinder {
                     return;
                 }
                 if (!_openNodes[neighbourPos]) {
+                    _openNodes[neighbourPos] = true;
                     currentNeighbour.Reset(
                         Destination,
                         new PathConnection(connection.Type, currentNode),
@@ -432,6 +457,16 @@ public class DebugPathfinder {
                     neighbourNodeSprite.scale = 10f;
                     var neighbourConnectionSprite = _connectionSprites[neighbourPos.x, neighbourPos.y]!.sprite;
                     neighbourConnectionSprite.isVisible = true;
+                    if (connection.Type
+                        is ConnectionType.Jump
+                        or ConnectionType.Drop
+                        or ConnectionType.WalkOffEdge
+                        or ConnectionType.Pounce
+                    ) {
+                        neighbourConnectionSprite.color = Color.grey;
+                    } else {
+                        neighbourConnectionSprite.color = Color.white;
+                    }
                     var currentScreenPos = RoomHelper.MiddleOfTile(currentPos);
                     var neighbourScreenPos = RoomHelper.MiddleOfTile(neighbourPos);
                     LineHelper.ReshapeLine(
@@ -439,13 +474,22 @@ public class DebugPathfinder {
                         neighbourScreenPos,
                         currentScreenPos
                     );
-                    _openNodes[neighbourPos] = true;
                 }
                 if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
                     currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
                     currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
                     var neighbourConnectionSprite = _connectionSprites[neighbourPos.x, neighbourPos.y]!.sprite;
                     neighbourConnectionSprite.isVisible = true;
+                    if (connection.Type
+                        is ConnectionType.Jump
+                        or ConnectionType.Drop
+                        or ConnectionType.WalkOffEdge
+                        or ConnectionType.Pounce
+                    ) {
+                        neighbourConnectionSprite.color = Color.grey;
+                    } else {
+                        neighbourConnectionSprite.color = Color.white;
+                    }
                     var currentScreenPos = RoomHelper.MiddleOfTile(currentPos);
                     var neighbourScreenPos = RoomHelper.MiddleOfTile(neighbourPos);
                     LineHelper.ReshapeLine(
@@ -462,11 +506,9 @@ public class DebugPathfinder {
             foreach (var connection in adjacencyList) {
                 CheckConnection(connection);
             }
-            finished = false;
-            return null;
+            IsFinished = false;
         } else {
-            finished = true;
-            return null;
+            IsFinished = true;
         }
     }
 }
@@ -494,11 +536,10 @@ static class VisualizerHooks {
                 self.GetCWT().DebugPathfinder = new DebugPathfinder(self.room, new SlugcatDescriptor(self));
             }
         } else {
-            bool finished = true;
-            if (debugPathfinder.IsInit) {
-                debugPathfinder.Poll(out finished);
+            if (debugPathfinder.IsInit && !debugPathfinder.IsFinished) {
+                debugPathfinder.Poll();
             }
-            if (InputHelper.JustPressedMouseButton(0) && finished) {
+            if (InputHelper.JustPressedMouseButton(0)) {
                 debugPathfinder.Reset();
                 var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
                 debugPathfinder.InitPathfinding(
