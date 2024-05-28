@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
@@ -1039,12 +1040,92 @@ public class BitGrid {
     }
 }
 
+public class PathNodeMinHeap {
+    private readonly List<PathNode> _nodes;
+
+    public int Count => _nodes.Count;
+    public PathNode? Root => _nodes.Count > 0 ? _nodes[0] : null;
+
+    public PathNodeMinHeap(int capacity) {
+        _nodes = new(capacity);
+    }
+
+    public void Add(PathNode node) {
+        _nodes.Add(node);
+        int index = _nodes.Count - 1;
+        while (index > 0 && node.FCost < _nodes[(index - 1) / 2].FCost) {
+            PathNode temp = _nodes[(index - 1) / 2];
+            _nodes[(index - 1) / 2] = node;
+            _nodes[index] = temp;
+            index = (index - 1) / 2;
+        }
+    }
+
+    public void RemoveRoot() {
+        _nodes[0] = _nodes[_nodes.Count - 1];
+        _nodes.RemoveAt(_nodes.Count - 1);
+        int index = 0;
+        int leftIndex = 2 * index + 1;
+        int rightIndex = 2 * index + 2;
+        while (true) {
+            if (rightIndex >= _nodes.Count) {
+                if (leftIndex >= _nodes.Count) {
+                    break;
+                } else {
+                    if (_nodes[leftIndex].FCost < _nodes[index].FCost) {
+                        (_nodes[leftIndex], _nodes[index]) = (_nodes[index], _nodes[leftIndex]);
+                        index = leftIndex;
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                if (_nodes[leftIndex].FCost < _nodes[index].FCost
+                    || _nodes[rightIndex].FCost < _nodes[index].FCost
+                ) {
+                    if (_nodes[leftIndex].FCost < _nodes[rightIndex].FCost) {
+                        (_nodes[leftIndex], _nodes[index]) = (_nodes[index], _nodes[leftIndex]);
+                        index = leftIndex;
+                    } else {
+                        (_nodes[rightIndex], _nodes[index]) = (_nodes[index], _nodes[rightIndex]);
+                        index = rightIndex;
+                    }
+                } else {
+                    break;
+                }
+            }
+            leftIndex = 2 * index + 1;
+            rightIndex = 2 * index + 2;
+        }
+    }
+
+    public void Clear() {
+        _nodes.Clear();
+    }
+
+    public bool Validate() {
+        for (int i = 0; i < Count; i++) {
+            var node = _nodes[i];
+            if (node.FCost < Root!.FCost) {
+                var validationString = new StringBuilder();
+                for (int j = 0; j < Count; j++) {
+                    validationString.Append(_nodes[j].FCost);
+                    validationString.Append(" ");
+                }
+                Plugin.Logger!.LogWarning($"heap validation failed: {validationString}");
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
 /// <summary>
 /// An object pool allowing <see cref="PathNode">path nodes</see> to be reused between ticks and shared between pathfinders without deallocation.
 /// </summary>
 public readonly struct PathNodePool {
     private readonly PathNode?[,] _array;
-
+    public readonly int NonNullCount;
     public readonly int Width => _array.GetLength(0);
     public readonly int Height => _array.GetLength(1);
 
@@ -1054,6 +1135,7 @@ public readonly struct PathNodePool {
             for (int x = 0; x < Width; x++) {
                 if (graph.Nodes[x, y] is not null) {
                     _array[x, y] = new PathNode(x, y);
+                    NonNullCount++;
                 }
             }
         }
@@ -1131,12 +1213,12 @@ public class Pathfinder {
         closedNodes.Reset();
         var startNode = pathNodePool[start]!;
         startNode.Reset(destination, null, 0);
-        var nodeHeap = new List<PathNode> {
-            startNode
-        };
+        var nodeHeap = _room.GetCWT().NodeHeap!;
+        nodeHeap.Clear();
+        nodeHeap.Add(startNode);
         openNodes[start.x, start.y] = true;
         while (nodeHeap.Count > 0) {
-            PathNode currentNode = nodeHeap[0];
+            PathNode currentNode = nodeHeap.Root!;
             var currentPos = currentNode.GridPos;
             if (currentPos == destination) {
                 if (Timers.Active) {
@@ -1145,42 +1227,7 @@ public class Pathfinder {
                 _lastDescriptor = descriptor;
                 return new Path(currentNode, sharedGraph);
             }
-
-            nodeHeap[0] = nodeHeap[nodeHeap.Count - 1];
-            nodeHeap.RemoveAt(nodeHeap.Count - 1);
-            int index = 0;
-            int leftIndex = 2 * index + 1;
-            int rightIndex = 2 * index + 2;
-            while (true) {
-                if (rightIndex >= nodeHeap.Count) {
-                    if (leftIndex >= nodeHeap.Count) {
-                        break;
-                    } else {
-                        if (nodeHeap[leftIndex].FCost < nodeHeap[index].FCost) {
-                            (nodeHeap[leftIndex], nodeHeap[index]) = (nodeHeap[index], nodeHeap[leftIndex]);
-                            index = leftIndex;
-                        } else {
-                            break;
-                        }
-                    }
-                } else {
-                    if (nodeHeap[leftIndex].FCost < nodeHeap[index].FCost
-                        || nodeHeap[rightIndex].FCost < nodeHeap[index].FCost
-                    ) {
-                        if (nodeHeap[leftIndex].FCost < nodeHeap[rightIndex].FCost) {
-                            (nodeHeap[leftIndex], nodeHeap[index]) = (nodeHeap[index], nodeHeap[leftIndex]);
-                            index = leftIndex;
-                        } else {
-                            (nodeHeap[rightIndex], nodeHeap[index]) = (nodeHeap[index], nodeHeap[rightIndex]);
-                            index = rightIndex;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-                leftIndex = 2 * index + 1;
-                rightIndex = 2 * index + 2;
-            }
+            nodeHeap.RemoveRoot();
             openNodes[currentPos] = false;
             closedNodes[currentPos] = true;
 
@@ -1207,13 +1254,6 @@ public class Pathfinder {
                         currentNode.PathCost + connection.Weight
                     );
                     nodeHeap.Add(currentNeighbour);
-                    int index = nodeHeap.Count - 1;
-                    while (index > 0 && currentNeighbour.FCost < nodeHeap[(index - 1) / 2].FCost) {
-                        PathNode temp = nodeHeap[(index - 1) / 2];
-                        nodeHeap[(index - 1) / 2] = currentNeighbour;
-                        nodeHeap[index] = temp;
-                        index = (index - 1) / 2;
-                    }
                     openNodes[neighbourPos] = true;
                 }
                 if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {

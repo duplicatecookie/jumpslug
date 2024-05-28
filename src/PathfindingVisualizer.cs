@@ -1,7 +1,4 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
 using UnityEngine;
 
@@ -224,7 +221,7 @@ public class DebugPathfinder {
     private PathNodePool _pathNodePool;
     private BitGrid _openNodes;
     private BitGrid _closedNodes;
-    private List<PathNode> _nodeHeap;
+    private readonly PathNodeMinHeap _nodeHeap;
     private readonly DynamicGraph _dynamicGraph;
     public IVec2 Start { get; private set; }
     public IVec2 Destination { get; private set; }
@@ -276,7 +273,7 @@ public class DebugPathfinder {
         }
         _openNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
         _closedNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
-        _nodeHeap = new();
+        _nodeHeap = new PathNodeMinHeap(_pathNodePool.NonNullCount);
     }
 
     /// <summary>
@@ -338,9 +335,8 @@ public class DebugPathfinder {
         }
         var startNode = _pathNodePool[Start]!;
         startNode.Reset(Destination, null, 0);
-        _nodeHeap = new List<PathNode> {
-            startNode
-        };
+        _nodeHeap.Clear();
+        _nodeHeap.Add(startNode);
         _openNodes[Start] = true;
         var startNodeSprite = _nodeSprites[Start.x, Start.y]!.sprite;
         startNodeSprite.isVisible = true;
@@ -359,20 +355,11 @@ public class DebugPathfinder {
             return;
         }
         if (_nodeHeap.Count > 0) {
-            for (int i = 0; i < _nodeHeap.Count; i++) {
-                var node = _nodeHeap[i];
-                if (node.FCost < _nodeHeap[0].FCost) {
-                    var validationString = new StringBuilder();
-                    for (int j = 0; j < _nodeHeap.Count; j++) {
-                        validationString.Append(_nodeHeap[j].FCost);
-                        validationString.Append(" ");
-                    }
-                    Plugin.Logger!.LogWarning($"heap validation failed: {validationString}");
-                    IsFinished = true;
-                    return;
-                }
+            if (!_nodeHeap.Validate()) {
+                IsFinished = true;
+                return;
             }
-            PathNode currentNode = _nodeHeap[0];
+            PathNode currentNode = _nodeHeap.Root!;
             var currentPos = currentNode.GridPos;
             if (currentPos == Destination) {
                 PathNode? cursor = _pathNodePool[Destination];
@@ -385,41 +372,7 @@ public class DebugPathfinder {
                 }
                 IsFinished = true;
             }
-            _nodeHeap[0] = _nodeHeap[_nodeHeap.Count - 1];
-            _nodeHeap.RemoveAt(_nodeHeap.Count - 1);
-            int index = 0;
-            int leftIndex = 2 * index + 1;
-            int rightIndex = 2 * index + 2;
-            while (true) {
-                if (rightIndex >= _nodeHeap.Count) {
-                    if (leftIndex >= _nodeHeap.Count) {
-                        break;
-                    } else {
-                        if (_nodeHeap[leftIndex].FCost < _nodeHeap[index].FCost) {
-                            (_nodeHeap[leftIndex], _nodeHeap[index]) = (_nodeHeap[index], _nodeHeap[leftIndex]);
-                            index = leftIndex;
-                        } else {
-                            break;
-                        }
-                    }
-                } else {
-                    if (_nodeHeap[leftIndex].FCost < _nodeHeap[index].FCost
-                        || _nodeHeap[rightIndex].FCost < _nodeHeap[index].FCost
-                    ) {
-                        if (_nodeHeap[leftIndex].FCost < _nodeHeap[rightIndex].FCost) {
-                            (_nodeHeap[leftIndex], _nodeHeap[index]) = (_nodeHeap[index], _nodeHeap[leftIndex]);
-                            index = leftIndex;
-                        } else {
-                            (_nodeHeap[rightIndex], _nodeHeap[index]) = (_nodeHeap[index], _nodeHeap[rightIndex]);
-                            index = rightIndex;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-                leftIndex = 2 * index + 1;
-                rightIndex = 2 * index + 2;
-            }
+            _nodeHeap.RemoveRoot();
             _openNodes[currentPos] = false;
             _closedNodes[currentPos] = true;
             _nodeSprites[currentPos.x, currentPos.y]!.sprite.scale = 5f;
@@ -445,13 +398,6 @@ public class DebugPathfinder {
                         currentNode.PathCost + connection.Weight
                     );
                     _nodeHeap.Add(currentNeighbour);
-                    int index = _nodeHeap.Count - 1;
-                    while (index > 0 && currentNeighbour.FCost < _nodeHeap[(index - 1) / 2].FCost) {
-                        PathNode temp = _nodeHeap[(index - 1) / 2];
-                        _nodeHeap[(index - 1) / 2] = currentNeighbour;
-                        _nodeHeap[index] = temp;
-                        index = (index - 1) / 2;
-                    }
                     var neighbourNodeSprite = _nodeSprites[neighbourPos.x, neighbourPos.y]!.sprite;
                     neighbourNodeSprite.isVisible = true;
                     neighbourNodeSprite.scale = 10f;
