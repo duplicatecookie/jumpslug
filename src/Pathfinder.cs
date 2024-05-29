@@ -9,6 +9,7 @@ using MoreSlugcats;
 using UnityEngine;
 
 using IVec2 = RWCustom.IntVector2;
+using System.Runtime.CompilerServices;
 
 namespace JumpSlug.Pathfinding;
 
@@ -890,17 +891,18 @@ public class DynamicGraph {
                         Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
                     )
                 );
-                if (sharedGraph.GetNode(x, i - 1)?.HasPlatform == false) {
+                if (sharedGraph.GetNode(x, i - 1)?.HasPlatform is false or null) {
                     break;
                 }
-            } else if (currentNode.Type is NodeType.Slope) {
+            } else if (currentNode.Type is not NodeType.Air or NodeType.Wall) {
                 adjacencyList.Add(
                     new NodeConnection(
-                        new ConnectionType.Drop(ignoreList),
+                        new ConnectionType.Drop(ignoreList.Clone()),
                         currentNode,
                         Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
                     )
                 );
+                break;
             } else if (currentNode.HorizontalBeam) {
                 adjacencyList.Add(
                     new NodeConnection(
@@ -911,7 +913,7 @@ public class DynamicGraph {
                 );
                 ignoreList.Add(new IVec2(x, i));
             } else {
-                ignoreList.Add(new IVec2(x, i));
+                break;
             }
         }
     }
