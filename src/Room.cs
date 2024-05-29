@@ -11,7 +11,7 @@ static class RoomCWT {
         public Pathfinding.PathNodePool? PathNodePool;
         public Pathfinding.BitGrid? OpenNodes;
         public Pathfinding.BitGrid? ClosedNodes;
-        public Pathfinding.PathNodeMinHeap? NodeHeap;
+        public Pathfinding.PathNodeQueue? NodeQueue;
         public RoomExtension() {
         }
     }
@@ -41,7 +41,11 @@ static class RoomHooks {
             roomExt.OpenNodes = new Pathfinding.BitGrid(width, height);
             roomExt.ClosedNodes = new Pathfinding.BitGrid(width, height);
             roomExt.PathNodePool = new Pathfinding.PathNodePool(roomExt.SharedGraph);
-            roomExt.NodeHeap = new Pathfinding.PathNodeMinHeap(roomExt.PathNodePool!.Value.NonNullCount);
+            roomExt.NodeQueue = new Pathfinding.PathNodeQueue(
+                roomExt.PathNodePool!.Value.NonNullCount,
+                width,
+                height
+            );
         }
     }
 

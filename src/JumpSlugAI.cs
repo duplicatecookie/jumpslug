@@ -94,8 +94,8 @@ class JumpSlugAI : ArtificialIntelligence {
             Timers.FollowPath.Start();
         }
         // checked in outher scope
-        var staticGraph = Room!.GetCWT().SharedGraph;
-        var currentNode = staticGraph!.CurrentNode(Player);
+        var sharedGraph = Room!.GetCWT().SharedGraph;
+        var currentNode = sharedGraph!.CurrentNode(Player);
         var currentPathPosNullable = _path.CurrentNode();
         if (currentNode is null || currentPathPosNullable is null) {
             Player.input[0] = input;
@@ -115,7 +115,7 @@ class JumpSlugAI : ArtificialIntelligence {
                 if (currentNode.Type is NodeType.Floor) {
                     var second = _path.PeekNode(2);
                     if (second is not null
-                        && staticGraph.GetNode(second.Value)?.Type
+                        && sharedGraph.GetNode(second.Value)?.Type
                         is NodeType.Corridor
                     ) {
                         var first = _path.PeekNode(1);
@@ -158,7 +158,7 @@ class JumpSlugAI : ArtificialIntelligence {
                         }
                     }
                     if (Player.animation != Player.AnimationIndex.StandOnBeam
-                        && staticGraph.GetNode(currentPathPos)?.VerticalBeam == false
+                        && sharedGraph.GetNode(currentPathPos)?.VerticalBeam == false
                         && Room!
                             .GetTile(currentPathPos.x, currentPathPos.y + 1)
                             .Terrain == Room.Tile.TerrainType.Air

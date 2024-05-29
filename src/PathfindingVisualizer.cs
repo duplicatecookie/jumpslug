@@ -221,7 +221,7 @@ public class DebugPathfinder {
     private PathNodePool _pathNodePool;
     private BitGrid _openNodes;
     private BitGrid _closedNodes;
-    private readonly PathNodeMinHeap _nodeHeap;
+    private PathNodeQueue _nodeQueue;
     private readonly DynamicGraph _dynamicGraph;
     public IVec2 Start { get; private set; }
     public IVec2 Destination { get; private set; }
@@ -273,7 +273,11 @@ public class DebugPathfinder {
         }
         _openNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
         _closedNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
-        _nodeHeap = new PathNodeMinHeap(_pathNodePool.NonNullCount);
+        _nodeQueue = new PathNodeQueue(
+            _pathNodePool.NonNullCount,
+            _pathNodePool.Width,
+            _pathNodePool.Height
+        );
     }
 
     /// <summary>
@@ -284,6 +288,11 @@ public class DebugPathfinder {
             _room = room;
             _dynamicGraph.NewRoom(room);
             _pathNodePool = new PathNodePool(room.GetCWT().SharedGraph!);
+            _nodeQueue = new PathNodeQueue(
+                _pathNodePool.NonNullCount,
+                _pathNodePool.Width,
+                _pathNodePool.Height
+            );
             Reset();
             foreach (var nodeSprite in _nodeSprites) {
                 if (nodeSprite is not null) {
@@ -335,8 +344,8 @@ public class DebugPathfinder {
         }
         var startNode = _pathNodePool[Start]!;
         startNode.Reset(Destination, null, 0);
-        _nodeHeap.Clear();
-        _nodeHeap.Add(startNode);
+        _nodeQueue.Reset();
+        _nodeQueue.Add(startNode);
         _openNodes[Start] = true;
         var startNodeSprite = _nodeSprites[Start.x, Start.y]!.sprite;
         startNodeSprite.isVisible = true;
@@ -351,15 +360,15 @@ public class DebugPathfinder {
     }
 
     public void Poll() {
-        if (!IsInit) {
+        if (!IsInit || IsFinished) {
             return;
         }
-        if (_nodeHeap.Count > 0) {
-            if (!_nodeHeap.Validate()) {
+        if (_nodeQueue.Count > 0) {
+            if (!_nodeQueue.Validate()) {
                 IsFinished = true;
                 return;
             }
-            PathNode currentNode = _nodeHeap.Root!;
+            PathNode currentNode = _nodeQueue.Root!;
             var currentPos = currentNode.GridPos;
             if (currentPos == Destination) {
                 PathNode? cursor = _pathNodePool[Destination];
@@ -372,7 +381,7 @@ public class DebugPathfinder {
                 }
                 IsFinished = true;
             }
-            _nodeHeap.RemoveRoot();
+            _nodeQueue.RemoveRoot();
             _openNodes[currentPos] = false;
             _closedNodes[currentPos] = true;
             _nodeSprites[currentPos.x, currentPos.y]!.sprite.scale = 5f;
@@ -397,7 +406,7 @@ public class DebugPathfinder {
                         new PathConnection(connection.Type, currentNode),
                         currentNode.PathCost + connection.Weight
                     );
-                    _nodeHeap.Add(currentNeighbour);
+                    _nodeQueue.Add(currentNeighbour);
                     var neighbourNodeSprite = _nodeSprites[neighbourPos.x, neighbourPos.y]!.sprite;
                     neighbourNodeSprite.isVisible = true;
                     neighbourNodeSprite.scale = 10f;
@@ -424,6 +433,7 @@ public class DebugPathfinder {
                 if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
                     currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
                     currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
+                    _nodeQueue.DecreasePriority(currentNeighbour.GridPos);
                     var neighbourConnectionSprite = _connectionSprites[neighbourPos.x, neighbourPos.y]!.sprite;
                     neighbourConnectionSprite.isVisible = true;
                     if (connection.Type

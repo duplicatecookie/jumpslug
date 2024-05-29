@@ -1040,83 +1040,133 @@ public class BitGrid {
     }
 }
 
-public class PathNodeMinHeap {
+public class PathNodeQueue {
     private readonly List<PathNode> _nodes;
+    private readonly int[,] _indexMap;
 
     public int Count => _nodes.Count;
+    public int Width => _indexMap.GetLength(0);
+    public int Height => _indexMap.GetLength(1);
     public PathNode? Root => _nodes.Count > 0 ? _nodes[0] : null;
 
-    public PathNodeMinHeap(int capacity) {
+    public PathNodeQueue(int capacity, int width, int height) {
         _nodes = new(capacity);
+        _indexMap = new int[width,height];
+        ResetMap();
+    }
+
+    public void Reset() {
+        _nodes.Clear();
+        ResetMap();
+    }
+
+    private void ResetMap() {
+        for (int y = 0; y < Height; y++) {
+            for (int x = 0; x < Width; x++) {
+                _indexMap[x, y] = -1;
+            }
+        }
     }
 
     public void Add(PathNode node) {
         _nodes.Add(node);
-        int index = _nodes.Count - 1;
-        while (index > 0 && node.FCost < _nodes[(index - 1) / 2].FCost) {
-            PathNode temp = _nodes[(index - 1) / 2];
-            _nodes[(index - 1) / 2] = node;
-            _nodes[index] = temp;
+        IVec2 pos = node.GridPos;
+        _indexMap[pos.x, pos.y] = _nodes.Count - 1;
+        MoveUp(_nodes.Count - 1);
+    }
+
+    public void DecreasePriority(IVec2 pos) {
+        int index = _indexMap[pos.x, pos.y];
+        if (index < 0) {
+            throw new ArgumentOutOfRangeException();
+        }
+        MoveUp(index);
+    }
+
+    private void MoveUp(int index) {
+        while (index > 0 && _nodes[index].FCost < _nodes[(index - 1) / 2].FCost) {
+            Swap(index, (index - 1) / 2);
             index = (index - 1) / 2;
         }
     }
 
+    private void Swap(int i, int j) {
+        (_nodes[i], _nodes[j]) = (_nodes[j], _nodes[i]);
+        IVec2 a = _nodes[i].GridPos;
+        IVec2 b = _nodes[j].GridPos;
+        (_indexMap[b.x, b.y], _indexMap[a.x, a.y]) = (_indexMap[a.x, a.y], _indexMap[b.x, b.y]);
+    }
+
     public void RemoveRoot() {
         _nodes[0] = _nodes[_nodes.Count - 1];
-        _nodes.RemoveAt(_nodes.Count - 1);
+        IVec2 pos = _nodes[0].GridPos;
+        _indexMap[pos.x, pos.y] = 0;
+        _nodes.Pop();
         int index = 0;
-        int leftIndex = 2 * index + 1;
-        int rightIndex = 2 * index + 2;
+        int leftIndex = 1;
+        int rightIndex = 2;
         while (true) {
-            if (rightIndex >= _nodes.Count) {
-                if (leftIndex >= _nodes.Count) {
-                    break;
-                } else {
-                    if (_nodes[leftIndex].FCost < _nodes[index].FCost) {
-                        (_nodes[leftIndex], _nodes[index]) = (_nodes[index], _nodes[leftIndex]);
-                        index = leftIndex;
+            if (rightIndex < _nodes.Count) {
+                float parentCost = _nodes[index].FCost;
+                float leftCost = _nodes[leftIndex].FCost;
+                float rightCost = _nodes[rightIndex].FCost;
+                if (leftCost < parentCost) {
+                    if (rightCost < parentCost) {
+                        if (leftCost < rightCost) {
+                            Swap(index, leftIndex);
+                            index = leftIndex;
+                        } else {
+                            Swap(index, rightIndex);
+                            index = rightIndex;
+                        }
                     } else {
-                        break;
+                        Swap(index, leftIndex);
+                        index = leftIndex;
                     }
+                } else if (rightCost < parentCost) {
+                    Swap(index, rightIndex);
+                    index = rightIndex;
+                } else {
+                    // heap in order
+                    break;
+                }
+            } else if (leftIndex < _nodes.Count) {
+                float parentCost = _nodes[index].FCost;
+                float leftCost = _nodes[leftIndex].FCost;
+                if (leftCost < parentCost) {
+                    Swap(index, leftIndex);
+                    index = leftIndex;
+                } else {
+                    // heap in order
+                    break;
                 }
             } else {
-                if (_nodes[leftIndex].FCost < _nodes[index].FCost
-                    || _nodes[rightIndex].FCost < _nodes[index].FCost
-                ) {
-                    if (_nodes[leftIndex].FCost < _nodes[rightIndex].FCost) {
-                        (_nodes[leftIndex], _nodes[index]) = (_nodes[index], _nodes[leftIndex]);
-                        index = leftIndex;
-                    } else {
-                        (_nodes[rightIndex], _nodes[index]) = (_nodes[index], _nodes[rightIndex]);
-                        index = rightIndex;
-                    }
-                } else {
-                    break;
-                }
+                // no children
+                break;
             }
             leftIndex = 2 * index + 1;
             rightIndex = 2 * index + 2;
         }
     }
 
-    public void Clear() {
-        _nodes.Clear();
-    }
-
     public bool Validate() {
+        PathNode node;
         for (int i = 0; i < Count; i++) {
-            var node = _nodes[i];
+            node = _nodes[i];
             if (node.FCost < Root!.FCost) {
-                var validationString = new StringBuilder();
-                for (int j = 0; j < Count; j++) {
-                    validationString.Append(_nodes[j].FCost);
-                    validationString.Append(" ");
-                }
-                Plugin.Logger!.LogWarning($"heap validation failed: {validationString}");
                 return false;
             }
         }
         return true;
+    }
+
+    public string DebugList() {
+        var validationString = new StringBuilder();
+        for (int j = 0; j < Count; j++) {
+            validationString.Append(_nodes[j].FCost);
+            validationString.Append(" ");
+        }
+        return validationString.ToString();
     }
 }
 
@@ -1213,12 +1263,12 @@ public class Pathfinder {
         closedNodes.Reset();
         var startNode = pathNodePool[start]!;
         startNode.Reset(destination, null, 0);
-        var nodeHeap = _room.GetCWT().NodeHeap!;
-        nodeHeap.Clear();
-        nodeHeap.Add(startNode);
-        openNodes[start.x, start.y] = true;
-        while (nodeHeap.Count > 0) {
-            PathNode currentNode = nodeHeap.Root!;
+        var nodeQueue = _room.GetCWT().NodeQueue!;
+        nodeQueue.Reset();
+        nodeQueue.Add(startNode);
+        openNodes[start] = true;
+        while (nodeQueue.Count > 0) {
+            PathNode currentNode = nodeQueue.Root!;
             var currentPos = currentNode.GridPos;
             if (currentPos == destination) {
                 if (Timers.Active) {
@@ -1227,7 +1277,7 @@ public class Pathfinder {
                 _lastDescriptor = descriptor;
                 return new Path(currentNode, sharedGraph);
             }
-            nodeHeap.RemoveRoot();
+            nodeQueue.RemoveRoot();
             openNodes[currentPos] = false;
             closedNodes[currentPos] = true;
 
@@ -1248,17 +1298,18 @@ public class Pathfinder {
                     return;
                 }
                 if (!openNodes[neighbourPos]) {
+                    openNodes[neighbourPos] = true;
                     currentNeighbour.Reset(
                         destination,
                         new PathConnection(connection.Type, currentNode),
                         currentNode.PathCost + connection.Weight
                     );
-                    nodeHeap.Add(currentNeighbour);
-                    openNodes[neighbourPos] = true;
+                    nodeQueue.Add(currentNeighbour);
                 }
                 if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
                     currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
                     currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
+                    nodeQueue.DecreasePriority(currentNeighbour.GridPos);
                 }
             }
 
