@@ -9,6 +9,7 @@ using IVec2 = RWCustom.IntVector2;
 using UnityEngine;
 
 using JumpSlug.Pathfinding;
+using System.Runtime.InteropServices;
 
 namespace JumpSlug;
 
@@ -111,37 +112,42 @@ class JumpSlugAI : ArtificialIntelligence {
             if (currentConnection is null) {
                 _path = null;
             } else if (currentConnection is ConnectionType.Walk(int direction)) {
-                input.x = direction;
-                if (currentNode.Type is NodeType.Floor) {
-                    var second = _path.PeekNode(2);
-                    if (second is not null
-                        && sharedGraph.GetNode(second.Value)?.Type
-                        is NodeType.Corridor
-                    ) {
-                        var first = _path.PeekNode(1);
-                        if (Player.bodyMode != Player.BodyModeIndex.Crawl
-                            && second.Value.y != first!.Value.y + 1
-                            && Player.input[1].y != -1
+                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                    input.y = -1;
+                    input.jmp = true;
+                } else {
+                    input.x = direction;
+                    if (currentNode.Type is NodeType.Floor) {
+                        var second = _path.PeekNode(2);
+                        if (second is not null
+                            && sharedGraph.GetNode(second.Value)?.Type
+                            is NodeType.Corridor
                         ) {
-                            input.y = -1;
+                            var first = _path.PeekNode(1);
+                            if (Player.bodyMode != Player.BodyModeIndex.Crawl
+                                && second.Value.y != first!.Value.y + 1
+                                && Player.input[1].y != -1
+                            ) {
+                                input.y = -1;
+                            }
+                        } else if (
+                            Player.bodyMode == Player.BodyModeIndex.Crawl
+                            && Player.input[1].y != 1
+                        ) {
+                            input.y = 1;
                         }
-                    } else if (
-                        Player.bodyMode == Player.BodyModeIndex.Crawl
-                        && Player.input[1].y != 1
-                    ) {
-                        input.y = 1;
                     }
                 }
             } else if (currentConnection is ConnectionType.Crawl(IVec2 dir)) {
                 input.x = dir.x;
                 input.y = dir.y;
+                bool backwards = (Player.bodyChunks[0].pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0;
                 if (_path.PeekConnection(1) is ConnectionType.Crawl(IVec2 nextDir)) {
-                    if ((Player.mainBodyChunk.pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0) {
+                    if (backwards) {
                         // turn around if going backwards
                         // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
                         if (dir == nextDir) {
                             input.jmp = true;
-                            // prevents getting stuck when moving backwards into a corner
                         } else if (dir.Dot(nextDir) == 0) {
                             input.x = nextDir.x;
                             input.y = nextDir.y;
@@ -150,12 +156,14 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
             } else if (currentConnection is ConnectionType.Climb(IVec2 climbDir)) {
                 if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                    if (climbDir.x != 0) {
-                        input.x = climbDir.x;
+                    if (_path.PeekConnection(1) is ConnectionType.Climb(IVec2 nextDir) && nextDir.x != 0) {
+                        input.x = nextDir.x;
                         // this is required for moving from vertical to horizontal poles
                         if (Player.flipDirection != climbDir.x) {
                             _waitOneTick = true;
                         }
+                    } else {
+                        input.x = climbDir.x;
                     }
                     if (Player.animation != Player.AnimationIndex.StandOnBeam
                         && sharedGraph.GetNode(currentPathPos)?.VerticalBeam == false
@@ -168,14 +176,16 @@ class JumpSlugAI : ArtificialIntelligence {
                     } else {
                         input.y = climbDir.y;
                     }
-                }
-            } else if (currentConnection is ConnectionType.GrabPole) {
-                if (currentNode.VerticalBeam) {
-                    input.y = 1;
-                } else if (currentNode.HorizontalBeam) {
-                    input.x = Player.flipDirection;
+                } else if (_path.PeekConnection(1) is ConnectionType.Climb) {
+                    if (currentNode.VerticalBeam) {
+                        input.y = 1;
+                    } else if (currentNode.HorizontalBeam) {
+                        input.x = Player.flipDirection;
+                    } else {
+                        Plugin.Logger!.LogWarning("trying to climb on node without pole");
+                    }
                 } else {
-                    Plugin.Logger!.LogWarning("trying to climb on node without pole");
+                    input.y = climbDir.y;
                 }
             } else if (currentConnection is ConnectionType.Drop) {
                 if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {

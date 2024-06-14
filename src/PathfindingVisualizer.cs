@@ -142,7 +142,6 @@ class PathVisualizer {
                 ConnectionType.Crawl => Color.green,
                 ConnectionType.Climb => Color.magenta,
                 ConnectionType.Walk => Color.white,
-                ConnectionType.GrabPole => Color.grey,
                 _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
             };
             var connection = path.Connections[i];

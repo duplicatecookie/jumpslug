@@ -9,7 +9,6 @@ using MoreSlugcats;
 using UnityEngine;
 
 using IVec2 = RWCustom.IntVector2;
-using System.Runtime.CompilerServices;
 
 namespace JumpSlug.Pathfinding;
 
@@ -32,47 +31,14 @@ public class Path {
     /// </summary>
     /// <param name="endNode">the node at the destination of the path.</param>
     /// <param name="sharedGraph">the room specific graph the path was generated for.</param>
-    public Path(PathNode endNode, SharedGraph sharedGraph) {
+    public Path(PathNode endNode) {
         Nodes = new();
         Connections = new();
         var currentNode = endNode;
         while (currentNode is not null) {
             Nodes.Add(currentNode.GridPos);
             if (currentNode.Connection is not null) {
-                // this is necessary because the pathfinder can't account for the slugcat taking up more than one tile
-                // and the AI movement code can't account for missing sections of the path
-                // any non-hacky way of dealing with this requires sweeping code changes that complicate everything
-                var nextConnection = Connections.Count > 0 ? Connections[Connections.Count - 1] : null;
-                var previousConnection = currentNode.Connection.Value.Type;
-                if (previousConnection is ConnectionType.Climb(IVec2 dir)) {
-                    if (currentNode.Connection.Value.Next.Connection?.Type is ConnectionType.Walk) {
-                        Connections.Add(new ConnectionType.GrabPole());
-                    } else if (nextConnection is ConnectionType.Walk) {
-                        if (dir.y == 1) {
-                            Connections.Add(new ConnectionType.Drop(new IgnoreList()));
-                            var abovePos = currentNode.GridPos;
-                            abovePos.y += 1;
-                            if (sharedGraph.GetNode(abovePos)?.VerticalBeam == true) {
-                                Nodes.Add(abovePos);
-                            } else {
-                                Plugin.Logger!.LogError("climbing up from a pole onto a platform is currently only supported when there a two poles above the platform");
-                                return;
-                            }
-                            Connections.Add(new ConnectionType.Climb(new IVec2(0, 1)));
-                            Nodes.Add(currentNode.GridPos);
-                            Connections.Add(previousConnection);
-                        } else if (dir.y == -1) {
-                            Connections.Add(new ConnectionType.Drop(new IgnoreList()));
-                        } else {
-                            Plugin.Logger!.LogError("invalid path: climb connection leading to walk connection");
-                            return;
-                        }
-                    } else {
-                        Connections.Add(previousConnection);
-                    }
-                } else {
-                    Connections.Add(previousConnection);
-                }
+                Connections.Add(currentNode.Connection.Value.Type);
             }
             currentNode = currentNode.Connection?.Next;
         }
@@ -299,7 +265,6 @@ public record ConnectionType {
     public record Walk(int Direction) : ConnectionType();
     public record Climb(IVec2 Direction) : ConnectionType();
     public record Crawl(IVec2 Direction) : ConnectionType();
-    public record GrabPole() : ConnectionType();
     public record Jump(int Direction) : ConnectionType();
     public record WalkOffEdge(int Direction) : ConnectionType();
     public record Pounce(int Direction) : ConnectionType();
@@ -353,13 +318,18 @@ public class SharedGraph {
     /// Null if the slugcat is not located at any node in the graph.
     /// </returns>
     public Node? CurrentNode(Player player) {
-        IVec2 pos = RoomHelper.TilePosition(player.bodyChunks[0].pos);
+        IVec2 pos = RoomHelper.TilePosition(player.bodyChunks[1].pos);
         if (player.bodyMode == Player.BodyModeIndex.Stand
             || player.animation == Player.AnimationIndex.StandOnBeam
         ) {
-            return GetNode(pos.x, pos.y - 1) is Node node ? node : GetNode(pos.x, pos.y - 2);
-        } else if (player.bodyMode == Player.BodyModeIndex.Crawl) {
             return GetNode(pos) is Node node ? node : GetNode(pos.x, pos.y - 1);
+        } else if (player.animation == Player.AnimationIndex.HangFromBeam) {
+            return GetNode(pos.x, pos.y + 1);
+        } else if (player.bodyMode == Player.BodyModeIndex.Crawl
+            || player.bodyMode == Player.BodyModeIndex.CorridorClimb
+        ) {
+            IVec2 headPos = RoomHelper.TilePosition(player.bodyChunks[0].pos);
+            return GetNode(headPos);
         }
         return GetNode(pos);
     }
@@ -479,9 +449,6 @@ public class SharedGraph {
                     if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor) {
                         Nodes[x, y]!.Connections.Add(new NodeConnection(new ConnectionType.Walk(1), Nodes[x + 1, y + 1]!));
                     }
-                    if (GetNode(x, y + 1)?.HasBeam == true) {
-                        Nodes[x, y]!.Connections.Add(new NodeConnection(new ConnectionType.GrabPole(), Nodes[x, y + 1]!, 1.5f));
-                    }
                 }
 
                 if (Nodes[x, y]!.Type is NodeType.Slope) {
@@ -506,9 +473,6 @@ public class SharedGraph {
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
-                    }
-                    if (GetNode(x, y + 1)?.HasBeam == true) {
-                        Nodes[x, y]!.Connections.Add(new NodeConnection(new ConnectionType.GrabPole(), Nodes[x, y + 1]!, 1.5f));
                     }
                 }
 
@@ -535,12 +499,19 @@ public class SharedGraph {
                     if (GetNode(x + 1, y - 1)?.Type is NodeType.Floor) {
                         Nodes[x + 1, y - 1]!.Connections.Add(new NodeConnection(new ConnectionType.Walk(-1), Nodes[x, y]!));
                     }
-                    if (aboveNode?.Type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
+                    if (aboveNode?.Type is NodeType.Corridor or NodeType.ShortcutEntrance or NodeType.Floor) {
                         ConnectNodes(
                             Nodes[x, y]!,
                             aboveNode,
                             new ConnectionType.Crawl(new IVec2(0, 1)),
                             new ConnectionType.Crawl(new IVec2(0, -1))
+                        );
+                    } else if (aboveNode?.Type is NodeType.Floor) {
+                        ConnectNodes(
+                            Nodes[x, y]!,
+                            aboveNode,
+                            new ConnectionType.Crawl(new IVec2 (0, 1)),
+                            new ConnectionType.Crawl(new IVec2 (0, -1))
                         );
                     }
                 } else {
@@ -1053,7 +1024,7 @@ public class PathNodeQueue {
 
     public PathNodeQueue(int capacity, int width, int height) {
         _nodes = new(capacity);
-        _indexMap = new int[width,height];
+        _indexMap = new int[width, height];
         ResetMap();
     }
 
@@ -1277,7 +1248,7 @@ public class Pathfinder {
                     Timers.FindPath.Stop();
                 }
                 _lastDescriptor = descriptor;
-                return new Path(currentNode, sharedGraph);
+                return new Path(currentNode);
             }
             nodeQueue.RemoveRoot();
             openNodes[currentPos] = false;
@@ -1346,7 +1317,6 @@ static class PathfinderHooks {
     }
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
-        // horrible hack because creature creation is pain
         if (self.abstractCreature?.abstractAI is null) {
             var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
             if (InputHelper.JustPressedMouseButton(1)) {
