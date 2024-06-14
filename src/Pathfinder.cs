@@ -312,29 +312,6 @@ public class SharedGraph {
     }
 
     /// <summary>
-    /// Find the node the requested slugcat is currently at.
-    /// </summary>
-    /// <returns>
-    /// Null if the slugcat is not located at any node in the graph.
-    /// </returns>
-    public Node? CurrentNode(Player player) {
-        IVec2 pos = RoomHelper.TilePosition(player.bodyChunks[1].pos);
-        if (player.bodyMode == Player.BodyModeIndex.Stand
-            || player.animation == Player.AnimationIndex.StandOnBeam
-        ) {
-            return GetNode(pos) is Node node ? node : GetNode(pos.x, pos.y - 1);
-        } else if (player.animation == Player.AnimationIndex.HangFromBeam) {
-            return GetNode(pos.x, pos.y + 1);
-        } else if (player.bodyMode == Player.BodyModeIndex.Crawl
-            || player.bodyMode == Player.BodyModeIndex.CorridorClimb
-        ) {
-            IVec2 headPos = RoomHelper.TilePosition(player.bodyChunks[0].pos);
-            return GetNode(headPos);
-        }
-        return GetNode(pos);
-    }
-
-    /// <summary>
     /// Generate the nodes making up the graph.
     /// </summary>
     private void GenerateNodes(Room room) {

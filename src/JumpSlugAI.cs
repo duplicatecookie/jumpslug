@@ -48,7 +48,7 @@ class JumpSlugAI : ArtificialIntelligence {
             return;
         }
         if (InputHelper.JustPressedMouseButton(0)) {
-            IVec2? start = Room.GetCWT().SharedGraph!.CurrentNode(Player)?.GridPos;
+            IVec2? start = CurrentNode()?.GridPos;
             var mousePos = (Vector2)Input.mousePosition + Room!.game.cameras[0].pos;
             _destination = Room.GetTilePosition(mousePos);
             _path = start is null || _destination is null
@@ -84,6 +84,30 @@ class JumpSlugAI : ArtificialIntelligence {
         }
     }
 
+    /// <summary>
+    /// Find the node the requested slugcat is currently at.
+    /// </summary>
+    /// <returns>
+    /// Null if the slugcat is not located at any node in the graph.
+    /// </returns>
+    public Node? CurrentNode() {
+        var sharedGraph = Player.room.GetCWT().SharedGraph!;
+        IVec2 pos = RoomHelper.TilePosition(Player.bodyChunks[1].pos);
+        if (Player.bodyMode == Player.BodyModeIndex.Stand
+            || Player.animation == Player.AnimationIndex.StandOnBeam
+        ) {
+            return sharedGraph.GetNode(pos) is Node node ? node : sharedGraph.GetNode(pos.x, pos.y - 1);
+        } else if (Player.animation == Player.AnimationIndex.HangFromBeam) {
+            return sharedGraph.GetNode(pos.x, pos.y + 1);
+        } else if (Player.bodyMode == Player.BodyModeIndex.Crawl
+            || Player.bodyMode == Player.BodyModeIndex.CorridorClimb
+        ) {
+            IVec2 headPos = RoomHelper.TilePosition(Player.bodyChunks[0].pos);
+            return sharedGraph.GetNode(headPos);
+        }
+        return sharedGraph.GetNode(pos);
+    }
+
     private void FollowPath() {
         Player.InputPackage input = default;
         if (_path is null || _waitOneTick) {
@@ -95,8 +119,8 @@ class JumpSlugAI : ArtificialIntelligence {
             Timers.FollowPath.Start();
         }
         // checked in outher scope
-        var sharedGraph = Room!.GetCWT().SharedGraph;
-        var currentNode = sharedGraph!.CurrentNode(Player);
+        var sharedGraph = Room!.GetCWT().SharedGraph!;
+        var currentNode = CurrentNode();
         var currentPathPosNullable = _path.CurrentNode();
         if (currentNode is null || currentPathPosNullable is null) {
             Player.input[0] = input;
