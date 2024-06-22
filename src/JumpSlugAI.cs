@@ -9,7 +9,7 @@ using IVec2 = RWCustom.IntVector2;
 using UnityEngine;
 
 using JumpSlug.Pathfinding;
-using System.Runtime.InteropServices;
+using RWCustom;
 
 namespace JumpSlug;
 
@@ -21,6 +21,7 @@ class JumpSlugAI : ArtificialIntelligence {
     private Player Player => (Player)creature.realizedCreature;
     private Room? Room => creature.Room.realizedRoom;
     private readonly DebugSprite _inputDirSprite;
+    private readonly FLabel _currentConnectionLabel;
     private bool _waitOneTick;
     private IVec2? _destination;
     private readonly Pathfinder _pathfinder;
@@ -32,6 +33,11 @@ class JumpSlugAI : ArtificialIntelligence {
         _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Room);
         _inputDirSprite.sprite.color = Color.red;
         _inputDirSprite.sprite.isVisible = false;
+        _currentConnectionLabel = new FLabel(Custom.GetFont(), "None") {  
+            alignment = FLabelAlignment.Center,
+            color = Color.white,
+        };
+        Room!.game.cameras[0].ReturnFContainer("Foreground").AddChild(_currentConnectionLabel);
         Room!.AddObject(_inputDirSprite);
     }
 
@@ -68,6 +74,9 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         }
         FollowPath();
+        var labelPos = Player.bodyChunks[0].pos - Room.game.cameras[0].pos;
+        labelPos.y += 10;
+        _currentConnectionLabel.SetPosition(labelPos);
         if (Player.input[0].x == 0 && Player.input[0].y == 0) {
             _inputDirSprite.sprite.isVisible = false;
         } else {
@@ -132,6 +141,18 @@ class JumpSlugAI : ArtificialIntelligence {
         }
         var currentPathPos = currentPathPosNullable.Value;
         var currentConnection = _path.CurrentConnection();
+        _currentConnectionLabel.text = currentConnection switch {
+            null => "None",
+            ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
+            ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
+            ConnectionType.Drop => "Drop",
+            ConnectionType.Jump(int dir) => $"Jump({dir})",
+            ConnectionType.Pounce(int dir) => $"Pounce({dir})",
+            ConnectionType.Shortcut => "Shortcut",
+            ConnectionType.Walk(int dir) => $"Walk({dir})",
+            ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
+            _ => throw new InvalidUnionVariantException(),
+        };
         if (currentNode.GridPos == currentPathPos) {
             if (currentConnection is null) {
                 _path = null;
