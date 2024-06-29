@@ -22,6 +22,8 @@ class JumpSlugAI : ArtificialIntelligence {
     private Room? Room => creature.Room.realizedRoom;
     private readonly DebugSprite _inputDirSprite;
     private readonly FLabel _currentConnectionLabel;
+    private readonly FLabel _bodyModeLabel;
+    private readonly FLabel _animationLabel;
     private bool _waitOneTick;
     private IVec2? _destination;
     private readonly Pathfinder _pathfinder;
@@ -33,11 +35,22 @@ class JumpSlugAI : ArtificialIntelligence {
         _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Room);
         _inputDirSprite.sprite.color = Color.red;
         _inputDirSprite.sprite.isVisible = false;
-        _currentConnectionLabel = new FLabel(Custom.GetFont(), "None") {  
+        _currentConnectionLabel = new FLabel(Custom.GetFont(), "None") {
             alignment = FLabelAlignment.Center,
             color = Color.white,
         };
-        Room!.game.cameras[0].ReturnFContainer("Foreground").AddChild(_currentConnectionLabel);
+        _bodyModeLabel = new FLabel(Custom.GetFont(), "None") {
+            alignment = FLabelAlignment.Center,
+            color = Color.white,
+        };
+        _animationLabel = new FLabel(Custom.GetFont(), "None") {
+            alignment = FLabelAlignment.Center,
+            color = Color.white,
+        };
+        var container = Room!.game.cameras[0].ReturnFContainer("Foreground");
+        container.AddChild(_currentConnectionLabel);
+        container.AddChild(_bodyModeLabel);
+        container.AddChild(_animationLabel);
         Room!.AddObject(_inputDirSprite);
     }
 
@@ -74,9 +87,17 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         }
         FollowPath();
+        _bodyModeLabel.text = Player.bodyMode.value;
+        _animationLabel.text = Player.animation.value;
+
         var labelPos = Player.bodyChunks[0].pos - Room.game.cameras[0].pos;
         labelPos.y += 10;
         _currentConnectionLabel.SetPosition(labelPos);
+        labelPos.y += 20;
+        _bodyModeLabel.SetPosition(labelPos);
+        labelPos.y += 20;
+        _animationLabel.SetPosition(labelPos);
+        
         if (Player.input[0].x == 0 && Player.input[0].y == 0) {
             _inputDirSprite.sprite.isVisible = false;
         } else {
