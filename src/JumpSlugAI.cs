@@ -242,7 +242,9 @@ class JumpSlugAI : ArtificialIntelligence {
                     } else {
                         input.y = climbDir.y;
                     }
-                } else if (_path.PeekConnection(1) is ConnectionType.Climb) {
+                } else if (_path.PeekConnection(1) is ConnectionType.Climb
+                    && Player.bodyMode != Player.BodyModeIndex.CorridorClimb
+                ) {
                     if (currentNode.VerticalBeam) {
                         input.y = 1;
                     } else if (currentNode.HorizontalBeam) {
