@@ -105,6 +105,69 @@ public class Path {
     public void Advance() {
         Cursor -= 1;
     }
+
+    public NodeSearchResult FindNode(IVec2 node) {
+        int initialCursor = Cursor;
+        while(Cursor >= 0) {
+            if (CurrentNode() == node) {
+                return NodeSearchResult.Found;
+            } else if (
+                CurrentConnection() is ConnectionType.Drop(var ignoreList)
+                && ignoreList.FindNode(node)
+            ) {
+                return NodeSearchResult.ShouldIgnore;
+            } else {
+                Advance();
+            }
+        }
+        Cursor = Nodes.Count - 1;
+        while (Cursor > initialCursor) {
+            if (CurrentNode() == node) {
+                return NodeSearchResult.Found;
+            } else if (CurrentConnection() is ConnectionType.Drop(var ignoreList)
+                && ignoreList.FindNode(node)
+            ) {
+                return NodeSearchResult.ShouldIgnore;
+            } else {
+                Advance();
+            }
+        }
+        return NodeSearchResult.NotFound;
+    }
+
+    public NodeSearchResult FindEitherNode(IVec2 primary, IVec2 secondary) {
+        int initialCursor = Cursor;
+        while(Cursor >= 0) {
+            if (CurrentNode() == primary || CurrentNode() == secondary) {
+                return NodeSearchResult.Found;
+            } else if (CurrentConnection() is ConnectionType.Drop(var ignoreList)
+                && ignoreList.FindEitherNode(primary, secondary)
+            ) {
+                return NodeSearchResult.ShouldIgnore;
+            } else {
+                Advance();
+            }
+        }
+        Cursor = Nodes.Count - 1;
+        while (Cursor > initialCursor) {
+            if (CurrentNode() == primary || CurrentNode() == secondary) {
+                return NodeSearchResult.Found;
+            } else if (CurrentConnection() is ConnectionType.Drop(var ignoreList)
+                && ignoreList.FindEitherNode(primary, secondary)
+            ) {
+                return NodeSearchResult.ShouldIgnore;
+            }  else {
+                Advance();
+            }
+        }
+        return NodeSearchResult.NotFound;
+    }
+
+    public enum NodeSearchResult {
+        Found,
+        NotFound,
+        ShouldIgnore,
+    }
 }
 
 /// <summary>
@@ -234,9 +297,19 @@ public class IgnoreList {
     /// Iterate through the list to check if it contains the requested tile position.
     /// entries checked during previous calls to this method are not checked again on repeated invocations.
     /// </summary>
-    public bool ShouldIgnore(IVec2 node) {
+    public bool FindNode(IVec2 node) {
         while (_cursor < _ignoreList.Count) {
             if (node == _ignoreList[_cursor]) {
+                return true;
+            }
+            _cursor++;
+        }
+        return false;
+    }
+
+    public bool FindEitherNode(IVec2 primary, IVec2 secondary) {
+        while (_cursor < _ignoreList.Count) {
+            if (primary == _ignoreList[_cursor] || secondary == _ignoreList[_cursor]) {
                 return true;
             }
             _cursor++;
@@ -480,15 +553,10 @@ public class SharedGraph {
                         ConnectNodes(
                             Nodes[x, y]!,
                             aboveNode,
-                            new ConnectionType.Crawl(new IVec2(0, 1)),
+                            Nodes[x, y]!.VerticalBeam
+                                ? new ConnectionType.Climb(new IVec2(0, 1))
+                                : new ConnectionType.Crawl(new IVec2(0, 1)),
                             new ConnectionType.Crawl(new IVec2(0, -1))
-                        );
-                    } else if (aboveNode?.Type is NodeType.Floor) {
-                        ConnectNodes(
-                            Nodes[x, y]!,
-                            aboveNode,
-                            new ConnectionType.Crawl(new IVec2 (0, 1)),
-                            new ConnectionType.Crawl(new IVec2 (0, -1))
                         );
                     }
                 } else {
