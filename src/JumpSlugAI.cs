@@ -21,6 +21,7 @@ class JumpSlugAI : ArtificialIntelligence {
     private Player Player => (Player)creature.realizedCreature;
     private Room? Room => creature.Room.realizedRoom;
     private readonly DebugSprite _inputDirSprite;
+    private readonly DebugSprite _currentNodeSprite;
     private readonly FLabel _currentConnectionLabel;
     private readonly FLabel _bodyModeLabel;
     private readonly FLabel _animationLabel;
@@ -35,6 +36,15 @@ class JumpSlugAI : ArtificialIntelligence {
         _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Room);
         _inputDirSprite.sprite.color = Color.red;
         _inputDirSprite.sprite.isVisible = false;
+        _currentNodeSprite = new DebugSprite(
+            Vector2.zero,
+            new FSprite("pixel") {
+                scale = 10f,
+                color = Color.blue,
+                isVisible = false
+            },
+            Room
+        );
         _currentConnectionLabel = new FLabel(Custom.GetFont(), "None") {
             alignment = FLabelAlignment.Center,
             color = Color.white,
@@ -52,6 +62,7 @@ class JumpSlugAI : ArtificialIntelligence {
         container.AddChild(_bodyModeLabel);
         container.AddChild(_animationLabel);
         Room!.AddObject(_inputDirSprite);
+        Room!.AddObject(_currentNodeSprite);
     }
 
     public override void NewRoom(Room room) {
@@ -70,39 +81,51 @@ class JumpSlugAI : ArtificialIntelligence {
             var mousePos = (Vector2)Input.mousePosition + Room!.game.cameras[0].pos;
             _destination = Room.GetTilePosition(mousePos);
             FindPath();
-
-            if (_visualizer.VisualizingPath) {
-                _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
-                if (_path is not null) {
-                    _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
-                }
-            } else if (_path is not null) {
-                _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
-            }
         }
+
         FollowPath();
+
+        _currentConnectionLabel.text = _path?.CurrentConnection() switch {
+            null => "None",
+            ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
+            ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
+            ConnectionType.Drop => "Drop",
+            ConnectionType.Jump(int dir) => $"Jump({dir})",
+            ConnectionType.Pounce(int dir) => $"Pounce({dir})",
+            ConnectionType.Shortcut => "Shortcut",
+            ConnectionType.Walk(int dir) => $"Walk({dir})",
+            ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
+            _ => throw new InvalidUnionVariantException(),
+        };
         _bodyModeLabel.text = Player.bodyMode.value;
         _animationLabel.text = Player.animation.value;
 
         var labelPos = Player.bodyChunks[0].pos - Room.game.cameras[0].pos;
-        labelPos.y += 10;
+        labelPos.y += 20;
         _currentConnectionLabel.SetPosition(labelPos);
         labelPos.y += 20;
         _bodyModeLabel.SetPosition(labelPos);
         labelPos.y += 20;
         _animationLabel.SetPosition(labelPos);
 
+        if (_path?.CurrentNode() is IVec2 current) {
+            _currentNodeSprite.sprite.isVisible = true;
+            _currentNodeSprite.pos = RoomHelper.MiddleOfTile(current);
+        } else {
+            _currentNodeSprite.sprite.isVisible = false;
+        }
+
         if (Player.input[0].x == 0 && Player.input[0].y == 0) {
             _inputDirSprite.sprite.isVisible = false;
         } else {
             _inputDirSprite.sprite.isVisible = true;
-            _inputDirSprite.pos = Player.mainBodyChunk.pos;
+
             LineHelper.ReshapeLine(
                 (TriangleMesh)_inputDirSprite.sprite,
                 Player.mainBodyChunk.pos,
                 new Vector2(
-                    Player.mainBodyChunk.pos.x + Player.input[0].x * 20,
-                    Player.mainBodyChunk.pos.y + Player.input[0].y * 20
+                    Player.mainBodyChunk.pos.x + Player.input[0].x * 50,
+                    Player.mainBodyChunk.pos.y + Player.input[0].y * 50
                 )
             );
         }
@@ -117,6 +140,15 @@ class JumpSlugAI : ArtificialIntelligence {
                 _destination.Value,
                 new SlugcatDescriptor(Player)
             );
+
+        if (_visualizer.VisualizingPath) {
+            _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
+            if (_path is not null) {
+                _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
+            }
+        } else if (_path is not null) {
+            _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
+        }
     }
 
     /// <summary>
@@ -196,18 +228,6 @@ class JumpSlugAI : ArtificialIntelligence {
 
         var currentPathPos = _path.CurrentNode()!.Value;
         var currentConnection = _path.CurrentConnection();
-        _currentConnectionLabel.text = currentConnection switch {
-            null => "None",
-            ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
-            ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
-            ConnectionType.Drop => "Drop",
-            ConnectionType.Jump(int dir) => $"Jump({dir})",
-            ConnectionType.Pounce(int dir) => $"Pounce({dir})",
-            ConnectionType.Shortcut => "Shortcut",
-            ConnectionType.Walk(int dir) => $"Walk({dir})",
-            ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
-            _ => throw new InvalidUnionVariantException(),
-        };
 
         if (currentConnection is null) {
             _path = null;
