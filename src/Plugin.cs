@@ -31,6 +31,7 @@ class Plugin : BaseUnityPlugin {
         AIHooks.RegisterHooks();
         TimerHooks.RegisterHooks();
         RoomHooks.RegisterHooks();
+        DebugHooks.RegisterHooks();
     }
 
     public void OnDisable() {
@@ -43,6 +44,7 @@ class Plugin : BaseUnityPlugin {
         Pathfinding.VisualizerHooks.UnregisterHooks();
         AIHooks.UnregisterHooks();
         RoomHooks.UnregisterHooks();
+        DebugHooks.UnregisterHooks();
     }
 
     // Load any resources, such as sprites or sounds
