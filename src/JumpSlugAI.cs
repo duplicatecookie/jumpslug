@@ -118,8 +118,8 @@ class JumpSlugAI : ArtificialIntelligence {
         if (Player.input[0].x == 0 && Player.input[0].y == 0) {
             _inputDirSprite.sprite.isVisible = false;
         } else {
+            _inputDirSprite.pos = Player.mainBodyChunk.pos;
             _inputDirSprite.sprite.isVisible = true;
-
             LineHelper.ReshapeLine(
                 (TriangleMesh)_inputDirSprite.sprite,
                 Player.mainBodyChunk.pos,
@@ -187,26 +187,28 @@ class JumpSlugAI : ArtificialIntelligence {
         IVec2 footPos = RoomHelper.TilePosition(Player.bodyChunks[1].pos);
 
         bool shouldIgnoreNode = false;
-        if (Player.bodyMode == Player.BodyModeIndex.Stand
-            || Player.animation == Player.AnimationIndex.StandOnBeam
-        ) {
-            var result = _path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1));
+        if (Player.bodyMode == Player.BodyModeIndex.WallClimb) {
+            var result = _path.FindNode(headPos);
             if (result == Path.NodeSearchResult.NotFound) {
                 FindPath();
             } else if (result == Path.NodeSearchResult.ShouldIgnore) {
                 shouldIgnoreNode = true;
             }
         } else if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
+            && Player.animation != Player.AnimationIndex.StandOnBeam
             || Player.bodyMode == Player.BodyModeIndex.CorridorClimb
+            || Player.bodyMode == Player.BodyModeIndex.Crawl
         ) {
-            var result = _path.FindEitherNode(headPos, footPos);
-            if (result == Path.NodeSearchResult.NotFound) {
-                FindPath();
-            } else if (result == Path.NodeSearchResult.ShouldIgnore) {
-                shouldIgnoreNode = true;
-            }
-        } else {
             var result = _path.FindNode(headPos);
+            if (result == Path.NodeSearchResult.NotFound) {
+                result = _path.FindNode(footPos);
+                if (result == Path.NodeSearchResult.NotFound) {
+                    FindPath();
+                }
+            }
+            shouldIgnoreNode = result == Path.NodeSearchResult.ShouldIgnore;
+        } else {
+            var result = _path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1));
             if (result == Path.NodeSearchResult.NotFound) {
                 FindPath();
             } else if (result == Path.NodeSearchResult.ShouldIgnore) {
@@ -233,8 +235,12 @@ class JumpSlugAI : ArtificialIntelligence {
             _path = null;
         } else if (currentConnection is ConnectionType.Walk(int direction)) {
             if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                input.y = -1;
-                input.jmp = true;
+                if (currentPathPos.y == headPos.y) {
+                    input.y = 1;
+                } else {
+                    input.y = -1;
+                    input.jmp = true;
+                }
             } else {
                 input.x = direction;
                 if (currentNode.Type is NodeType.Floor) {
@@ -276,25 +282,33 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         } else if (currentConnection is ConnectionType.Climb(IVec2 climbDir)) {
             if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                if (_path.PeekConnection(1) is ConnectionType.Climb(IVec2 nextDir) && nextDir.x != 0) {
-                    input.x = nextDir.x;
-                    // this is required for moving from vertical to horizontal poles
-                    if (Player.flipDirection != climbDir.x) {
-                        _waitOneTick = true;
+                if (_path.PeekConnection(1) is ConnectionType.Walk && climbDir.y < 0) {
+                    input.y = -1;
+                    input.jmp = true;
+                } else {
+                    if (climbDir.x != 0) {
+                        input.x = climbDir.x;
+                        // this is required for moving from vertical to horizontal poles
+                        if (Player.flipDirection != climbDir.x) {
+                            _waitOneTick = true;
+                        }
+                    } else {
+                        input.x = climbDir.x;
                     }
-                } else {
-                    input.x = climbDir.x;
-                }
-                if (Player.animation != Player.AnimationIndex.StandOnBeam
-                    && sharedGraph.GetNode(currentPathPos)?.VerticalBeam == false
-                    && Room!
-                        .GetTile(currentPathPos.x, currentPathPos.y + 1)
-                        .Terrain == Room.Tile.TerrainType.Air
-                    && Player.input[1].y != 1
-                ) {
-                    input.y = 1;
-                } else {
-                    input.y = climbDir.y;
+
+                    if (Player.animation == Player.AnimationIndex.StandOnBeam
+                        && climbDir.y < 0
+                        || Player.animation != Player.AnimationIndex.StandOnBeam
+                        && currentNode.VerticalBeam == false
+                        && Room!
+                            .GetTile(currentPathPos.x, currentPathPos.y + 1)
+                            .Terrain == Room.Tile.TerrainType.Air
+                        && Player.input[1].y != 1
+                    ) {
+                        input.y = 1;
+                    } else {
+                        input.y = climbDir.y;
+                    }
                 }
             } else if (_path.PeekConnection(1) is ConnectionType.Climb
                 && Player.bodyMode != Player.BodyModeIndex.CorridorClimb
