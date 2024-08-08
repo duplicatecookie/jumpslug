@@ -2,16 +2,16 @@ using System.Runtime.CompilerServices;
 
 using UnityEngine;
 
-namespace JumpSlug;
+namespace JumpSlug.Pathfinding;
 
 static class RoomCWT {
     public class RoomExtension {
-        public Pathfinding.SharedGraph? SharedGraph;
-        public Pathfinding.SharedGraphVisualizer? Visualizer;
-        public Pathfinding.PathNodePool? PathNodePool;
-        public Pathfinding.BitGrid? OpenNodes;
-        public Pathfinding.BitGrid? ClosedNodes;
-        public Pathfinding.PathNodeQueue? NodeQueue;
+        public SharedGraph? SharedGraph;
+        public SharedGraphVisualizer? Visualizer;
+        public PathNodePool? PathNodePool;
+        public BitGrid? OpenNodes;
+        public BitGrid? ClosedNodes;
+        public PathNodeQueue? NodeQueue;
         public RoomExtension() {
         }
     }
@@ -34,14 +34,14 @@ static class RoomHooks {
         orig(self);
         if (self.threadFinished) {
             var roomExt = self.room.GetCWT();
-            roomExt.SharedGraph = new Pathfinding.SharedGraph(self.room);
-            roomExt.Visualizer = new Pathfinding.SharedGraphVisualizer(self.room);
+            roomExt.SharedGraph = new SharedGraph(self.room);
+            roomExt.Visualizer = new SharedGraphVisualizer(self.room);
             int width = roomExt.SharedGraph.Width;
             int height = roomExt.SharedGraph.Height;
-            roomExt.OpenNodes = new Pathfinding.BitGrid(width, height);
-            roomExt.ClosedNodes = new Pathfinding.BitGrid(width, height);
-            roomExt.PathNodePool = new Pathfinding.PathNodePool(roomExt.SharedGraph);
-            roomExt.NodeQueue = new Pathfinding.PathNodeQueue(
+            roomExt.OpenNodes = new BitGrid(width, height);
+            roomExt.ClosedNodes = new BitGrid(width, height);
+            roomExt.PathNodePool = new PathNodePool(roomExt.SharedGraph);
+            roomExt.NodeQueue = new PathNodeQueue(
                 roomExt.PathNodePool!.Value.NonNullCount,
                 width,
                 height

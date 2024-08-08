@@ -148,7 +148,7 @@ class PathVisualizer {
             var sharedGraph = _room.GetCWT().SharedGraph!;
             if (connection is ConnectionType.Jump) {
                 // this node can be null only if the path is constructed incorrectly so this should throw
-                Node graphNode = sharedGraph.GetNode(startTile)!;
+                GraphNode graphNode = sharedGraph.GetNode(startTile)!;
                 if (graphNode.VerticalBeam && !graphNode.HorizontalBeam) {
                     var v0 = slugcat.VerticalPoleJumpVector();
                     VisualizeJump(v0, startTile, endTile);

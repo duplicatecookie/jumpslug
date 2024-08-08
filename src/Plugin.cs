@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Timers;
 
 using BepInEx;
 using BepInEx.Logging;
@@ -28,9 +29,10 @@ class Plugin : BaseUnityPlugin {
 
         Pathfinding.PathfinderHooks.RegisterHooks();
         Pathfinding.VisualizerHooks.RegisterHooks();
+        Pathfinding.RoomHooks.RegisterHooks();
+        
         AIHooks.RegisterHooks();
         TimerHooks.RegisterHooks();
-        RoomHooks.RegisterHooks();
         DebugHooks.RegisterHooks();
     }
 
@@ -42,8 +44,10 @@ class Plugin : BaseUnityPlugin {
 
         Pathfinding.PathfinderHooks.UnregisterHooks();
         Pathfinding.VisualizerHooks.UnregisterHooks();
+        Pathfinding.RoomHooks.UnregisterHooks();
+
         AIHooks.UnregisterHooks();
-        RoomHooks.UnregisterHooks();
+        TimerHooks.UnregisterHooks();
         DebugHooks.UnregisterHooks();
     }
 

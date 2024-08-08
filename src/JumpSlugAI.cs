@@ -157,14 +157,14 @@ class JumpSlugAI : ArtificialIntelligence {
     /// <returns>
     /// Null if the slugcat is not located at any node in the graph.
     /// </returns>
-    public Node? CurrentNode() {
+    public GraphNode? CurrentNode() {
         var sharedGraph = Player.room.GetCWT().SharedGraph!;
         IVec2 headPos = RoomHelper.TilePosition(Player.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(Player.bodyChunks[1].pos);
         if (Player.bodyMode == Player.BodyModeIndex.Stand
             || Player.animation == Player.AnimationIndex.StandOnBeam
         ) {
-            return sharedGraph.GetNode(footPos) is Node node
+            return sharedGraph.GetNode(footPos) is GraphNode node
                 ? node
                 : sharedGraph.GetNode(footPos.x, footPos.y - 1);
         }
@@ -214,7 +214,7 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         }
 
-        Node? currentNode;
+        GraphNode? currentNode;
         if (shouldIgnoreNode || _path.CurrentNode() is null
             || (currentNode = sharedGraph.GetNode(_path.CurrentNode()!.Value)) is null
         ) {
