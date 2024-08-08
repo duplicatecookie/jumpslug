@@ -217,7 +217,7 @@ class JumpSlugAI : ArtificialIntelligence {
         }
 
         GraphNode? currentNode;
-        if (shouldIgnoreNode || _path.CurrentNode() is null
+        if (shouldIgnoreNode || _path?.CurrentNode() is null
             || (currentNode = sharedGraph.GetNode(_path.CurrentNode()!.Value)) is null
         ) {
             Player.input[0] = input;
@@ -324,11 +324,13 @@ class JumpSlugAI : ArtificialIntelligence {
                 input.y = climbDir.y;
             }
         } else if (currentConnection is ConnectionType.Drop) {
-            if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                input.y = -1;
-                input.jmp = true;
-            } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb) {
-                input.y = -1;
+            if (Mathf.Abs(Player.mainBodyChunk.vel.x) < 0.5f) {
+                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                    input.y = -1;
+                    input.jmp = true;
+                } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb) {
+                    input.y = -1;
+                }
             }
         }
         Player.input[0] = input;
