@@ -286,14 +286,9 @@ class JumpSlugAI : ArtificialIntelligence {
                     input.y = -1;
                     input.jmp = true;
                 } else {
-                    if (climbDir.x != 0) {
-                        input.x = climbDir.x;
-                        // this is required for moving from vertical to horizontal poles
-                        if (Player.flipDirection != climbDir.x) {
-                            _waitOneTick = true;
-                        }
-                    } else {
-                        input.x = climbDir.x;
+                    input.x = climbDir.x;
+                    if (climbDir.x != 0 && Player.flipDirection != climbDir.x) {
+                        _waitOneTick = true;
                     }
 
                     if (Player.animation == Player.AnimationIndex.StandOnBeam
@@ -310,9 +305,7 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.y = climbDir.y;
                     }
                 }
-            } else if (_path.PeekConnection(1) is ConnectionType.Climb
-                && Player.bodyMode != Player.BodyModeIndex.CorridorClimb
-            ) {
+            } else {
                 if (currentNode.VerticalBeam) {
                     input.y = 1;
                 } else if (currentNode.HorizontalBeam) {
@@ -320,8 +313,6 @@ class JumpSlugAI : ArtificialIntelligence {
                 } else {
                     Plugin.Logger!.LogWarning("trying to climb on node without pole");
                 }
-            } else {
-                input.y = climbDir.y;
             }
         } else if (currentConnection is ConnectionType.Drop) {
             if (Mathf.Abs(Player.mainBodyChunk.vel.x) < 0.5f) {
