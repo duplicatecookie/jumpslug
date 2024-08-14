@@ -599,17 +599,11 @@ public class Pathfinder {
 
 static class PathfinderHooks {
     public static void RegisterHooks() {
-        On.Player.ctor += Player_ctor;
         On.Player.Update += Player_Update;
     }
 
     public static void UnregisterHooks() {
-        On.Player.ctor -= Player_ctor;
         On.Player.Update -= Player_Update;
-    }
-
-    private static void Player_ctor(On.Player.orig_ctor orig, Player self, AbstractCreature abstractCreature, World world) {
-        orig(self, abstractCreature, world);
     }
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {

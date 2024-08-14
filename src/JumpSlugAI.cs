@@ -341,27 +341,6 @@ class JumpSlugAI : ArtificialIntelligence {
 }
 
 static class AIHooks {
-    public static void RegisterHooks() {
-        On.Player.Update += Player_Update;
-        On.Player.checkInput += Player_checkInput;
-        IL.Player.checkInput += IL_Player_checkInput;
-    }
-
-    public static void UnregisterHooks() {
-        On.Player.Update -= Player_Update;
-        On.Player.checkInput -= Player_checkInput;
-    }
-
-    private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
-        orig(self, eu);
-        if (self.abstractCreature?.abstractAI?.RealAI is JumpSlugAI ai) {
-            ai.Update();
-        }
-    }
-
-    private static void Player_checkInput(On.Player.orig_checkInput orig, Player self) {
-        orig(self);
-    }
 
     private static void IL_Player_checkInput(ILContext il) {
         try {

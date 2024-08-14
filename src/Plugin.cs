@@ -30,8 +30,7 @@ class Plugin : BaseUnityPlugin {
         Pathfinding.PathfinderHooks.RegisterHooks();
         Pathfinding.VisualizerHooks.RegisterHooks();
         Pathfinding.RoomHooks.RegisterHooks();
-        
-        AIHooks.RegisterHooks();
+
         TimerHooks.RegisterHooks();
         DebugHooks.RegisterHooks();
     }
@@ -46,7 +45,6 @@ class Plugin : BaseUnityPlugin {
         Pathfinding.VisualizerHooks.UnregisterHooks();
         Pathfinding.RoomHooks.UnregisterHooks();
 
-        AIHooks.UnregisterHooks();
         TimerHooks.UnregisterHooks();
         DebugHooks.UnregisterHooks();
     }
