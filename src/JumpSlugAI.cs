@@ -341,6 +341,13 @@ class JumpSlugAI : ArtificialIntelligence {
 }
 
 static class AIHooks {
+    public static void RegisterHooks() {
+        IL.Player.checkInput += IL_Player_checkInput;
+    }
+
+    public static void UnregisterHooks() {
+        IL.Player.checkInput -= IL_Player_checkInput;
+    }
 
     private static void IL_Player_checkInput(ILContext il) {
         try {
