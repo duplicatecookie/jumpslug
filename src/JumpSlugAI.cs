@@ -20,16 +20,17 @@ class JumpSlugAbstractAI : AbstractCreatureAI {
 class JumpSlugAI : ArtificialIntelligence {
     private Player Player => (Player)creature.realizedCreature;
     private Room? Room => creature.Room.realizedRoom;
+    private bool _waitOneTick;
+    private IVec2? _destination;
+    private readonly Pathfinder _pathfinder;
+    private Path? _path;
+    private readonly PathVisualizer _visualizer;
     private readonly DebugSprite _inputDirSprite;
     private readonly DebugSprite _currentNodeSprite;
     private readonly FLabel _currentConnectionLabel;
     private readonly FLabel _bodyModeLabel;
     private readonly FLabel _animationLabel;
-    private bool _waitOneTick;
-    private IVec2? _destination;
-    private readonly Pathfinder _pathfinder;
-    private readonly PathVisualizer _visualizer;
-    private Path? _path;
+
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         _pathfinder = new Pathfinder(Room!, new SlugcatDescriptor(Player));
         _visualizer = new PathVisualizer(Room!);
