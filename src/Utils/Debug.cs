@@ -11,14 +11,14 @@ static class DebugHooks {
         On.RainWorld.Update -= RainWorld_Update;
     }
 
-    private static bool _FrameStep = false;
+    private static bool s_frameStep = false;
 
     private static void RainWorld_Update(On.RainWorld.orig_Update orig, RainWorld self) {
         if (InputHelper.JustPressed(KeyCode.U)) {
             Plugin.Logger!.LogDebug("toggled frame stepping");
-            _FrameStep = !_FrameStep;
+            s_frameStep = !s_frameStep;
         }
-        if (!_FrameStep || InputHelper.JustPressed(KeyCode.I)) {
+        if (!s_frameStep || InputHelper.JustPressed(KeyCode.I)) {
             orig(self);
         }
     }
