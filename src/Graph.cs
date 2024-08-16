@@ -252,56 +252,65 @@ public class SharedGraph {
     private void GenerateConnections(Room room) {
         for (int y = 0; y < Height; y++) {
             for (int x = 0; x < Width; x++) {
-                if (Nodes[x, y] is null) {
+                var currentNode = Nodes[x, y];
+                if (currentNode is null) {
                     continue;
                 }
-                if (Nodes[x, y]!.Type is NodeType.Floor) {
-                    if (GetNode(x + 1, y)?.Type is NodeType.Floor or NodeType.Slope) {
+                var rightNode = GetNode(x + 1, y);
+                var aboveNode = GetNode(x, y + 1);
+
+                if (currentNode.Type is NodeType.Floor) {
+                    if (rightNode?.Type is NodeType.Floor or NodeType.Slope) {
                         ConnectNodes(
-                            Nodes[x, y]!,
-                            Nodes[x + 1, y]!,
+                            currentNode,
+                            rightNode,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
-                    } else if (GetNode(x + 1, y)?.Type is NodeType.Corridor) {
+                    } else if (rightNode?.Type is NodeType.Corridor) {
                         ConnectNodes(
-                            Nodes[x, y]!,
-                            Nodes[x + 1, y]!,
+                            currentNode,
+                            rightNode,
                             new ConnectionType.Crawl(new IVec2(1, 0)),
                             new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     }
                     if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
                         ConnectNodes(
-                            Nodes[x, y]!,
+                            currentNode,
                             Nodes[x + 1, y - 1]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
                     }
                     if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor) {
-                        Nodes[x, y]!.Connections.Add(new NodeConnection(new ConnectionType.Walk(1), Nodes[x + 1, y + 1]!));
+                        currentNode.Connections.Add(
+                            new NodeConnection(
+                                new ConnectionType.Walk(1),
+                                Nodes[x + 1, y + 1]!
+                            )
+                        );
                     }
                 }
 
-                if (Nodes[x, y]!.Type is NodeType.Slope) {
-                    if (GetNode(x + 1, y)?.Type is NodeType.Floor or NodeType.Slope) {
+                if (currentNode.Type is NodeType.Slope) {
+                    if (rightNode?.Type is NodeType.Floor or NodeType.Slope) {
                         ConnectNodes(
-                            Nodes[x, y]!,
-                            Nodes[x + 1, y]!,
+                            currentNode,
+                            rightNode,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
                     } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
                         ConnectNodes(
-                            Nodes[x, y]!,
+                            currentNode,
                             Nodes[x + 1, y - 1]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
                     } else if (GetNode(x + 1, y + 1)?.Type is NodeType.Slope or NodeType.Floor) {
                         ConnectNodes(
-                            Nodes[x, y]!,
+                            currentNode,
                             Nodes[x + 1, y + 1]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
@@ -309,19 +318,17 @@ public class SharedGraph {
                     }
                 }
 
-                var rightNode = GetNode(x + 1, y);
-                var aboveNode = GetNode(x, y + 1);
-                if (Nodes[x, y]!.Type is NodeType.Corridor) {
+                if (currentNode.Type is NodeType.Corridor) {
                     if (rightNode?.Type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
                         ConnectNodes(
-                            Nodes[x, y]!,
+                            currentNode,
                             rightNode,
                             new ConnectionType.Crawl(new IVec2(1, 0)),
                             new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     } else if (rightNode?.HorizontalBeam == true) {
                         ConnectNodes(
-                            Nodes[x, y]!,
+                            currentNode,
                             rightNode,
                             new ConnectionType.Crawl(new IVec2(1, 0)),
                             rightNode.HorizontalBeam
@@ -330,36 +337,41 @@ public class SharedGraph {
                         );
                     }
                     if (GetNode(x + 1, y - 1)?.Type is NodeType.Floor) {
-                        Nodes[x + 1, y - 1]!.Connections.Add(new NodeConnection(new ConnectionType.Walk(-1), Nodes[x, y]!));
+                        Nodes[x + 1, y - 1]!.Connections.Add(
+                            new NodeConnection(
+                                new ConnectionType.Walk(-1),
+                                currentNode
+                            )
+                        );
                     }
                     if (aboveNode?.Type is NodeType.Corridor or NodeType.ShortcutEntrance or NodeType.Floor) {
                         ConnectNodes(
-                            Nodes[x, y]!,
+                            currentNode,
                             aboveNode,
-                            Nodes[x, y]!.VerticalBeam
+                            currentNode.VerticalBeam
                                 ? new ConnectionType.Climb(new IVec2(0, 1))
                                 : new ConnectionType.Crawl(new IVec2(0, 1)),
                             new ConnectionType.Crawl(new IVec2(0, -1))
                         );
                     }
                 } else {
-                    if (Nodes[x, y]!.HorizontalBeam
+                    if (currentNode.HorizontalBeam
                         && rightNode?.HorizontalBeam == true
                     ) {
                         ConnectNodes(
-                            Nodes[x, y]!,
-                            Nodes[x + 1, y]!,
+                            currentNode,
+                            rightNode,
                             new ConnectionType.Climb(new IVec2(1, 0)),
                             rightNode.Type is NodeType.Corridor
                                 ? new ConnectionType.Crawl(new IVec2(-1, 0))
                                 : new ConnectionType.Climb(new IVec2(-1, 0))
                         );
                     }
-                    if (Nodes[x, y]!.VerticalBeam
+                    if (currentNode.VerticalBeam
                         && aboveNode?.VerticalBeam == true
                     ) {
                         ConnectNodes(
-                            Nodes[x, y]!,
+                            currentNode,
                             aboveNode,
                             new ConnectionType.Climb(new IVec2(0, 1)),
                             aboveNode.Type is NodeType.Corridor
@@ -369,27 +381,32 @@ public class SharedGraph {
 
                     }
                 }
-                if (Nodes[x, y]!.Type is NodeType.ShortcutEntrance) {
-                    var entrance = Nodes[x, y]!.Type as NodeType.ShortcutEntrance;
-                    var shortcutData = room.shortcuts[entrance!.Index];
+                if (currentNode.Type is NodeType.ShortcutEntrance entrance) {
+                    var shortcutData = room.shortcuts[entrance.Index];
                     var destNode = Nodes[shortcutData.destinationCoord.x, shortcutData.destinationCoord.y];
                     if (destNode is null || destNode.Type is not NodeType.ShortcutEntrance) {
                         Plugin.Logger!.LogError($"Shortcut entrance has no valid exit, pos: ({x}, {y}), index: {entrance.Index}");
                         return;
                     }
-                    Nodes[x, y]!.Connections.Add(new NodeConnection(new ConnectionType.Shortcut(), destNode, shortcutData.length));
-                    if (GetNode(x + 1, y)?.Type is NodeType.Corridor) {
+                    currentNode.Connections.Add(
+                        new NodeConnection(
+                            new ConnectionType.Shortcut(),
+                            destNode,
+                            shortcutData.length
+                        )
+                    );
+                    if (rightNode?.Type is NodeType.Corridor) {
                         ConnectNodes(
-                            Nodes[x, y]!,
-                            Nodes[x + 1, y]!,
+                            currentNode,
+                            rightNode,
                             new ConnectionType.Crawl(new IVec2(1, 0)),
                             new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     }
-                    if (GetNode(x, y + 1)?.Type is NodeType.Corridor) {
+                    if (aboveNode?.Type is NodeType.Corridor) {
                         ConnectNodes(
-                            Nodes[x, y]!,
-                            Nodes[x, y + 1]!,
+                            currentNode,
+                            aboveNode,
                             new ConnectionType.Crawl(new IVec2(0, 1)),
                             new ConnectionType.Crawl(new IVec2(0, -1))
                         );
