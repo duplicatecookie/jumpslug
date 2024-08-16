@@ -185,18 +185,14 @@ public class SharedGraph {
                         };
                     }
                 } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Air) {
-                    if (!(room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x - 1, y + 1].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Air)
-                        && !(room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x + 1, y + 1].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Air)
-                        && !(room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x - 1, y - 1].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Air)
-                        && !(room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x + 1, y - 1].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Air)
+                    if (room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid
+                        && room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
+                        || room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Solid
+                        && room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Solid
+                        || room.Tiles[x - 1, y + 1].Terrain != Room.Tile.TerrainType.Air
+                        && room.Tiles[x + 1, y + 1].Terrain != Room.Tile.TerrainType.Air
+                        && room.Tiles[x - 1, y - 1].Terrain != Room.Tile.TerrainType.Air
+                        && room.Tiles[x + 1, y - 1].Terrain != Room.Tile.TerrainType.Air
                     ) {
                         Nodes[x, y] = new GraphNode(new NodeType.Corridor(), x, y);
                     } else if (
@@ -283,7 +279,7 @@ public class SharedGraph {
                             new ConnectionType.Walk(-1)
                         );
                     }
-                    if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor) {
+                    if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor or NodeType.Slope) {
                         currentNode.Connections.Add(
                             new NodeConnection(
                                 new ConnectionType.Walk(1),
@@ -308,12 +304,26 @@ public class SharedGraph {
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
+                    } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Floor) {
+                        Nodes[x + 1, y - 1]!.Connections.Add(
+                            new NodeConnection(
+                                new ConnectionType.Walk(-1),
+                                currentNode
+                            )
+                        );
                     } else if (GetNode(x + 1, y + 1)?.Type is NodeType.Slope or NodeType.Floor) {
                         ConnectNodes(
                             currentNode,
                             Nodes[x + 1, y + 1]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
+                        );
+                    } else if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor) {
+                        ConnectNodes(
+                            currentNode,
+                            Nodes[x + 1, y + 1]!,
+                            new ConnectionType.Walk(1),
+                            new ConnectionType.Crawl(new IVec2(-1, 0))
                         );
                     }
                 }
@@ -342,6 +352,13 @@ public class SharedGraph {
                                 new ConnectionType.Walk(-1),
                                 currentNode
                             )
+                        );
+                    } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
+                        ConnectNodes(
+                            currentNode,
+                            Nodes[x + 1, y - 1]!,
+                            new ConnectionType.Crawl(new IVec2(1, 0)),
+                            new ConnectionType.Walk(-1)
                         );
                     }
                     if (aboveNode?.Type is NodeType.Corridor or NodeType.ShortcutEntrance or NodeType.Floor) {
