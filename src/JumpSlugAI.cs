@@ -176,7 +176,9 @@ class JumpSlugAI : ArtificialIntelligence {
             if (result == Path.NodeSearchResult.NotFound) {
                 result = _path.FindEitherNode(footPos, new IVec2(headPos.x, headPos.y - 1));
                 if (result == Path.NodeSearchResult.NotFound) {
-                    FindPath();
+                    if (CurrentNode() is not null) {
+                        FindPath();
+                    }
                 }
             }
             shouldIgnoreNode = result == Path.NodeSearchResult.ShouldIgnore;
@@ -186,7 +188,9 @@ class JumpSlugAI : ArtificialIntelligence {
         ) {
             var result = _path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1));
             if (result == Path.NodeSearchResult.NotFound) {
-                FindPath();
+                if (CurrentNode() is not null) {
+                        FindPath();
+                    }
             } else if (result == Path.NodeSearchResult.ShouldIgnore) {
                 shouldIgnoreNode = true;
             }
@@ -195,7 +199,9 @@ class JumpSlugAI : ArtificialIntelligence {
             if (result == Path.NodeSearchResult.NotFound) {
                 result = _path.FindNode(headPos);
                 if (result == Path.NodeSearchResult.NotFound) {
-                    FindPath();
+                    if (CurrentNode() is not null) {
+                        FindPath();
+                    };
                 }
             }
             shouldIgnoreNode = result == Path.NodeSearchResult.ShouldIgnore;
@@ -204,7 +210,9 @@ class JumpSlugAI : ArtificialIntelligence {
             if (result == Path.NodeSearchResult.NotFound) {
                 result = _path.FindNode(footPos);
                 if (result == Path.NodeSearchResult.NotFound) {
-                    FindPath();
+                    if (CurrentNode() is not null) {
+                        FindPath();
+                    }
                 }
             }
             shouldIgnoreNode = result == Path.NodeSearchResult.ShouldIgnore;
