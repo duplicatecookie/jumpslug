@@ -28,8 +28,6 @@ class JumpSlugAI : ArtificialIntelligence {
     private readonly DebugSprite _inputDirSprite;
     private readonly DebugSprite _currentNodeSprite;
     private readonly FLabel _currentConnectionLabel;
-    private readonly FLabel _bodyModeLabel;
-    private readonly FLabel _animationLabel;
 
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         _pathfinder = new Pathfinder(Room!, new SlugcatDescriptor(Player));
@@ -50,18 +48,9 @@ class JumpSlugAI : ArtificialIntelligence {
             alignment = FLabelAlignment.Center,
             color = Color.white,
         };
-        _bodyModeLabel = new FLabel(Custom.GetFont(), "None") {
-            alignment = FLabelAlignment.Center,
-            color = Color.white,
-        };
-        _animationLabel = new FLabel(Custom.GetFont(), "None") {
-            alignment = FLabelAlignment.Center,
-            color = Color.white,
-        };
+        
         var container = Room!.game.cameras[0].ReturnFContainer("Foreground");
         container.AddChild(_currentConnectionLabel);
-        container.AddChild(_bodyModeLabel);
-        container.AddChild(_animationLabel);
         Room!.AddObject(_inputDirSprite);
         Room!.AddObject(_currentNodeSprite);
     }
@@ -98,16 +87,10 @@ class JumpSlugAI : ArtificialIntelligence {
             ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
             _ => throw new InvalidUnionVariantException(),
         };
-        _bodyModeLabel.text = Player.bodyMode.value;
-        _animationLabel.text = Player.animation.value;
 
         var labelPos = Player.bodyChunks[0].pos - Room.game.cameras[0].pos;
-        labelPos.y += 20;
+        labelPos.y += 60;
         _currentConnectionLabel.SetPosition(labelPos);
-        labelPos.y += 20;
-        _bodyModeLabel.SetPosition(labelPos);
-        labelPos.y += 20;
-        _animationLabel.SetPosition(labelPos);
 
         if (_path?.CurrentNode() is IVec2 current) {
             _currentNodeSprite.sprite.isVisible = true;
