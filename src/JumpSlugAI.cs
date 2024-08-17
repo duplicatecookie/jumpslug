@@ -201,6 +201,15 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
             }
             shouldIgnoreNode = result == Path.NodeSearchResult.ShouldIgnore;
+        }   else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
+            var result = _path.FindNode(headPos);
+            if (result == Path.NodeSearchResult.NotFound) {
+                result = _path.FindEitherNode(footPos, new IVec2(headPos.x, headPos.y - 1));
+                if (result == Path.NodeSearchResult.NotFound) {
+                    FindPath();
+                }
+            }
+            shouldIgnoreNode = result == Path.NodeSearchResult.ShouldIgnore;
         } else {
             var result = _path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1));
             if (result == Path.NodeSearchResult.NotFound) {
