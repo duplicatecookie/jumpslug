@@ -298,9 +298,7 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.y = climbDir.y;
                     }
                 }
-            } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb
-                || Player.animation == Player.AnimationIndex.ClimbOnBeam
-            ) {
+            } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb) {
                 input.x = climbDir.x;
                 input.y = climbDir.y;
             } else {
