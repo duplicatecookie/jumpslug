@@ -188,17 +188,10 @@ class JumpSlugAI : ArtificialIntelligence {
         IVec2 footPos = RoomHelper.TilePosition(Player.bodyChunks[1].pos);
 
         bool shouldIgnoreNode = false;
-        if (Player.bodyMode == Player.BodyModeIndex.WallClimb) {
-            var result = _path.FindNode(headPos);
-            if (result == Path.NodeSearchResult.NotFound) {
-                FindPath();
-            } else if (result == Path.NodeSearchResult.ShouldIgnore) {
-                shouldIgnoreNode = true;
-            }
-        } else if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
+        if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
             && Player.animation != Player.AnimationIndex.StandOnBeam
             || Player.bodyMode == Player.BodyModeIndex.CorridorClimb
-            || Player.bodyMode == Player.BodyModeIndex.Crawl
+            || Player.bodyMode == Player.BodyModeIndex.WallClimb
         ) {
             var result = _path.FindNode(headPos);
             if (result == Path.NodeSearchResult.NotFound) {
