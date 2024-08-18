@@ -48,7 +48,7 @@ class JumpSlugAI : ArtificialIntelligence {
             alignment = FLabelAlignment.Center,
             color = Color.white,
         };
-        
+
         var container = Room!.game.cameras[0].ReturnFContainer("Foreground");
         container.AddChild(_currentConnectionLabel);
         Room!.AddObject(_inputDirSprite);
@@ -80,11 +80,11 @@ class JumpSlugAI : ArtificialIntelligence {
             ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
             ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
             ConnectionType.Drop => "Drop",
-            ConnectionType.Jump(int dir) => $"Jump({dir})",
+            ConnectionType.Jump(int dir, _) => $"Jump({dir})",
             ConnectionType.Pounce(int dir) => $"Pounce({dir})",
             ConnectionType.Shortcut => "Shortcut",
             ConnectionType.Walk(int dir) => $"Walk({dir})",
-            ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
+            ConnectionType.WalkOffEdge(int dir, _) => $"WalkOffEdge({dir})",
             _ => throw new InvalidUnionVariantException(),
         };
 
@@ -189,8 +189,8 @@ class JumpSlugAI : ArtificialIntelligence {
             var result = _path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1));
             if (result == Path.NodeSearchResult.NotFound) {
                 if (CurrentNode() is not null) {
-                        FindPath();
-                    }
+                    FindPath();
+                }
             } else if (result == Path.NodeSearchResult.ShouldIgnore) {
                 shouldIgnoreNode = true;
             }
@@ -222,6 +222,10 @@ class JumpSlugAI : ArtificialIntelligence {
         if (shouldIgnoreNode || _path?.CurrentNode() is null
             || (currentNode = sharedGraph.GetNode(_path.CurrentNode()!.Value)) is null
         ) {
+            if (_path?.CurrentConnection() is ConnectionType.Jump(int jumpDir, _) && Player.jumpBoost > 0) {
+                input.x = jumpDir;
+                input.jmp = true;
+            }
             Player.input[0] = input;
             // can't move on non-existent node, wait instead
             if (Timers.Active) {
@@ -326,6 +330,17 @@ class JumpSlugAI : ArtificialIntelligence {
                 } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb) {
                     input.y = -1;
                 }
+            }
+        } else if (currentConnection is ConnectionType.Jump(int jumpDir, _)) {
+            input.x = jumpDir;
+            input.jmp = true;
+        } else if (currentConnection is ConnectionType.WalkOffEdge(int walkDir, _)) {
+            input.x = walkDir;
+            if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                input.y = -1;
+                input.jmp = true;
+            } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
+                input.y = 1;
             }
         }
         Player.input[0] = input;

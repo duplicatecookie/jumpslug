@@ -106,7 +106,7 @@ public class Path {
 
     public NodeSearchResult FindNode(IVec2 node) {
         int initialCursor = Cursor;
-        while(Cursor >= 0) {
+        while (Cursor >= 0) {
             if (CurrentNode() == node) {
                 return NodeSearchResult.Found;
             } else if (
@@ -122,9 +122,7 @@ public class Path {
         while (Cursor > initialCursor) {
             if (CurrentNode() == node) {
                 return NodeSearchResult.Found;
-            } else if (CurrentConnection() is ConnectionType.Drop(var ignoreList)
-                && ignoreList.FindNode(node)
-            ) {
+            } else if (ShouldIgnoreNode(node)) {
                 return NodeSearchResult.ShouldIgnore;
             } else {
                 Advance();
@@ -135,12 +133,10 @@ public class Path {
 
     public NodeSearchResult FindEitherNode(IVec2 primary, IVec2 secondary) {
         int initialCursor = Cursor;
-        while(Cursor >= 0) {
+        while (Cursor >= 0) {
             if (CurrentNode() == primary || CurrentNode() == secondary) {
                 return NodeSearchResult.Found;
-            } else if (CurrentConnection() is ConnectionType.Drop(var ignoreList)
-                && ignoreList.FindEitherNode(primary, secondary)
-            ) {
+            } else if (ShouldIgnoreEitherNode(primary, secondary)) {
                 return NodeSearchResult.ShouldIgnore;
             } else {
                 Advance();
@@ -150,15 +146,31 @@ public class Path {
         while (Cursor > initialCursor) {
             if (CurrentNode() == primary || CurrentNode() == secondary) {
                 return NodeSearchResult.Found;
-            } else if (CurrentConnection() is ConnectionType.Drop(var ignoreList)
-                && ignoreList.FindEitherNode(primary, secondary)
-            ) {
+            } else if (ShouldIgnoreEitherNode(primary, secondary)) {
                 return NodeSearchResult.ShouldIgnore;
-            }  else {
+            } else {
                 Advance();
             }
         }
         return NodeSearchResult.NotFound;
+    }
+
+    private bool ShouldIgnoreNode(IVec2 node) {
+        return CurrentConnection() is ConnectionType.Drop(var ignoreList)
+            && ignoreList.FindNode(node)
+            || CurrentConnection() is ConnectionType.Jump(_, var ignoreList2)
+            && ignoreList2.FindNode(node)
+            || CurrentConnection() is ConnectionType.WalkOffEdge(_, var ignoreList3)
+            && ignoreList3.FindNode(node);
+    }
+
+    private bool ShouldIgnoreEitherNode(IVec2 primary, IVec2 secondary) {
+        return CurrentConnection() is ConnectionType.Drop(var ignoreList)
+            && ignoreList.FindEitherNode(primary, secondary)
+            || CurrentConnection() is ConnectionType.Jump(_, var ignoreList2)
+            && ignoreList2.FindEitherNode(primary, secondary)
+            || CurrentConnection() is ConnectionType.WalkOffEdge(_, var ignoreList3)
+            && ignoreList3.FindEitherNode(primary, secondary);
     }
 
     public enum NodeSearchResult {
