@@ -24,9 +24,11 @@ class JumpSlugAI : ArtificialIntelligence {
     private IVec2? _destination;
     private readonly Pathfinder _pathfinder;
     private Path? _path;
+    private const int MAX_SPRITES = 16;
     private readonly PathVisualizer _visualizer;
     private readonly DebugSprite _inputDirSprite;
     private readonly DebugSprite _currentNodeSprite;
+    private readonly DebugSprite[] _predictedIntersectionSprites;
     private readonly FLabel _currentConnectionLabel;
 
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
@@ -44,6 +46,18 @@ class JumpSlugAI : ArtificialIntelligence {
             },
             Room
         );
+        _predictedIntersectionSprites = new DebugSprite[MAX_SPRITES];
+        for (int i = 0; i < MAX_SPRITES; i++) {
+            _predictedIntersectionSprites[i] = new DebugSprite(
+                Vector2.zero,
+                new FSprite("pixel") {
+                    scale = 10f,
+                    color = Color.green,
+                    isVisible = false,
+                },
+                Room
+            );
+        }
         _currentConnectionLabel = new FLabel(Custom.GetFont(), "None") {
             alignment = FLabelAlignment.Center,
             color = Color.white,
@@ -53,6 +67,9 @@ class JumpSlugAI : ArtificialIntelligence {
         container.AddChild(_currentConnectionLabel);
         Room!.AddObject(_inputDirSprite);
         Room!.AddObject(_currentNodeSprite);
+        foreach (var sprite in _predictedIntersectionSprites) {
+            Room.AddObject(sprite);
+        }
     }
 
     public override void NewRoom(Room room) {
@@ -60,6 +77,10 @@ class JumpSlugAI : ArtificialIntelligence {
         _pathfinder.NewRoom(room);
         _visualizer.NewRoom(room);
         room.AddObject(_inputDirSprite);
+        Room!.AddObject(_currentNodeSprite);
+        foreach (var sprite in _predictedIntersectionSprites) {
+            Room.AddObject(sprite);
+        }
     }
 
     public override void Update() {
@@ -71,6 +92,10 @@ class JumpSlugAI : ArtificialIntelligence {
             var mousePos = (Vector2)Input.mousePosition + Room!.game.cameras[0].pos;
             _destination = Room.GetTilePosition(mousePos);
             FindPath();
+        }
+
+        foreach (var sprite in _predictedIntersectionSprites) {
+            sprite.sprite.isVisible = false;
         }
 
         FollowPath();
@@ -154,6 +179,7 @@ class JumpSlugAI : ArtificialIntelligence {
         };
         int xOffset = (direction + 1) / 2;
         var pathOffset = RoomHelper.MiddleOfTile(headPos);
+        int spriteIndex = 0;
         while (true) {
             float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
             float result = DynamicGraph.Parabola(pathOffset.y, v0, Room!.gravity, t) / 20;
@@ -171,9 +197,18 @@ class JumpSlugAI : ArtificialIntelligence {
                 break;
             }
 
-            if (sharedGraph.Nodes[x, y] is null) {
+            var shiftedNode = sharedGraph.Nodes[x, y];
+            if (shiftedNode is null) {
                 continue;
             }
+
+            if (spriteIndex < MAX_SPRITES) {
+                var sprite = _predictedIntersectionSprites[spriteIndex];
+                sprite.pos = RoomHelper.MiddleOfTile(x, y);
+                sprite.sprite.isVisible = true;
+                spriteIndex++;
+            }
+
             // TODO: extenally messing with the cursor like this is bad, fix when reworking how nodes are found inside the path 
             int initialCursor = _path.Cursor;
             if (_path.FindNodeAhead(new IVec2(x, y))) {
