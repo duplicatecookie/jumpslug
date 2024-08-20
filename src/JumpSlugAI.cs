@@ -80,11 +80,11 @@ class JumpSlugAI : ArtificialIntelligence {
             ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
             ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
             ConnectionType.Drop => "Drop",
-            ConnectionType.Jump(int dir, _) => $"Jump({dir})",
+            ConnectionType.Jump(int dir) => $"Jump({dir})",
             ConnectionType.Pounce(int dir) => $"Pounce({dir})",
             ConnectionType.Shortcut => "Shortcut",
             ConnectionType.Walk(int dir) => $"Walk({dir})",
-            ConnectionType.WalkOffEdge(int dir, _) => $"WalkOffEdge({dir})",
+            ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
             _ => throw new InvalidUnionVariantException(),
         };
 
@@ -135,6 +135,55 @@ class JumpSlugAI : ArtificialIntelligence {
         }
     }
 
+    private bool FallingTowardsPath() {
+        if (_path is null) {
+            return false;
+        }
+        var sharedGraph = Player.room.GetCWT().SharedGraph!;
+        IVec2 headPos = RoomHelper.TilePosition(Player.bodyChunks[0].pos);
+        int x = headPos.x;
+        int y = headPos.y;
+        if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height) {
+            return false;
+        }
+        Vector2 v0 = Player.mainBodyChunk.vel;
+        int direction = v0.x switch {
+            > 0 => 1,
+            < 0 => -1,
+            0 or float.NaN => throw new ArgumentOutOfRangeException(),
+        };
+        int xOffset = (direction + 1) / 2;
+        var pathOffset = RoomHelper.MiddleOfTile(headPos);
+        while (true) {
+            float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
+            float result = DynamicGraph.Parabola(pathOffset.y, v0, Room!.gravity, t) / 20;
+            if (result > y + 1) {
+                y++;
+            } else if (result < y) {
+                y--;
+            } else {
+                x += direction;
+            }
+
+            if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height
+                || Room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid
+                || Room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope) {
+                break;
+            }
+
+            if (sharedGraph.Nodes[x, y] is null) {
+                continue;
+            }
+            // TODO: extenally messing with the cursor like this is bad, fix when reworking how nodes are found inside the path 
+            int initialCursor = _path.Cursor;
+            if (_path.FindNodeAhead(new IVec2(x, y))) {
+                _path.Cursor = initialCursor;
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>
     /// Find the node the requested slugcat is currently at.
     /// </summary>
@@ -170,59 +219,43 @@ class JumpSlugAI : ArtificialIntelligence {
         IVec2 headPos = RoomHelper.TilePosition(Player.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(Player.bodyChunks[1].pos);
 
-        bool shouldIgnoreNode = false;
+        bool fallingTowardsPath = false;
         if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
-            var result = _path.FindNode(headPos);
-            if (result == Path.NodeSearchResult.NotFound) {
-                result = _path.FindEitherNode(footPos, new IVec2(headPos.x, headPos.y - 1));
-                if (result == Path.NodeSearchResult.NotFound) {
-                    if (CurrentNode() is not null) {
-                        FindPath();
-                    }
-                }
+            if (!_path.FindNode(headPos)
+                && !_path.FindEitherNode(footPos, new IVec2(headPos.x, headPos.y - 1))
+                && CurrentNode() is not null
+            ) {
+                FindPath();
             }
-            shouldIgnoreNode = result == Path.NodeSearchResult.ShouldIgnore;
         } else if (Player.bodyMode == Player.BodyModeIndex.Stand
             || Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
             && Player.animation == Player.AnimationIndex.StandOnBeam
         ) {
-            var result = _path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1));
-            if (result == Path.NodeSearchResult.NotFound) {
-                if (CurrentNode() is not null) {
-                    FindPath();
-                }
-            } else if (result == Path.NodeSearchResult.ShouldIgnore) {
-                shouldIgnoreNode = true;
+            if (!_path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1))
+                && CurrentNode() is not null
+            ) {
+                FindPath();
             }
         } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
-            var result = _path.FindNode(footPos);
-            if (result == Path.NodeSearchResult.NotFound) {
-                result = _path.FindNode(headPos);
-                if (result == Path.NodeSearchResult.NotFound) {
-                    if (CurrentNode() is not null) {
-                        FindPath();
-                    };
-                }
+            if (!_path.FindNodeAhead(footPos)
+                && !_path.FindNodeAhead(headPos)
+                && !(fallingTowardsPath = FallingTowardsPath())
+                //&& !_path.FindNodeBehind(footPos)
+                //&& !_path.FindNodeBehind(headPos)
+                && CurrentNode() is not null
+            ) {
+                FindPath();
             }
-            shouldIgnoreNode = result == Path.NodeSearchResult.ShouldIgnore;
-        } else {
-            var result = _path.FindNode(headPos);
-            if (result == Path.NodeSearchResult.NotFound) {
-                result = _path.FindNode(footPos);
-                if (result == Path.NodeSearchResult.NotFound) {
-                    if (CurrentNode() is not null) {
-                        FindPath();
-                    }
-                }
-            }
-            shouldIgnoreNode = result == Path.NodeSearchResult.ShouldIgnore;
+        } else if (!_path.FindNode(headPos)
+            && !_path.FindNode(footPos)
+            && CurrentNode() is not null
+        ) {
+            FindPath();
         }
 
         GraphNode? currentNode;
-        if (shouldIgnoreNode || _path?.CurrentNode() is null
-            || (currentNode = sharedGraph.GetNode(_path.CurrentNode()!.Value)) is null
-        ) {
-            if (_path?.CurrentConnection() is ConnectionType.Jump(int jumpDir, _) && Player.jumpBoost > 0) {
+        if (_path?.CurrentNode() is null || fallingTowardsPath) {
+            if (_path?.CurrentConnection() is ConnectionType.Jump(int jumpDir) && Player.jumpBoost > 0) {
                 input.x = jumpDir;
                 input.jmp = true;
             }
@@ -232,6 +265,9 @@ class JumpSlugAI : ArtificialIntelligence {
                 Timers.FollowPath.Stop();
             }
             return;
+        } else {
+            // this should never be null assuming correct path generation
+            currentNode = sharedGraph.GetNode(_path.CurrentNode()!.Value)!;
         }
 
         var currentPathPos = _path.CurrentNode()!.Value;
@@ -331,10 +367,10 @@ class JumpSlugAI : ArtificialIntelligence {
                     input.y = -1;
                 }
             }
-        } else if (currentConnection is ConnectionType.Jump(int jumpDir, _)) {
+        } else if (currentConnection is ConnectionType.Jump(int jumpDir)) {
             input.x = jumpDir;
             input.jmp = true;
-        } else if (currentConnection is ConnectionType.WalkOffEdge(int walkDir, _)) {
+        } else if (currentConnection is ConnectionType.WalkOffEdge(int walkDir)) {
             input.x = walkDir;
             if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
                 input.y = -1;

@@ -61,71 +61,17 @@ public class NodeConnection {
 }
 
 /// <summary>
-/// List of node positions the slugcat should allow itself to pass through without taking action, providing easy iteration across ticks.
-/// </summary>
-public class IgnoreList {
-    private int _cursor;
-    private List<IVec2> _ignoreList;
-
-    public IgnoreList() {
-        _cursor = 0;
-        _ignoreList = new();
-    }
-
-    public void Add(IVec2 node) {
-        _ignoreList.Add(node);
-    }
-
-    /// <summary>
-    /// Iterate through the list to check if it contains the requested tile position.
-    /// entries checked during previous calls to this method are not checked again on repeated invocations.
-    /// </summary>
-    public bool FindNode(IVec2 node) {
-        while (_cursor < _ignoreList.Count) {
-            if (node == _ignoreList[_cursor]) {
-                return true;
-            }
-            _cursor++;
-        }
-        return false;
-    }
-
-    public bool FindEitherNode(IVec2 primary, IVec2 secondary) {
-        while (_cursor < _ignoreList.Count) {
-            if (primary == _ignoreList[_cursor] || secondary == _ignoreList[_cursor]) {
-                return true;
-            }
-            _cursor++;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Make a deep copy of the list.
-    /// </summary>
-    public IgnoreList Clone() {
-        var cloneList = new List<IVec2>();
-        cloneList.AddRange(_ignoreList);
-        var clone = new IgnoreList() {
-            _cursor = _cursor,
-            _ignoreList = cloneList,
-        };
-        return clone;
-    }
-}
-
-/// <summary>
 /// Tagged union representing different variants of connections between <see cref="GraphNode">graph nodes.</see>
 /// </summary>
 public record ConnectionType {
     public record Walk(int Direction) : ConnectionType();
     public record Climb(IVec2 Direction) : ConnectionType();
     public record Crawl(IVec2 Direction) : ConnectionType();
-    public record Jump(int Direction, IgnoreList IgnoreList) : ConnectionType();
-    public record WalkOffEdge(int Direction, IgnoreList IgnoreList) : ConnectionType();
+    public record Jump(int Direction) : ConnectionType();
+    public record WalkOffEdge(int Direction) : ConnectionType();
     public record Pounce(int Direction) : ConnectionType();
     public record Shortcut() : ConnectionType();
-    public record Drop(IgnoreList IgnoreList) : ConnectionType();
+    public record Drop() : ConnectionType();
 
     private ConnectionType() { }
 }
@@ -532,11 +478,11 @@ public class DynamicGraph {
             && sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
             Vector2 v0 = descriptor.VerticalPoleJumpVector();
             if (goRight) {
-                TraceJump(pos, pos, v0, new ConnectionType.Jump(1, new()));
+                TraceJump(pos, pos, v0, new ConnectionType.Jump(1));
             }
             if (goLeft) {
                 v0.x = -v0.x;
-                TraceJump(pos, pos, v0, new ConnectionType.Jump(-1, new()));
+                TraceJump(pos, pos, v0, new ConnectionType.Jump(-1));
             }
             TraceDrop(pos.x, pos.y);
         }
@@ -544,11 +490,11 @@ public class DynamicGraph {
             var headPos = new IVec2(pos.x, pos.y + 1);
             var v0 = descriptor.HorizontalPoleJumpVector();
             if (goRight) {
-                TraceJump(pos, headPos, v0, new ConnectionType.Jump(1, new()));
+                TraceJump(pos, headPos, v0, new ConnectionType.Jump(1));
             }
             if (goLeft) {
                 v0.x = -v0.x;
-                TraceJump(pos, headPos, v0, new ConnectionType.Jump(-1, new()));
+                TraceJump(pos, headPos, v0, new ConnectionType.Jump(-1));
             }
             TraceDrop(pos.x, pos.y);
         }
@@ -556,18 +502,18 @@ public class DynamicGraph {
             var headPos = new IVec2(pos.x, pos.y + 1);
             var v0 = descriptor.FloorJumpVector();
             if (goRight) {
-                TraceJump(pos, headPos, v0, new ConnectionType.Jump(1, new()));
+                TraceJump(pos, headPos, v0, new ConnectionType.Jump(1));
                 if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
                     v0.y = 0f;
-                    TraceJump(pos, headPos, v0, new ConnectionType.WalkOffEdge(1, new()));
+                    TraceJump(pos, headPos, v0, new ConnectionType.WalkOffEdge(1));
                 }
             }
             if (goLeft) {
                 v0.x = -v0.x;
-                TraceJump(pos, headPos, v0, new ConnectionType.Jump(-1, new()));
+                TraceJump(pos, headPos, v0, new ConnectionType.Jump(-1));
                 if (sharedGraph.GetNode(pos.x - 1, pos.y - 1)?.Type is NodeType.Wall) {
                     v0.y = 0f;
-                    TraceJump(pos, headPos, v0, new ConnectionType.WalkOffEdge(-1, new()));
+                    TraceJump(pos, headPos, v0, new ConnectionType.WalkOffEdge(-1));
                 }
             }
 
@@ -575,11 +521,11 @@ public class DynamicGraph {
             var v0 = descriptor.HorizontalCorridorFallVector();
             // v0.x might be too large
             if (sharedGraph.GetNode(pos.x + 1, pos.y) is null) {
-                TraceJump(pos, pos, v0, new ConnectionType.WalkOffEdge(1, new()), upright: false);
+                TraceJump(pos, pos, v0, new ConnectionType.WalkOffEdge(1), upright: false);
             }
             if (sharedGraph.GetNode(pos.x - 1, pos.y) is null) {
                 v0.x = -v0.x;
-                TraceJump(pos, pos, v0, new ConnectionType.WalkOffEdge(-1, new()), upright: false);
+                TraceJump(pos, pos, v0, new ConnectionType.WalkOffEdge(-1), upright: false);
             }
             if (sharedGraph.GetNode(pos.x, pos.y - 1) is null
                 && _room.Tiles[pos.x, pos.y - 1].Terrain == Room.Tile.TerrainType.Air
@@ -588,7 +534,7 @@ public class DynamicGraph {
             }
         } else if (graphNode.Type is NodeType.Wall jumpWall) {
             var v0 = descriptor.WallJumpVector(jumpWall.Direction);
-            TraceJump(pos, pos, v0, new ConnectionType.Jump(-jumpWall.Direction, new()));
+            TraceJump(pos, pos, v0, new ConnectionType.Jump(-jumpWall.Direction));
         }
         if (Timers.Active) {
             Timers.TraceFromNode.Stop();
@@ -649,11 +595,6 @@ public class DynamicGraph {
         var pathOffset = RoomHelper.MiddleOfTile(headPos);
 
         var startConnectionList = AdjacencyLists[startPos.x, startPos.y];
-        IgnoreList? ignoreList = type switch {
-            ConnectionType.Jump => new(),
-            ConnectionType.WalkOffEdge => new(),
-            _ => null,
-        };
         while (true) {
             float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
             float result = Parabola(pathOffset.y, v0, _room.gravity, t) / 20;
@@ -665,11 +606,6 @@ public class DynamicGraph {
                 }
                 var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
                 if (currentNode?.Type is NodeType.Floor or NodeType.Slope) {
-                    if (type is ConnectionType.Jump jump) {
-                        type = jump with { IgnoreList = ignoreList!.Clone() };
-                    } else if (type is ConnectionType.WalkOffEdge edgeWalk) {
-                        type = edgeWalk with { IgnoreList = ignoreList!.Clone() };
-                    }
                     startConnectionList.Add(new NodeConnection(type, currentNode, t * 20 / 4.2f + 1));
                 }
                 if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
@@ -699,22 +635,10 @@ public class DynamicGraph {
             } else if (shiftedNode.VerticalBeam) {
                 float poleResult = Parabola(pathOffset.y, v0, _room.gravity, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
                 if (poleResult > y && poleResult < y + 1) {
-                    if (type is ConnectionType.Jump jump) {
-                        type = jump with { IgnoreList = ignoreList!.Clone() };
-                    } else if (type is ConnectionType.WalkOffEdge edgeWalk) {
-                        type = edgeWalk with { IgnoreList = ignoreList!.Clone() };
-                    }
                     startConnectionList.Add(new NodeConnection(type, shiftedNode, t * 4.2f / 20 + 5));
-                    ignoreList?.Add(new IVec2(x, y));
                 }
             } else if (shiftedNode.HorizontalBeam) {
-                if (type is ConnectionType.Jump jump) {
-                    type = jump with { IgnoreList = ignoreList!.Clone() };
-                } else if (type is ConnectionType.WalkOffEdge edgeWalk) {
-                    type = edgeWalk with { IgnoreList = ignoreList!.Clone() };
-                }
                 startConnectionList.Add(new NodeConnection(type, shiftedNode, t * 4.2f / 20 + 10));
-                ignoreList?.Add(new IVec2(x, y));
             }
         }
     }
@@ -730,7 +654,6 @@ public class DynamicGraph {
             return;
         }
         var adjacencyList = AdjacencyLists[x, y]!;
-        var ignoreList = new IgnoreList();
         for (int i = y - 1; i >= 0; i--) {
             if (sharedGraph.Nodes[x, i] is null) {
                 continue;
@@ -741,7 +664,7 @@ public class DynamicGraph {
                 // weight might have inaccurate units
                 adjacencyList.Add(
                     new NodeConnection(
-                        new ConnectionType.Drop(ignoreList),
+                        new ConnectionType.Drop(),
                         currentNode,
                         Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
                     )
@@ -752,7 +675,7 @@ public class DynamicGraph {
             } else if (currentNode.Type is not NodeType.Air or NodeType.Wall) {
                 adjacencyList.Add(
                     new NodeConnection(
-                        new ConnectionType.Drop(ignoreList.Clone()),
+                        new ConnectionType.Drop(),
                         currentNode,
                         Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
                     )
@@ -761,12 +684,11 @@ public class DynamicGraph {
             } else if (currentNode.HorizontalBeam) {
                 adjacencyList.Add(
                     new NodeConnection(
-                        new ConnectionType.Drop(ignoreList.Clone()),
+                        new ConnectionType.Drop(),
                         currentNode,
                         Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity)
                     )
                 );
-                ignoreList.Add(new IVec2(x, i));
             } else {
                 break;
             }
