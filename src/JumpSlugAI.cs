@@ -385,10 +385,8 @@ class JumpSlugAI : ArtificialIntelligence {
                 input.x = climbDir.x;
                 input.y = climbDir.y;
             } else {
-                if (currentNode.VerticalBeam) {
+                if (currentNode.HasBeam) {
                     input.y = 1;
-                } else if (currentNode.HorizontalBeam) {
-                    input.x = Player.flipDirection;
                 } else {
                     Plugin.Logger!.LogWarning("trying to climb on node without pole");
                 }
