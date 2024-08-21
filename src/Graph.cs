@@ -224,8 +224,15 @@ public class SharedGraph {
                             new ConnectionType.Walk(1),
                             new ConnectionType.Walk(-1)
                         );
+                    } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Floor) {
+                        Nodes[x + 1, y - 1]!.Connections.Add(
+                            new NodeConnection(
+                                new ConnectionType.Walk(-1),
+                                currentNode
+                            )
+                        );
                     }
-                    if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor or NodeType.Slope) {
+                    if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor or NodeType.Slope or NodeType.Floor) {
                         currentNode.Connections.Add(
                             new NodeConnection(
                                 new ConnectionType.Walk(1),
