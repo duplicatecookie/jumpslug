@@ -337,7 +337,7 @@ class JumpSlugAI : ArtificialIntelligence {
                         }
                     } else {
                         input.x = direction;
-                        if (crawlDir.x != 0 && _path.PeekNode(2)?.y != currentPathPos.y) {
+                        if (crawlDir.x != 0 && _path.PeekNode(2)?.y == currentPathPos.y) {
                             input.y = -1;
                         }
                     }
