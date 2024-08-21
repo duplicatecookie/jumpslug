@@ -393,6 +393,7 @@ class JumpSlugAI : ArtificialIntelligence {
                 input.x = climbDir.x;
                 input.y = climbDir.y;
             } else {
+                input.x = climbDir.x;
                 if (currentNode.HasBeam) {
                     input.y = 1;
                 } else {
