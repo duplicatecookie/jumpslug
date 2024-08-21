@@ -175,6 +175,7 @@ class JumpSlugAI : ArtificialIntelligence {
         int direction = v0.x switch {
             > 0 => 1,
             < 0 => -1,
+            // TODO: treat this as a drop
             0 or float.NaN => throw new ArgumentOutOfRangeException(),
         };
         int xOffset = (direction + 1) / 2;
@@ -262,8 +263,15 @@ class JumpSlugAI : ArtificialIntelligence {
             ) {
                 FindPath();
             }
-        } else if (Player.bodyMode == Player.BodyModeIndex.Stand
-            || Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
+        } else if (Player.bodyMode == Player.BodyModeIndex.Stand) {
+            if (!_path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1))
+                && (_path.CurrentConnection() is not (ConnectionType.Drop or ConnectionType.Jump or ConnectionType.WalkOffEdge)
+                    || !(fallingTowardsPath = FallingTowardsPath()))
+                && CurrentNode() is not null
+            ) {
+                FindPath();
+            }
+        } else if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
             && Player.animation == Player.AnimationIndex.StandOnBeam
         ) {
             if (!_path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1))
