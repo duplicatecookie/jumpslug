@@ -274,7 +274,8 @@ class JumpSlugAI : ArtificialIntelligence {
         } else if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
             && Player.animation == Player.AnimationIndex.StandOnBeam
         ) {
-            if (!_path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1))
+            if (!_path.FindNode(footPos)
+                && !_path.FindNode(new IVec2(footPos.x, footPos.y - 1))
                 && CurrentNode() is not null
             ) {
                 FindPath();
@@ -375,16 +376,35 @@ class JumpSlugAI : ArtificialIntelligence {
                         _waitOneTick = true;
                     }
 
-                    if (Player.animation == Player.AnimationIndex.StandOnBeam
-                        && climbDir.y < 0
-                        || Player.animation != Player.AnimationIndex.StandOnBeam
+                    if (Player.animation == Player.AnimationIndex.StandOnBeam) {
+                        if (climbDir.y != 0) {
+                            input.y = 1;
+                        }
+                        if (climbDir.x != 0) {
+                            var nextPos = _path.PeekNode(2);
+                            if (nextPos is not null) {
+                                var terrain = Room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
+                                if (terrain == Room.Tile.TerrainType.Solid
+                                    || terrain == Room.Tile.TerrainType.Slope
+                                ) {
+                                    input.y = -1;
+                                }
+                            }
+                        }
+                    } else if (Player.animation != Player.AnimationIndex.GetUpOnBeam
                         && currentNode.VerticalBeam == false
-                        && Room!
-                            .GetTile(currentPathPos.x, currentPathPos.y + 1)
-                            .Terrain == Room.Tile.TerrainType.Air
+                        && Room!.GetTile(currentPathPos.x, currentPathPos.y + 1).Terrain == Room.Tile.TerrainType.Air
                         && Player.input[1].y != 1
                     ) {
-                        input.y = 1;
+                        var nextPos = _path.PeekNode(2);
+                        if (nextPos is not null) {
+                            var terrain = Room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
+                            if (terrain != Room.Tile.TerrainType.Solid
+                                && terrain != Room.Tile.TerrainType.Slope
+                            ) {
+                                input.y = 1;
+                            }
+                        }
                     } else {
                         input.y = climbDir.y;
                     }
