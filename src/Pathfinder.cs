@@ -266,7 +266,7 @@ public readonly struct SlugcatDescriptor {
             (IsRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, Adrenaline) + JumpBoost(IsPup ? 7 : 8));
     }
 
-    public readonly Vector2 HorizontalPoleJumpVector() {
+    public readonly Vector2 VerticalPoleJumpVector() {
         Vector2 v0;
         if (IsRivulet) {
             v0 = new Vector2(9f, 9f) * Mathf.Lerp(1, 1.15f, Adrenaline);
@@ -278,7 +278,7 @@ public readonly struct SlugcatDescriptor {
         return v0;
     }
 
-    public readonly Vector2 VerticalPoleJumpVector() {
+    public readonly Vector2 HorizontalPoleJumpVector() {
         return new Vector2(
             4.2f * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
             (IsRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, Adrenaline) + JumpBoost(IsPup ? 7 : 8)
