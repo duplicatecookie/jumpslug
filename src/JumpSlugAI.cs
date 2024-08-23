@@ -110,6 +110,7 @@ class JumpSlugAI : ArtificialIntelligence {
             ConnectionType.Shortcut => "Shortcut",
             ConnectionType.Walk(int dir) => $"Walk({dir})",
             ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
+            ConnectionType.SlideOnWall(int dir) => $"SlideOnWall({dir})",
             _ => throw new InvalidUnionVariantException(),
         };
 
@@ -353,7 +354,9 @@ class JumpSlugAI : ArtificialIntelligence {
             input.x = dir.x;
             input.y = dir.y;
             bool backwards = (Player.bodyChunks[0].pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0;
-            if (_path.PeekConnection(1) is ConnectionType.Crawl(IVec2 nextDir)) {
+            if (Player.bodyMode != Player.BodyModeIndex.WallClimb
+                && _path.PeekConnection(1) is ConnectionType.Crawl(IVec2 nextDir)
+            ) {
                 if (backwards) {
                     // turn around if going backwards
                     // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
@@ -440,6 +443,8 @@ class JumpSlugAI : ArtificialIntelligence {
             } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
                 input.y = 1;
             }
+        } else if (currentConnection is ConnectionType.SlideOnWall(int wallDir)) {
+            input.x = wallDir;
         }
         Player.input[0] = input;
         if (Timers.Active) {

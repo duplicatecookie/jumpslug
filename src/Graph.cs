@@ -72,6 +72,7 @@ public record ConnectionType {
     public record Pounce(int Direction) : ConnectionType();
     public record Shortcut() : ConnectionType();
     public record Drop() : ConnectionType();
+    public record SlideOnWall(int Direction) : ConnectionType();
 
     private ConnectionType() { }
 }
@@ -324,6 +325,15 @@ public class SharedGraph {
                             new ConnectionType.Crawl(new IVec2(0, -1))
                         );
                     }
+                    if (GetNode(x + 1, y + 1)?.Type is NodeType.Wall wallTR) {
+                        Nodes[x + 1, y + 1]!.Connections.Add(
+                            new NodeConnection(
+                                new ConnectionType.SlideOnWall(wallTR.Direction),
+                                currentNode,
+                                2
+                            )
+                        );
+                    }
                 } else {
                     if (currentNode.HorizontalBeam
                         && rightNode?.HorizontalBeam == true
@@ -379,6 +389,27 @@ public class SharedGraph {
                             aboveNode,
                             new ConnectionType.Crawl(new IVec2(0, 1)),
                             new ConnectionType.Crawl(new IVec2(0, -1))
+                        );
+                    }
+                }
+
+                if (currentNode.Type is NodeType.Wall wall) {
+                    if (aboveNode?.Type is NodeType.Wall) {
+                        aboveNode.Connections.Add(
+                            new NodeConnection(
+                                new ConnectionType.SlideOnWall(wall.Direction),
+                                currentNode,
+                                2
+                            )
+                        );
+                    }
+                    if (GetNode(x + 1, y - 1)?.Type is NodeType.Corridor) {
+                        currentNode.Connections.Add(
+                            new NodeConnection(
+                                new ConnectionType.SlideOnWall(wall.Direction),
+                                Nodes[x + 1, y - 1]!,
+                                2
+                            )
                         );
                     }
                 }
