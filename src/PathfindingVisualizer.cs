@@ -147,15 +147,15 @@ class PathVisualizer {
             };
             var connection = path.Connections[i];
             var sharedGraph = _room.GetCWT().SharedGraph!;
-            if (connection is ConnectionType.Jump) {
+            if (connection is ConnectionType.Jump jump) {
                 // this node can be null only if the path is constructed incorrectly so this should throw
                 GraphNode graphNode = sharedGraph.GetNode(startTile)!;
                 if (graphNode.VerticalBeam && !graphNode.HorizontalBeam) {
-                    var v0 = slugcat.VerticalPoleJumpVector();
+                    var v0 = slugcat.VerticalPoleJumpVector(jump.Direction);
                     VisualizeJump(v0, startTile, endTile);
                 } else if (graphNode.HorizontalBeam || graphNode.Type is NodeType.Floor) {
                     var headPos = new IVec2(startTile.x, startTile.y + 1);
-                    var v0 = slugcat.HorizontalPoleJumpVector();
+                    var v0 = slugcat.HorizontalPoleJumpVector(jump.Direction);
                     VisualizeJump(v0, headPos, endTile);
                     var preLine = LineHelper.MakeLine(start, RoomHelper.MiddleOfTile(headPos), Color.white);
                     var preSprite = new DebugSprite(start, preLine, _room);
@@ -165,12 +165,12 @@ class PathVisualizer {
                     Vector2 v0 = slugcat.WallJumpVector(wall.Direction);
                     VisualizeJump(v0, startTile, endTile);
                 }
-            } else if (connection is ConnectionType.WalkOffEdge) {
+            } else if (connection is ConnectionType.WalkOffEdge edgeWalk) {
                 var startPos = new IVec2(
                     startTile.x,
                     sharedGraph.GetNode(startTile)?.Type is NodeType.Corridor ? startTile.y : startTile.y + 1
                 );
-                var v0 = slugcat.HorizontalCorridorFallVector();
+                var v0 = slugcat.HorizontalCorridorFallVector(edgeWalk.Direction);
                 VisualizeJump(v0, startPos, endTile);
                 var preLine = LineHelper.MakeLine(start, RoomHelper.MiddleOfTile(startPos), Color.white);
                 var preSprite = new DebugSprite(start, preLine, _room);

@@ -260,34 +260,34 @@ public readonly struct SlugcatDescriptor {
         return 0.3f * ((boost - 0.5f) * t - 0.75f * t * t);
     }
 
-    public readonly Vector2 FloorJumpVector() {
+    public readonly Vector2 FloorJumpVector(int direction) {
         return new Vector2(
-            4.2f * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
+            4.2f * direction * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
             (IsRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, Adrenaline) + JumpBoost(IsPup ? 7 : 8));
     }
 
-    public readonly Vector2 VerticalPoleJumpVector() {
+    public readonly Vector2 VerticalPoleJumpVector(int direction) {
         Vector2 v0;
         if (IsRivulet) {
-            v0 = new Vector2(9f, 9f) * Mathf.Lerp(1, 1.15f, Adrenaline);
+            v0 = new Vector2(direction * 9f, 9f) * Mathf.Lerp(1, 1.15f, Adrenaline);
         } else if (IsPup) {
-            v0 = new Vector2(5f, 7f) * Mathf.Lerp(1, 1.15f, Adrenaline);
+            v0 = new Vector2(direction * 5f, 7f) * Mathf.Lerp(1, 1.15f, Adrenaline);
         } else {
-            v0 = new Vector2(6f, 8f) * Mathf.Lerp(1, 1.15f, Adrenaline);
+            v0 = new Vector2(direction * 6f, 8f) * Mathf.Lerp(1, 1.15f, Adrenaline);
         }
         return v0;
     }
 
-    public readonly Vector2 HorizontalPoleJumpVector() {
+    public readonly Vector2 HorizontalPoleJumpVector(int direction) {
         return new Vector2(
-            4.2f * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
+            4.2f * direction * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
             (IsRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, Adrenaline) + JumpBoost(IsPup ? 7 : 8)
         );
     }
 
-    public readonly Vector2 HorizontalCorridorFallVector() {
+    public readonly Vector2 HorizontalCorridorFallVector(int direction) {
         return new Vector2(
-            4.2f * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
+            4.2f * direction * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
             0);
     }
 

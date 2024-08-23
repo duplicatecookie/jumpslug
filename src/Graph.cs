@@ -514,7 +514,7 @@ public class DynamicGraph {
         if (graphNode.VerticalBeam && !graphNode.HorizontalBeam
             && graphNode.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)
             && sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
-            Vector2 v0 = descriptor.VerticalPoleJumpVector();
+            Vector2 v0 = descriptor.VerticalPoleJumpVector(1);
             if (goRight) {
                 TraceJump(pos, pos, v0, new ConnectionType.Jump(1));
             }
@@ -526,7 +526,7 @@ public class DynamicGraph {
         }
         if (graphNode.HorizontalBeam && graphNode.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
             var headPos = new IVec2(pos.x, pos.y + 1);
-            var v0 = descriptor.HorizontalPoleJumpVector();
+            var v0 = descriptor.HorizontalPoleJumpVector(1);
             if (goRight) {
                 TraceJump(pos, headPos, v0, new ConnectionType.Jump(1));
             }
@@ -538,7 +538,7 @@ public class DynamicGraph {
         }
         if (graphNode.Type is NodeType.Floor) {
             var headPos = new IVec2(pos.x, pos.y + 1);
-            var v0 = descriptor.FloorJumpVector();
+            var v0 = descriptor.FloorJumpVector(1);
             if (goRight) {
                 TraceJump(pos, headPos, v0, new ConnectionType.Jump(1));
                 if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
@@ -556,7 +556,7 @@ public class DynamicGraph {
             }
 
         } else if (graphNode.Type is NodeType.Corridor) {
-            var v0 = descriptor.HorizontalCorridorFallVector();
+            var v0 = descriptor.HorizontalCorridorFallVector(1);
             // v0.x might be too large
             if (sharedGraph.GetNode(pos.x + 1, pos.y) is null) {
                 TraceJump(pos, pos, v0, new ConnectionType.WalkOffEdge(1), upright: false);
