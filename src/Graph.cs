@@ -16,6 +16,7 @@ public class GraphNode {
     public bool VerticalBeam;
     public bool HorizontalBeam;
     public bool HasPlatform;
+    public BeamTipStatus TipStatus;
     public List<NodeConnection> Connections;
     public IVec2 GridPos;
 
@@ -26,6 +27,12 @@ public class GraphNode {
     }
 
     public bool HasBeam => VerticalBeam || HorizontalBeam;
+
+    public enum BeamTipStatus {
+        None = 0,
+        OnBeam,
+        UnderBeam
+    }
 }
 
 /// <summary>
@@ -125,13 +132,9 @@ public class SharedGraph {
                 }
                 if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid) {
                     continue;
-                } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Floor) {
-                    if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid) {
-                        Nodes[x, y] = new GraphNode(new NodeType.Corridor(), x, y) {
-                            HasPlatform = true,
-                        };
-                    }
-                } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Air) {
+                } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Air
+                    || room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Floor
+                ) {
                     if (room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid
                         && room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
                         || room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Solid
@@ -153,17 +156,28 @@ public class SharedGraph {
                         Nodes[x, y] = new GraphNode(new NodeType.Floor(), x, y);
                     } else if (room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Floor) {
                         Nodes[x, y] = new GraphNode(new NodeType.Floor(), x, y);
-                    } else if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
-                          && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid) {
+                    } else if ((room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
+                        || room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Floor)
+                        && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid
+                    ) {
                         Nodes[x, y] = new GraphNode(new NodeType.Wall(1), x, y);
                     } else if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
-                          && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air) {
+                        && (room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air
+                        || room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Floor)
+                    ) {
                         Nodes[x, y] = new GraphNode(new NodeType.Wall(-1), x, y);
+                    }
+                    if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Floor) {
+                        if (Nodes[x, y] is null) {
+                            Nodes[x, y] = new GraphNode(new NodeType.Air(), x, y);
+                        }
+                        Nodes[x, y]!.HasPlatform = true;
                     }
                 } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope
                       && room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Air
                       && !(room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
-                          && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid)) {
+                          && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid)
+                ) {
                     Nodes[x, y] = new GraphNode(new NodeType.Slope(), x, y);
                 } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.ShortcutEntrance) {
                     int index = Array.IndexOf(room.shortcutsIndex, new IVec2(x, y));
@@ -177,6 +191,20 @@ public class SharedGraph {
                         Nodes[x, y] = new GraphNode(new NodeType.Air(), x, y);
                     }
                     Nodes[x, y]!.VerticalBeam = true;
+                } else if (room.Tiles[x, y - 1].Terrain != Room.Tile.TerrainType.Solid
+                    && room.Tiles[x, y - 1].verticalBeam
+                ) {
+                    if (Nodes[x, y] is null) {
+                        Nodes[x, y] = new GraphNode(new NodeType.Air(), x, y);
+                    }
+                    Nodes[x, y]!.TipStatus = GraphNode.BeamTipStatus.OnBeam;
+                } else if (room.Tiles[x, y + 1].Terrain != Room.Tile.TerrainType.Solid
+                    && room.Tiles[x, y + 1].verticalBeam
+                ) {
+                    if (Nodes[x, y] is null) {
+                        Nodes[x, y] = new GraphNode(new NodeType.Air(), x, y);
+                    }
+                    Nodes[x, y]!.TipStatus = GraphNode.BeamTipStatus.UnderBeam;
                 }
 
                 if (room.Tiles[x, y].horizontalBeam) {
@@ -347,18 +375,24 @@ public class SharedGraph {
                                 : new ConnectionType.Climb(new IVec2(-1, 0))
                         );
                     }
-                    if (currentNode.VerticalBeam
-                        && aboveNode?.VerticalBeam == true
-                    ) {
-                        ConnectNodes(
-                            currentNode,
-                            aboveNode,
-                            new ConnectionType.Climb(new IVec2(0, 1)),
-                            aboveNode.Type is NodeType.Corridor
-                                ? new ConnectionType.Crawl(new IVec2(0, -1))
-                                : new ConnectionType.Climb(new IVec2(0, -1))
-                        );
-
+                    if (currentNode.VerticalBeam) {
+                        if (aboveNode?.VerticalBeam == true) {
+                            ConnectNodes(
+                                currentNode,
+                                aboveNode,
+                                new ConnectionType.Climb(new IVec2(0, 1)),
+                                aboveNode.Type is NodeType.Corridor
+                                    ? new ConnectionType.Crawl(new IVec2(0, -1))
+                                    : new ConnectionType.Climb(new IVec2(0, -1))
+                            );
+                        } else if (aboveNode?.TipStatus == GraphNode.BeamTipStatus.OnBeam) {
+                            currentNode.Connections.Add(
+                                new NodeConnection(
+                                    new ConnectionType.Climb(new IVec2(0, 1)),
+                                    aboveNode
+                                )
+                            );
+                        }
                     }
                 }
                 if (currentNode.Type is NodeType.ShortcutEntrance entrance) {
@@ -412,6 +446,15 @@ public class SharedGraph {
                             )
                         );
                     }
+                }
+
+                if (currentNode.TipStatus == GraphNode.BeamTipStatus.UnderBeam) {
+                    ConnectNodes(
+                        currentNode,
+                        aboveNode!,
+                        new ConnectionType.Climb(new IVec2(0, 1)),
+                        new ConnectionType.Climb(new IVec2(0, -1))
+                    );
                 }
             }
         }
@@ -522,7 +565,6 @@ public class DynamicGraph {
                 v0.x = -v0.x;
                 TraceJump(pos, pos, v0, new ConnectionType.Jump(-1));
             }
-            TraceDrop(pos.x, pos.y);
         }
         if (graphNode.HorizontalBeam && graphNode.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
             var headPos = new IVec2(pos.x, pos.y + 1);
@@ -536,6 +578,13 @@ public class DynamicGraph {
             }
             TraceDrop(pos.x, pos.y);
         }
+
+        if (graphNode.TipStatus == GraphNode.BeamTipStatus.OnBeam) {
+            TraceDrop(pos.x, pos.y);
+        } else if (graphNode.TipStatus == GraphNode.BeamTipStatus.UnderBeam) {
+            TraceDrop(pos.x, pos.y);
+        }
+
         if (graphNode.Type is NodeType.Floor) {
             var headPos = new IVec2(pos.x, pos.y + 1);
             var v0 = descriptor.FloorJumpVector(1);
@@ -553,6 +602,9 @@ public class DynamicGraph {
                     v0.y = 0f;
                     TraceJump(pos, headPos, v0, new ConnectionType.WalkOffEdge(-1));
                 }
+            }
+            if (sharedGraph.GetNode(pos.x, pos.y - 1)?.HasPlatform == true) {
+                TraceDrop(pos.x, pos.y);
             }
 
         } else if (graphNode.Type is NodeType.Corridor) {
@@ -686,18 +738,41 @@ public class DynamicGraph {
     /// </summary>
     private void TraceDrop(int x, int y) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
-        if (sharedGraph.GetNode(x, y)?.Type is NodeType.Floor or NodeType.Slope
-            || y >= sharedGraph.Height
-        ) {
+        var startNode = sharedGraph.GetNode(x, y);
+        if (startNode is null) {
             return;
         }
         var adjacencyList = AdjacencyLists[x, y]!;
+        bool log = startNode.Type is NodeType.Floor && sharedGraph.Nodes[x, y - 1]?.HasPlatform == true;
         for (int i = y - 1; i >= 0; i--) {
             if (sharedGraph.Nodes[x, i] is null) {
                 continue;
             }
             var currentNode = sharedGraph.Nodes[x, i]!;
-            if (sharedGraph.Nodes[x, i]!.Type is NodeType.Floor) {
+            if (currentNode.Type is NodeType.Air or NodeType.Wall) {
+                if (sharedGraph.Nodes[x, i + 1]?.VerticalBeam == true) {
+                    if (currentNode.HorizontalBeam) {
+                        adjacencyList.Add(
+                            new NodeConnection(
+                                new ConnectionType.Drop(),
+                                currentNode,
+                                Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
+                            )
+                        );
+                    }
+                } else if (currentNode.HasBeam) {
+                    adjacencyList.Add(
+                        new NodeConnection(
+                            new ConnectionType.Drop(),
+                            currentNode,
+                            Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
+                        )
+                    );
+                }
+                if (log) {
+                    Plugin.Logger!.LogDebug($"air or wall, {y} -> {i}");
+                }
+            } else {
                 // t = sqrt(2 * d / g)
                 // weight might have inaccurate units
                 adjacencyList.Add(
@@ -707,28 +782,24 @@ public class DynamicGraph {
                         Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
                     )
                 );
-                if (sharedGraph.GetNode(x, i - 1)?.HasPlatform is false or null) {
+                if (log) {
+                    string type = currentNode.Type switch {
+                        NodeType.Air => "air",
+                        NodeType.Corridor => "corridor",
+                        NodeType.Floor => "floor",
+                        NodeType.ShortcutEntrance => "shortcut",
+                        NodeType.Slope => "slope",
+                        NodeType.Wall => "wall",
+                        _ => throw new InvalidUnionVariantException(),
+                    };
+                    Plugin.Logger!.LogDebug($"{type}, {y} -> {i}");
+                }
+                if (currentNode.Type is not NodeType.Wall) {
+                    if (log) {
+                        Plugin.Logger!.LogDebug($"break");
+                    }
                     break;
                 }
-            } else if (currentNode.Type is not NodeType.Air or NodeType.Wall) {
-                adjacencyList.Add(
-                    new NodeConnection(
-                        new ConnectionType.Drop(),
-                        currentNode,
-                        Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
-                    )
-                );
-                break;
-            } else if (currentNode.HorizontalBeam) {
-                adjacencyList.Add(
-                    new NodeConnection(
-                        new ConnectionType.Drop(),
-                        currentNode,
-                        Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity)
-                    )
-                );
-            } else {
-                break;
             }
         }
     }

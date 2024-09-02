@@ -233,6 +233,7 @@ class JumpSlugAI : ArtificialIntelligence {
         IVec2 footPos = RoomHelper.TilePosition(Player.bodyChunks[1].pos);
         if (Player.bodyMode == Player.BodyModeIndex.Stand
             || Player.animation == Player.AnimationIndex.StandOnBeam
+            || Player.animation == Player.AnimationIndex.BeamTip
         ) {
             return sharedGraph.GetNode(footPos) is GraphNode node
                 ? node
@@ -273,7 +274,9 @@ class JumpSlugAI : ArtificialIntelligence {
                 FindPath();
             }
         } else if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
-            && Player.animation == Player.AnimationIndex.StandOnBeam
+            && (Player.animation == Player.AnimationIndex.StandOnBeam
+                || Player.animation == Player.AnimationIndex.BeamTip
+            )
         ) {
             if (!_path.FindNode(footPos)
                 && !_path.FindNode(new IVec2(footPos.x, footPos.y - 1))
@@ -425,11 +428,13 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         } else if (currentConnection is ConnectionType.Drop) {
             if (Mathf.Abs(Player.mainBodyChunk.vel.x) < 0.5f) {
-                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
+                    || Player.bodyMode == Player.BodyModeIndex.CorridorClimb
+                ) {
                     input.y = -1;
-                    input.jmp = true;
-                } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb) {
-                    input.y = -1;
+                    if (Player.animation == Player.AnimationIndex.HangUnderVerticalBeam) {
+                        _waitOneTick = true;
+                    }
                 }
             }
         } else if (currentConnection is ConnectionType.Jump(int jumpDir)) {
