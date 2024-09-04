@@ -748,7 +748,7 @@ public class DynamicGraph {
                 continue;
             }
             var currentNode = sharedGraph.Nodes[x, i]!;
-            if (currentNode.Type is NodeType.Air or NodeType.Wall) {
+            if (currentNode.Type is NodeType.Air) {
                 if (sharedGraph.Nodes[x, i + 1]?.VerticalBeam == true) {
                     if (currentNode.HorizontalBeam) {
                         adjacencyList.Add(
@@ -778,9 +778,7 @@ public class DynamicGraph {
                         Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
                     )
                 );
-                if (currentNode.Type is not NodeType.Wall) {
-                    break;
-                }
+                break;
             }
         }
     }
