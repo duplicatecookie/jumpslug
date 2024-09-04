@@ -743,7 +743,6 @@ public class DynamicGraph {
             return;
         }
         var adjacencyList = AdjacencyLists[x, y]!;
-        bool log = startNode.Type is NodeType.Floor && sharedGraph.Nodes[x, y - 1]?.HasPlatform == true;
         for (int i = y - 1; i >= 0; i--) {
             if (sharedGraph.Nodes[x, i] is null) {
                 continue;
@@ -769,9 +768,6 @@ public class DynamicGraph {
                         )
                     );
                 }
-                if (log) {
-                    Plugin.Logger!.LogDebug($"air or wall, {y} -> {i}");
-                }
             } else {
                 // t = sqrt(2 * d / g)
                 // weight might have inaccurate units
@@ -782,22 +778,7 @@ public class DynamicGraph {
                         Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
                     )
                 );
-                if (log) {
-                    string type = currentNode.Type switch {
-                        NodeType.Air => "air",
-                        NodeType.Corridor => "corridor",
-                        NodeType.Floor => "floor",
-                        NodeType.ShortcutEntrance => "shortcut",
-                        NodeType.Slope => "slope",
-                        NodeType.Wall => "wall",
-                        _ => throw new InvalidUnionVariantException(),
-                    };
-                    Plugin.Logger!.LogDebug($"{type}, {y} -> {i}");
-                }
                 if (currentNode.Type is not NodeType.Wall) {
-                    if (log) {
-                        Plugin.Logger!.LogDebug($"break");
-                    }
                     break;
                 }
             }
