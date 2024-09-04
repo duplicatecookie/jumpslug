@@ -33,7 +33,7 @@ class JumpSlugAI : ArtificialIntelligence {
 
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         _pathfinder = new Pathfinder(Room!, new SlugcatDescriptor(Player));
-        _visualizer = new PathVisualizer(Room!);
+        _visualizer = new PathVisualizer(Room!, _pathfinder);
         _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Room);
         _inputDirSprite.sprite.color = Color.red;
         _inputDirSprite.sprite.isVisible = false;

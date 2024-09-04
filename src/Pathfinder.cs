@@ -462,7 +462,7 @@ public readonly struct PathNodePool {
 public class Pathfinder {
     private Room _room;
     private SlugcatDescriptor _lastDescriptor;
-    private readonly DynamicGraph _dynamicGraph;
+    public readonly DynamicGraph DynamicGraph;
 
     /// <summary>
     /// Create new pathfinder in the specified room.
@@ -476,7 +476,7 @@ public class Pathfinder {
     public Pathfinder(Room room, SlugcatDescriptor descriptor) {
         _room = room;
         _lastDescriptor = descriptor;
-        _dynamicGraph = new DynamicGraph(room);
+        DynamicGraph = new DynamicGraph(room);
     }
 
     /// <summary>
@@ -485,7 +485,7 @@ public class Pathfinder {
     public void NewRoom(Room room) {
         if (room != _room) {
             _room = room;
-            _dynamicGraph.NewRoom(room);
+            DynamicGraph.NewRoom(room);
         }
     }
 
@@ -546,13 +546,13 @@ public class Pathfinder {
             closedNodes[currentPos] = true;
 
             var graphNode = sharedGraph.Nodes[currentPos.x, currentPos.y]!;
-            var adjacencyList = _dynamicGraph.AdjacencyLists[currentPos.x, currentPos.y]!;
+            var adjacencyList = DynamicGraph.AdjacencyLists[currentPos.x, currentPos.y]!;
 
             if (adjacencyList.Count == 0) {
-                _dynamicGraph.TraceFromNode(currentPos, descriptor);
+                DynamicGraph.TraceFromNode(currentPos, descriptor);
             } else if (_lastDescriptor != descriptor) {
                 adjacencyList.Clear();
-                _dynamicGraph.TraceFromNode(currentPos, descriptor);
+                DynamicGraph.TraceFromNode(currentPos, descriptor);
             }
 
             void CheckConnection(NodeConnection connection) {
