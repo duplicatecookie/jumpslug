@@ -346,12 +346,15 @@ class JumpSlugAI : ArtificialIntelligence {
                             input.y = -1;
                         }
                     }
-                } else if (_path.PeekConnection(1) is ConnectionType.Drop) {
-                    Plugin.Logger!.LogDebug("drop");
-                    input.y = -1;
                 } else {
                     input.x = direction;
-                    if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
+                    if (_path.PeekConnection(1) is ConnectionType.Drop
+                        || _path.PeekConnection(2) is ConnectionType.Drop
+                    ) {
+                        if (Player.bodyMode == Player.BodyModeIndex.Stand) {
+                            input.y = -1;
+                        }
+                    } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
                         input.y = 1;
                     }
                 }
