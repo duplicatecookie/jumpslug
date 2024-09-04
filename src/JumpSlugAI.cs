@@ -346,6 +346,9 @@ class JumpSlugAI : ArtificialIntelligence {
                             input.y = -1;
                         }
                     }
+                } else if (_path.PeekConnection(1) is ConnectionType.Drop) {
+                    Plugin.Logger!.LogDebug("drop");
+                    input.y = -1;
                 } else {
                     input.x = direction;
                     if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
@@ -428,8 +431,8 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         } else if (currentConnection is ConnectionType.Drop) {
             if (Mathf.Abs(Player.mainBodyChunk.vel.x) < 0.5f) {
-                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
-                    || Player.bodyMode == Player.BodyModeIndex.CorridorClimb
+                if (Player.bodyMode != Player.BodyModeIndex.Default
+                    || currentNode.Type is NodeType.Floor
                 ) {
                     input.y = -1;
                     if (Player.animation == Player.AnimationIndex.HangUnderVerticalBeam) {
