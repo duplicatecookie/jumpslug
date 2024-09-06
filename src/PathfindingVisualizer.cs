@@ -106,14 +106,17 @@ class SharedGraphVisualizer {
 class PathVisualizer {
     private Room _room;
     private readonly Pathfinder _pathfinder;
+    private int _spriteCursor;
     private readonly List<DebugSprite> _pathSprites;
+    private int _labelCursor;
     private readonly List<FLabel> _weightLabels;
     private FContainer _foreground;
-    public bool VisualizingPath { get; private set; }
 
     public PathVisualizer(Room room, Pathfinder pathfinder) {
         _room = room;
+        _spriteCursor = 0;
         _pathSprites = new();
+        _labelCursor = 0;
         _weightLabels = new();
         _foreground = room.game.cameras[0].ReturnFContainer("Foreground");
         _pathfinder = pathfinder;
@@ -122,21 +125,40 @@ class PathVisualizer {
     public void NewRoom(Room room) {
         if (room != _room) {
             _room = room;
-            ResetSprites();
-            _foreground = room.game.cameras[0].ReturnFContainer("Foreground");
+            _foreground = _room.game.cameras[0].ReturnFContainer("Foreground");
+            _spriteCursor = 0;
+            foreach (var sprite in _pathSprites) {
+                sprite.sprite.isVisible = false;
+                _room.AddObject(sprite);
+            }
+            _labelCursor = 0;
+            foreach (var label in _weightLabels) {
+                label.isVisible = false;
+                _foreground.AddChild(label);
+            }
         }
     }
 
-    public void TogglePath(Path? path, SlugcatDescriptor slugcat) {
-        if (VisualizingPath
-            || path is null
-            || path.NodeCount <= 2
-        ) {
-            ResetSprites();
+    public void ClearPath() {
+        _spriteCursor = 0;
+        foreach (var sprite in _pathSprites) {
+            sprite.sprite.isVisible = false;
+        }
+
+        _labelCursor = 0;
+        foreach (var label in _weightLabels) {
+            label.isVisible = false;
+        }
+    }
+
+    public void DisplayPath(Path path, SlugcatDescriptor slugcat) {
+        ClearPath();
+
+        if (path.NodeCount <= 2) {
             return;
         }
-        VisualizingPath = true;
-        for (int i = 0; i < path!.ConnectionCount; i++) {
+
+        for (int i = 0; i < path.ConnectionCount; i++) {
             IVec2 startTile = path.Nodes[i + 1];
             IVec2 endTile = path.Nodes[i];
             var start = RoomHelper.MiddleOfTile(startTile);
@@ -182,18 +204,28 @@ class PathVisualizer {
                 );
                 var v0 = slugcat.HorizontalCorridorFallVector(edgeWalk.Direction);
                 VisualizeJump(v0, startPos, endTile);
-                var preLine = LineHelper.MakeLine(start, RoomHelper.MiddleOfTile(startPos), Color.white);
-                var preSprite = new DebugSprite(start, preLine, _room);
-                _pathSprites.Add(preSprite);
-                _room.AddObject(preSprite);
+                AddLine(start, RoomHelper.MiddleOfTile(startPos), Color.white);
                 AddLabel(connectionType, startTile, endTile, v0);
             } else if (connectionType is ConnectionType.Drop) {
                 AddLabel(connectionType, startTile, endTile, Vector2.zero);
             }
-            var mesh = LineHelper.MakeLine(start, end, color);
-            var sprite = new DebugSprite(start, mesh, _room);
-            _room.AddObject(sprite);
-            _pathSprites.Add(sprite);
+            AddLine(start, end, color);
+        }
+    }
+
+    private void AddLine(Vector2 start, Vector2 end, Color color) {
+        if (_pathSprites.Count == 0 || _pathSprites.Count <= _spriteCursor) {
+            var debugSprite = new DebugSprite(start, LineHelper.MakeLine(start, end, color), _room);
+            _pathSprites.Add(debugSprite);
+            _room.AddObject(debugSprite);
+            _spriteCursor = _pathSprites.Count;
+        } else {
+            _spriteCursor += 1;
+            var debugSprite = _pathSprites[_spriteCursor];
+            debugSprite.pos = start;
+            LineHelper.ReshapeLine((TriangleMesh)debugSprite.sprite, start, end);
+            debugSprite.sprite.color = color;
+            debugSprite.sprite.isVisible = true;
         }
     }
 
@@ -210,8 +242,8 @@ class PathVisualizer {
         }
 
         var start = RoomHelper.MiddleOfTile(startTile);
-        
         Vector2 labelPos;
+
         if (connectionType is ConnectionType.Jump jump) {
             float halfDist = 10 * (endTile.x - startTile.x);
             labelPos = new Vector2(
@@ -229,24 +261,21 @@ class PathVisualizer {
             labelPos = start + 0.5f * (end - start) - _room.game.cameras[0].pos;
         }
 
-        var label = new FLabel(RWCustom.Custom.GetFont(), nodeConnection!.Weight.ToString()) {
-            alignment = FLabelAlignment.Center,
-            color = Color.white,
-        };
-        label.SetPosition(labelPos);
-        _foreground.AddChild(label);
-    }
-
-    private void ResetSprites() {
-        foreach (var sprite in _pathSprites) {
-            sprite.Destroy();
+        if (_weightLabels.Count == 0 || _weightLabels.Count <= _labelCursor) {
+            var label = new FLabel(RWCustom.Custom.GetFont(), nodeConnection!.Weight.ToString()) {
+                alignment = FLabelAlignment.Center,
+                color = Color.white,
+            };
+            label.SetPosition(labelPos);
+            _foreground.AddChild(label);
+            _weightLabels.Add(label);
+            _labelCursor = _weightLabels.Count;
+        } else {
+            var label = _weightLabels[_labelCursor];
+            label.SetPosition(labelPos);
+            label.isVisible = true;
+            _labelCursor += 1;
         }
-        _pathSprites.Clear();
-        foreach (var label in _weightLabels) {
-            label.RemoveFromContainer();
-        }
-        _weightLabels.Clear();
-        VisualizingPath = false;
     }
 
     private void VisualizeJump(Vector2 v0, IVec2 startTile, IVec2 endTile) {
@@ -255,15 +284,10 @@ class PathVisualizer {
         float maxT = 20 * (endTile.x - startTile.x) / v0.x;
         for (float t = 0; t < maxT; t += 2f) {
             var nextPos = new Vector2(pathOffset.x + v0.x * t, DynamicGraph.Parabola(pathOffset.y, v0, _room.gravity, t));
-            var sprite = new DebugSprite(lastPos, LineHelper.MakeLine(lastPos, nextPos, Color.white), _room);
-            _pathSprites.Add(sprite);
-            _room.AddObject(sprite);
+            AddLine(lastPos, nextPos, Color.white);
             lastPos = nextPos;
         }
-        var postLine = LineHelper.MakeLine(lastPos, _room.MiddleOfTile(endTile), Color.white);
-        var postSprite = new DebugSprite(lastPos, postLine, _room);
-        _pathSprites.Add(postSprite);
-        _room.AddObject(postSprite);
+        AddLine(lastPos, _room.MiddleOfTile(endTile), Color.white);
     }
 }
 

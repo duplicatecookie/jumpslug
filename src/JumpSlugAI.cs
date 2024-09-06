@@ -150,15 +150,11 @@ class JumpSlugAI : ArtificialIntelligence {
                 _destination.Value,
                 new SlugcatDescriptor(Player)
             );
-
-        if (_visualizer.VisualizingPath) {
-            _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
-            if (_path is not null) {
-                _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
-            }
-        } else if (_path is not null) {
-            _visualizer.TogglePath(_path, new SlugcatDescriptor(Player));
-        }
+        if (_path is null) {
+            _visualizer.ClearPath();
+        } else {
+            _visualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
+        }        
     }
 
     private bool FallingTowardsPath() {
