@@ -65,10 +65,8 @@ public class Path {
     /// Null if the specified offset falls outside the path.
     /// </returns>
     public IVec2? PeekNode(int offset) {
-        if (Cursor - offset < 0) {
-            return null;
-        }
-        return Nodes[Cursor - offset];
+        int index = Cursor - offset;
+        return index < 0 || index >= Nodes.Count ? null : Nodes[index];
     }
     /// <summary>
     /// Access outgoing connection from the current cursor position.
@@ -92,10 +90,8 @@ public class Path {
     /// Null if the specified offset falls outside the path.
     /// </returns>
     public ConnectionType? PeekConnection(int offset) {
-        if (Cursor - offset < 1) {
-            return null;
-        }
-        return Connections[Cursor - offset - 1];
+        int index = Cursor - offset;
+        return index < 1 || index >= Connections.Count ? null : Connections[index - 1];
     }
     /// <summary>
     /// Move the cursor forward by one step.
