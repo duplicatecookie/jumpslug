@@ -696,7 +696,7 @@ public class DynamicGraph {
                 }
                 var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
                 if (currentNode?.Type is NodeType.Floor or NodeType.Slope) {
-                    startConnectionList.Add(new NodeConnection(type, currentNode, t * 20 / 4.2f + 1));
+                    startConnectionList.Add(new NodeConnection(type, currentNode, new IVec2(x, y).FloatDist(startPos) + 1));
                 }
                 if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
                     break;
@@ -720,15 +720,15 @@ public class DynamicGraph {
                 break;
             }
             if (shiftedNode.Type is NodeType.Wall wall && wall.Direction == direction) {
-                startConnectionList.Add(new NodeConnection(type, shiftedNode, t * 4.2f / 20));
+                startConnectionList.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startPos) + 1));
                 break;
             } else if (shiftedNode.VerticalBeam) {
                 float poleResult = Parabola(pathOffset.y, v0, _room.gravity, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
                 if (poleResult > y && poleResult < y + 1) {
-                    startConnectionList.Add(new NodeConnection(type, shiftedNode, t * 4.2f / 20 + 5));
+                    startConnectionList.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startPos) + 1));
                 }
             } else if (shiftedNode.HorizontalBeam) {
-                startConnectionList.Add(new NodeConnection(type, shiftedNode, t * 4.2f / 20 + 10));
+                startConnectionList.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startPos) + 1));
             }
         }
     }
