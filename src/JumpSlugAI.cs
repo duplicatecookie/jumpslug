@@ -10,6 +10,7 @@ using UnityEngine;
 
 using JumpSlug.Pathfinding;
 using RWCustom;
+using System.Diagnostics.Tracing;
 
 namespace JumpSlug;
 
@@ -154,7 +155,7 @@ class JumpSlugAI : ArtificialIntelligence {
             _visualizer.ClearPath();
         } else {
             _visualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
-        }        
+        }
     }
 
     private bool FallingTowardsPath() {
@@ -318,6 +319,11 @@ class JumpSlugAI : ArtificialIntelligence {
         var currentConnection = _path.CurrentConnection();
 
         if (currentConnection is null) {
+            if (currentNode.HasBeam
+                && Player.bodyMode != Player.BodyModeIndex.ClimbingOnBeam
+            ) {
+                input.y = 1;
+            }
             _path = null;
         } else if (currentConnection is ConnectionType.Walk(int direction)) {
             if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
@@ -440,8 +446,23 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
             }
         } else if (currentConnection is ConnectionType.Jump(int jumpDir)) {
-            input.x = jumpDir;
-            input.jmp = true;
+            if (currentNode.HasBeam
+                && Player.bodyMode != Player.BodyModeIndex.ClimbingOnBeam
+                && _path.PeekConnection(-1)
+                is null
+                or ConnectionType.Jump
+                or ConnectionType.WalkOffEdge
+                or ConnectionType.Drop
+            ) {
+                input.y = 1;
+            } else {
+                if (Player.bodyMode == Player.BodyModeIndex.WallClimb
+                    || Player.flipDirection == jumpDir
+                ) {
+                    input.jmp = true;
+                }
+                input.x = jumpDir;
+            }
         } else if (currentConnection is ConnectionType.WalkOffEdge(int walkDir)) {
             input.x = walkDir;
             if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {

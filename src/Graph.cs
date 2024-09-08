@@ -566,7 +566,7 @@ public class DynamicGraph {
                 TraceJump(pos, pos, v0, new ConnectionType.Jump(-1));
             }
         }
-        if (graphNode.HorizontalBeam && graphNode.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
+        if (graphNode.HorizontalBeam && !graphNode.VerticalBeam && graphNode.Type is not (NodeType.Corridor or NodeType.Floor or NodeType.Slope)) {
             var headPos = new IVec2(pos.x, pos.y + 1);
             var v0 = descriptor.HorizontalPoleJumpVector(1);
             if (goRight) {
