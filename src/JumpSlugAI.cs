@@ -170,49 +170,72 @@ class JumpSlugAI : ArtificialIntelligence {
             return false;
         }
         Vector2 v0 = Player.mainBodyChunk.vel;
-        int direction = v0.x switch {
-            > 0 => 1,
-            < 0 => -1,
-            // TODO: treat this as a drop
-            0 or float.NaN => throw new ArgumentOutOfRangeException(),
-        };
-        int xOffset = (direction + 1) / 2;
-        var pathOffset = RoomHelper.MiddleOfTile(headPos);
         int spriteIndex = 0;
-        while (true) {
-            float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
-            float result = DynamicGraph.Parabola(pathOffset.y, v0, Room!.gravity, t) / 20;
-            if (result > y + 1) {
-                y++;
-            } else if (result < y) {
+        if (v0.x == 0) {
+            while (y > 0) {
                 y--;
-            } else {
-                x += direction;
-            }
+                var currentNode = sharedGraph.Nodes[x, y];
+                if (currentNode is null) {
+                    continue;
+                }
 
-            if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height
-                || Room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid
-                || Room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope) {
-                break;
-            }
+                if (spriteIndex < MAX_SPRITES) {
+                    var sprite = _predictedIntersectionSprites[spriteIndex];
+                    sprite.pos = RoomHelper.MiddleOfTile(x, y);
+                    sprite.sprite.isVisible = true;
+                    spriteIndex++;
+                }
 
-            var shiftedNode = sharedGraph.Nodes[x, y];
-            if (shiftedNode is null) {
-                continue;
+                // TODO: extenally messing with the cursor like this is bad, fix when reworking how nodes are found inside the path 
+                int initialCursor = _path.Cursor;
+                if (_path.FindNodeAhead(new IVec2(x, y))) {
+                    _path.Cursor = initialCursor;
+                    return true;
+                }
+                if (currentNode.Type is NodeType.Floor or NodeType.Slope) {
+                    break;
+                }
             }
+        } else {
+            int direction = v0.x > 0 ? 1 : -1;
+            int xOffset = (direction + 1) / 2;
+            var pathOffset = RoomHelper.MiddleOfTile(headPos);
 
-            if (spriteIndex < MAX_SPRITES) {
-                var sprite = _predictedIntersectionSprites[spriteIndex];
-                sprite.pos = RoomHelper.MiddleOfTile(x, y);
-                sprite.sprite.isVisible = true;
-                spriteIndex++;
-            }
+            while (true) {
+                float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
+                float result = DynamicGraph.Parabola(pathOffset.y, v0, Room!.gravity, t) / 20;
+                if (result > y + 1) {
+                    y++;
+                } else if (result < y) {
+                    y--;
+                } else {
+                    x += direction;
+                }
 
-            // TODO: extenally messing with the cursor like this is bad, fix when reworking how nodes are found inside the path 
-            int initialCursor = _path.Cursor;
-            if (_path.FindNodeAhead(new IVec2(x, y))) {
-                _path.Cursor = initialCursor;
-                return true;
+                if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height
+                    || Room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid
+                    || Room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope) {
+                    break;
+                }
+
+                var shiftedNode = sharedGraph.Nodes[x, y];
+                if (shiftedNode is null) {
+                    continue;
+                }
+
+                if (spriteIndex < MAX_SPRITES) {
+                    var sprite = _predictedIntersectionSprites[spriteIndex];
+                    sprite.pos = RoomHelper.MiddleOfTile(x, y);
+                    sprite.sprite.isVisible = true;
+                    spriteIndex++;
+                }
+
+                // TODO: extenally messing with the cursor like this is bad, fix when reworking how nodes are found inside the path 
+                int initialCursor = _path.Cursor;
+                if (_path.FindNodeAhead(new IVec2(x, y))) {
+                    _path.Cursor = initialCursor;
+                    return true;
+                }
             }
         }
         return false;
