@@ -214,22 +214,26 @@ class PathVisualizer {
     }
 
     private void AddLine(Vector2 start, Vector2 end, Color color) {
+        Plugin.Logger!.LogDebug($"sprite: {_spriteCursor}, count: {_pathSprites.Count}");
         if (_pathSprites.Count == 0 || _pathSprites.Count <= _spriteCursor) {
+            Plugin.Logger!.LogDebug("new");
             var debugSprite = new DebugSprite(start, LineHelper.MakeLine(start, end, color), _room);
             _pathSprites.Add(debugSprite);
             _room.AddObject(debugSprite);
             _spriteCursor = _pathSprites.Count;
         } else {
-            _spriteCursor += 1;
+            Plugin.Logger!.LogDebug("reuse");
             var debugSprite = _pathSprites[_spriteCursor];
             debugSprite.pos = start;
             LineHelper.ReshapeLine((TriangleMesh)debugSprite.sprite, start, end);
             debugSprite.sprite.color = color;
             debugSprite.sprite.isVisible = true;
+            _spriteCursor += 1;
         }
     }
 
     private void AddLabel(ConnectionType connectionType, IVec2 startTile, IVec2 endTile, Vector2 v0) {
+        Plugin.Logger!.LogDebug($"label: {_spriteCursor}, count: {_pathSprites.Count}");
         NodeConnection? nodeConnection = null;
         foreach (var connection in _pathfinder.DynamicGraph.AdjacencyLists[startTile.x, startTile.y]) {
             if (connection.Type == connectionType && connection.Next.GridPos == endTile) {
