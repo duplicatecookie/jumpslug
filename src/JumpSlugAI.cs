@@ -131,6 +131,11 @@ class JumpSlugAI : ArtificialIntelligence {
         } else {
             _inputDirSprite.pos = Player.mainBodyChunk.pos;
             _inputDirSprite.sprite.isVisible = true;
+            if (Player.input[0].jmp == true) {
+                _inputDirSprite.sprite.color = Color.green;
+            } else {
+                _inputDirSprite.sprite.color = Color.red;
+            }
             LineHelper.ReshapeLine(
                 (TriangleMesh)_inputDirSprite.sprite,
                 Player.mainBodyChunk.pos,
@@ -479,6 +484,34 @@ class JumpSlugAI : ArtificialIntelligence {
             ) {
                 input.y = 1;
             } else {
+                if (Player.bodyMode == Player.BodyModeIndex.Stand) {
+                    if (Player.flipDirection == jumpDir) {
+                        input.jmp = true;
+                    }
+                    input.x = jumpDir;
+                } else if (Player.bodyMode == Player.BodyModeIndex.WallClimb) {
+                    input.jmp = true;
+                    input.x = jumpDir;
+                } else if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                    if (Player.animation == Player.AnimationIndex.ClimbOnBeam) {
+                        if (Player.flipDirection == jumpDir) {
+                            input.jmp = true;
+                        }
+                        input.x = jumpDir;
+                    } else if (Player.animation == Player.AnimationIndex.HangFromBeam) {
+                        input.y = 1;
+                    } else if (Player.animation == Player.AnimationIndex.StandOnBeam) {
+                        if (headPos.x == footPos.x && headPos.y == footPos.y + 1) {
+                            input.jmp = true;
+                            input.x = jumpDir;
+                        } else {
+                            input.y = 1;
+                        }
+                    }
+                } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
+                    input.jmp = true;
+                    input.x = jumpDir;
+                }
                 if (Player.bodyMode == Player.BodyModeIndex.WallClimb
                     || Player.flipDirection == jumpDir
                 ) {
