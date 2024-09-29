@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using System.Reflection;
+using System;
 
 using UnityEngine;
 
@@ -107,7 +107,9 @@ class PathVisualizer {
     private Room _room;
     private readonly Pathfinder _pathfinder;
     private int _spriteCursor;
-    private readonly List<DebugSprite> _pathSprites;
+    private readonly List<DebugSprite> _lineSprites;
+    private int _traceCursor;
+    private readonly List<DebugSprite> _traceSprites;
     private int _labelCursor;
     private readonly List<FLabel> _weightLabels;
     private FContainer _foreground;
@@ -115,7 +117,9 @@ class PathVisualizer {
     public PathVisualizer(Room room, Pathfinder pathfinder) {
         _room = room;
         _spriteCursor = 0;
-        _pathSprites = new();
+        _lineSprites = new();
+        _traceCursor = 0;
+        _traceSprites = new();
         _labelCursor = 0;
         _weightLabels = new();
         _foreground = room.game.cameras[0].ReturnFContainer("Foreground");
@@ -127,7 +131,12 @@ class PathVisualizer {
             _room = room;
             _foreground = _room.game.cameras[0].ReturnFContainer("Foreground");
             _spriteCursor = 0;
-            foreach (var sprite in _pathSprites) {
+            foreach (var sprite in _lineSprites) {
+                sprite.sprite.isVisible = false;
+                _room.AddObject(sprite);
+            }
+            _traceCursor = 0;
+            foreach (var sprite in _traceSprites) {
                 sprite.sprite.isVisible = false;
                 _room.AddObject(sprite);
             }
@@ -141,7 +150,12 @@ class PathVisualizer {
 
     public void ClearPath() {
         _spriteCursor = 0;
-        foreach (var sprite in _pathSprites) {
+        foreach (var sprite in _lineSprites) {
+            sprite.sprite.isVisible = false;
+        }
+
+        _traceCursor = 0;
+        foreach (var sprite in _traceSprites) {
             sprite.sprite.isVisible = false;
         }
 
@@ -184,17 +198,17 @@ class PathVisualizer {
                 if (graphNode.VerticalBeam && !graphNode.HorizontalBeam) {
                     v0 = slugcat.VerticalPoleJumpVector(jump.Direction);
                     VisualizeJump(v0, startTile, endTile);
+                    VisualizeJumpTracing(v0, startTile);
                 } else if (graphNode.HorizontalBeam || graphNode.Type is NodeType.Floor) {
                     var headPos = new IVec2(startTile.x, startTile.y + 1);
                     v0 = slugcat.HorizontalPoleJumpVector(jump.Direction);
                     VisualizeJump(v0, headPos, endTile);
-                    var preLine = LineHelper.MakeLine(start, RoomHelper.MiddleOfTile(headPos), Color.white);
-                    var preSprite = new DebugSprite(start, preLine, _room);
-                    _pathSprites.Add(preSprite);
-                    _room.AddObject(preSprite);
+                    VisualizeJumpTracing(v0, headPos);
+                    AddLine(start, RoomHelper.MiddleOfTile(headPos), Color.white);
                 } else if (graphNode.Type is NodeType.Wall wall) {
                     v0 = slugcat.WallJumpVector(wall.Direction);
                     VisualizeJump(v0, startTile, endTile);
+                    VisualizeJumpTracing(v0, startTile);
                 }
                 AddLabel(connectionType, startTile, endTile, v0);
             } else if (connectionType is ConnectionType.WalkOffEdge edgeWalk) {
@@ -204,6 +218,7 @@ class PathVisualizer {
                 );
                 var v0 = slugcat.HorizontalCorridorFallVector(edgeWalk.Direction);
                 VisualizeJump(v0, startPos, endTile);
+                VisualizeJumpTracing(v0, startPos);
                 AddLine(start, RoomHelper.MiddleOfTile(startPos), Color.white);
                 AddLabel(connectionType, startTile, endTile, v0);
             } else if (connectionType is ConnectionType.Drop) {
@@ -214,16 +229,13 @@ class PathVisualizer {
     }
 
     private void AddLine(Vector2 start, Vector2 end, Color color) {
-        Plugin.Logger!.LogDebug($"sprite: {_spriteCursor}, count: {_pathSprites.Count}");
-        if (_pathSprites.Count == 0 || _pathSprites.Count <= _spriteCursor) {
-            Plugin.Logger!.LogDebug("new");
+        if (_lineSprites.Count == 0 || _lineSprites.Count <= _spriteCursor) {
             var debugSprite = new DebugSprite(start, LineHelper.MakeLine(start, end, color), _room);
-            _pathSprites.Add(debugSprite);
+            _lineSprites.Add(debugSprite);
             _room.AddObject(debugSprite);
-            _spriteCursor = _pathSprites.Count;
+            _spriteCursor = _lineSprites.Count;
         } else {
-            Plugin.Logger!.LogDebug("reuse");
-            var debugSprite = _pathSprites[_spriteCursor];
+            var debugSprite = _lineSprites[_spriteCursor];
             debugSprite.pos = start;
             LineHelper.ReshapeLine((TriangleMesh)debugSprite.sprite, start, end);
             debugSprite.sprite.color = color;
@@ -233,7 +245,6 @@ class PathVisualizer {
     }
 
     private void AddLabel(ConnectionType connectionType, IVec2 startTile, IVec2 endTile, Vector2 v0) {
-        Plugin.Logger!.LogDebug($"label: {_spriteCursor}, count: {_pathSprites.Count}");
         NodeConnection? nodeConnection = null;
         foreach (var connection in _pathfinder.DynamicGraph.AdjacencyLists[startTile.x, startTile.y]) {
             if (connection.Type == connectionType && connection.Next.GridPos == endTile) {
@@ -282,6 +293,29 @@ class PathVisualizer {
         }
     }
 
+    private void AddSquare(IVec2 pos, Color color) {
+        if (_traceSprites.Count == 0 || _traceSprites.Count <= _traceCursor) {
+            var debugSprite = new DebugSprite(
+                RoomHelper.MiddleOfTile(pos),
+                new FSprite("pixel") {
+                    alpha = 0.3f,
+                    scale = 20f,
+                    color = color
+                },
+                _room
+            );
+            _traceSprites.Add(debugSprite);
+            _room.AddObject(debugSprite);
+            _traceCursor = _traceSprites.Count;
+        } else {
+            var debugSprite = _traceSprites[_traceCursor];
+            debugSprite.pos = RoomHelper.MiddleOfTile(pos);
+            debugSprite.sprite.color = color;
+            debugSprite.sprite.isVisible = true;
+            _traceCursor += 1;
+        }
+    }
+
     private void VisualizeJump(Vector2 v0, IVec2 startTile, IVec2 endTile) {
         Vector2 pathOffset = RoomHelper.MiddleOfTile(startTile);
         Vector2 lastPos = pathOffset;
@@ -292,6 +326,70 @@ class PathVisualizer {
             lastPos = nextPos;
         }
         AddLine(lastPos, _room.MiddleOfTile(endTile), Color.white);
+    }
+
+    private void VisualizeJumpTracing(Vector2 v0, IVec2 headPos, bool upright = true) {
+        int x = headPos.x;
+        int y = headPos.y;
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height) {
+            return;
+        }
+        int direction = v0.x switch {
+            > 0 => 1,
+            < 0 => -1,
+            0 or float.NaN => throw new ArgumentOutOfRangeException(),
+        };
+        int xOffset = (direction + 1) / 2;
+        var pathOffset = RoomHelper.MiddleOfTile(headPos);
+
+        while (true) {
+            float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
+            float result = DynamicGraph.Parabola(pathOffset.y, v0, _room.gravity, t) / 20;
+            if (result > y + 1) {
+                y++;
+            } else if (result < y) {
+                if (y - 2 < 0) {
+                    break;
+                }
+                var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
+                if (currentNode?.Type is NodeType.Floor or NodeType.Slope) {
+                    AddSquare(new IVec2(x, y), Color.cyan);
+                }
+                if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
+                    break;
+                }
+                y--;
+            } else {
+                x += direction;
+            }
+
+            if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height
+                || _room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid
+                || _room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope
+            ) {
+                break;
+            }
+
+            var shiftedNode = sharedGraph.Nodes[x, y];
+            if (shiftedNode is null) {
+                continue;
+            }
+            if (shiftedNode.Type is NodeType.Corridor) {
+                break;
+            }
+            if (shiftedNode.Type is NodeType.Wall wall && wall.Direction == direction) {
+                AddSquare(new IVec2(x, y), Color.cyan);
+                break;
+            } else if (shiftedNode.VerticalBeam) {
+                float poleResult = DynamicGraph.Parabola(pathOffset.y, v0, _room.gravity, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
+                if (poleResult > y && poleResult < y + 1) {
+                    AddSquare(new IVec2(x, y), Color.cyan);
+                }
+            } else if (shiftedNode.HorizontalBeam) {
+                AddSquare(new IVec2(x, y), Color.cyan);
+            }
+        }
     }
 }
 
