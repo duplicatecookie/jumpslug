@@ -387,7 +387,12 @@ class PathVisualizer {
                     AddSquare(new IVec2(x, y), Color.cyan);
                 }
             } else if (shiftedNode.HorizontalBeam) {
-                AddSquare(new IVec2(x, y), Color.cyan);
+                float leftHeight = DynamicGraph.Parabola(pathOffset.y, v0, _room.gravity, (20 * x - pathOffset.x) / v0.x);
+                float rightHeight = DynamicGraph.Parabola(pathOffset.y, v0, _room.gravity, (20 * (x + 1) - pathOffset.x) / v0.x);
+                float poleHeight = 20 * y + 10;
+                if (direction * leftHeight < direction * poleHeight && direction * poleHeight < direction * rightHeight) {
+                    AddSquare(new IVec2(x, y), Color.cyan);
+                }
             }
         }
     }

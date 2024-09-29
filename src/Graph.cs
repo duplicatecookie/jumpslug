@@ -728,7 +728,12 @@ public class DynamicGraph {
                     startConnectionList.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startPos) + 1));
                 }
             } else if (shiftedNode.HorizontalBeam) {
-                startConnectionList.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startPos) + 1));
+                float leftHeight = Parabola(pathOffset.y, v0, _room.gravity, (20 * x - pathOffset.x) / v0.x);
+                float rightHeight = Parabola(pathOffset.y, v0, _room.gravity, (20 * (x + 1) - pathOffset.x) / v0.x);
+                float poleHeight = 20 * y + 10;
+                if (direction * leftHeight < direction * poleHeight && direction * poleHeight < direction * rightHeight) {
+                    startConnectionList.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startPos) + 2));
+                }
             }
         }
     }
