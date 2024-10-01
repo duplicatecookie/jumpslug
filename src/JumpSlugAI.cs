@@ -414,7 +414,7 @@ class JumpSlugAI : ArtificialIntelligence {
                     input.jmp = true;
                 } else {
                     input.x = climbDir.x;
-                    if (climbDir.x != 0 && Player.flipDirection != climbDir.x) {
+                    if (climbDir.x != 0 && (Player.flipDirection != climbDir.x || Player.animation == Player.AnimationIndex.ClimbOnBeam)) {
                         _waitOneTick = true;
                     }
 
