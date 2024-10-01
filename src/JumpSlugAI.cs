@@ -545,6 +545,9 @@ class JumpSlugAI : ArtificialIntelligence {
                         } else {
                             input.y = 1;
                         }
+                    } else if (Player.animation == Player.AnimationIndex.None && Player.input[1].jmp) {
+                        input.jmp = true;
+                        input.x = jumpDir;
                     }
                 } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
                     if (Player.jumpBoost > 0) {
