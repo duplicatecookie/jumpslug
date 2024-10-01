@@ -4,7 +4,6 @@ using System;
 using UnityEngine;
 
 using IVec2 = RWCustom.IntVector2;
-
 namespace JumpSlug.Pathfinding;
 
 class SharedGraphVisualizer {

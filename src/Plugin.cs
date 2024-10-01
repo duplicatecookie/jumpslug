@@ -23,10 +23,9 @@ class Plugin : BaseUnityPlugin {
             Logger!.LogError("No high resolution timer available, disabling performance timing");
         }
 
-        //TemplateType.RegisterValues();
-        //TemplateHooks.RegisterHooks();
+        TemplateType.RegisterValues();
+        TemplateHooks.RegisterHooks();
 
-        Pathfinding.PathfinderHooks.RegisterHooks();
         Pathfinding.VisualizerHooks.RegisterHooks();
         Pathfinding.RoomHooks.RegisterHooks();
         
@@ -38,10 +37,9 @@ class Plugin : BaseUnityPlugin {
     public void OnDisable() {
         On.RainWorld.OnModsInit -= Extras.WrapInit(LoadResources);
 
-        //TemplateType.UnregisterValues();
-        //TemplateHooks.UnregisterHooks();
+        TemplateType.UnregisterValues();
+        TemplateHooks.UnregisterHooks();
 
-        Pathfinding.PathfinderHooks.UnregisterHooks();
         Pathfinding.VisualizerHooks.UnregisterHooks();
         Pathfinding.RoomHooks.UnregisterHooks();
 

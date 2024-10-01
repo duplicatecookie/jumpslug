@@ -15,28 +15,21 @@ static class TemplateType {
 
 static class TemplateHooks {
     public static void RegisterHooks() {
+        On.AbstractCreature.ctor += AbstractCreature_ctor;
+        On.AbstractCreature.InitiateAI += AbstractCreature_InitiateAI;
         On.StaticWorld.InitCustomTemplates += StaticWorld_InitCustomTemplates;
     }
 
     public static void UnregisterHooks() {
+        On.AbstractCreature.ctor -= AbstractCreature_ctor;
+        On.AbstractCreature.InitiateAI -= AbstractCreature_InitiateAI;
         On.StaticWorld.InitCustomTemplates -= StaticWorld_InitCustomTemplates;
     }
 
     private static void StaticWorld_InitCustomTemplates(On.StaticWorld.orig_InitCustomTemplates orig) {
-        CreatureTemplate? stdGroundTemplate = null;
-        foreach (var template in StaticWorld.creatureTemplates) {
-            if (template.type == CreatureTemplate.Type.StandardGroundCreature) {
-                stdGroundTemplate = template;
-                break;
-            }
-        }
-        if (stdGroundTemplate is null) {
-            Plugin.Logger!.LogError("could not find Standard Ground Creature template");
-            return;
-        }
         var jumpslugTemplate = new CreatureTemplate(
             TemplateType.JumpSlug,
-            stdGroundTemplate,
+            StaticWorld.GetCreatureTemplate(CreatureTemplate.Type.Slugcat),
             new(),
             new(),
             new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 1f)
@@ -49,5 +42,30 @@ static class TemplateHooks {
             }
         }
         orig();
+    }
+
+    private static void AbstractCreature_ctor(
+        On.AbstractCreature.orig_ctor orig,
+        AbstractCreature self,
+        World world,
+        CreatureTemplate creatureTemplate,
+        Creature realizedCreature,
+        WorldCoordinate pos,
+        EntityID id
+    ) {
+        orig(self, world, creatureTemplate, realizedCreature, pos, id);
+        if (creatureTemplate.type == TemplateType.JumpSlug) {
+            self.state = new PlayerState(self, 0, SlugcatStats.Name.White, false) {
+                forceFullGrown = true
+            };
+            self.abstractAI = new JumpSlugAbstractAI(self, world);
+        }
+    }
+
+    private static void AbstractCreature_InitiateAI(On.AbstractCreature.orig_InitiateAI orig, AbstractCreature self) {
+        orig(self);
+        if (self.creatureTemplate.type == TemplateType.JumpSlug) {
+            self.abstractAI.RealAI = new JumpSlugAI(self, self.world);
+        }
     }
 }

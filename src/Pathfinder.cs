@@ -587,39 +587,3 @@ public class Pathfinder {
         return null;
     }
 }
-
-static class PathfinderHooks {
-    public static void RegisterHooks() {
-        On.Player.Update += Player_Update;
-    }
-
-    public static void UnregisterHooks() {
-        On.Player.Update -= Player_Update;
-    }
-
-    private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
-        if (self.abstractCreature?.abstractAI is null) {
-            var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
-            if (InputHelper.JustPressedMouseButton(1)) {
-                var scugTemplate = StaticWorld.GetCreatureTemplate(MoreSlugcatsEnums.CreatureTemplateType.SlugNPC);
-                var abstractScug = new AbstractCreature(
-                    self.room.world,
-                    scugTemplate,
-                    null,
-                    self.room.ToWorldCoordinate(mousePos),
-                    self.room.game.GetNewID());
-                abstractScug.state = new PlayerNPCState(abstractScug, 0) {
-                    forceFullGrown = true,
-                };
-                self.room.abstractRoom.AddEntity(abstractScug);
-                abstractScug.RealizeInRoom();
-                abstractScug.abstractAI = new JumpSlugAbstractAI(abstractScug, self.room.world) {
-                    RealAI = new JumpSlugAI(abstractScug, self.room.world),
-                };
-                var realizedScug = (Player)abstractScug.realizedCreature;
-                realizedScug.controller = null;
-            }
-        }
-        orig(self, eu);
-    }
-}
