@@ -11,6 +11,7 @@ using UnityEngine;
 using JumpSlug.Pathfinding;
 using RWCustom;
 using System.Diagnostics.Tracing;
+using System.Media;
 
 namespace JumpSlug;
 
@@ -33,6 +34,7 @@ class JumpSlugAI : ArtificialIntelligence {
     private readonly DebugSprite _currentNodeSprite;
     private readonly DebugSprite[] _predictedIntersectionSprites;
     private readonly FLabel _currentConnectionLabel;
+    private readonly FLabel _jumpBoostLabel;
 
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         _pathfinder = new Pathfinder(Room!, new SlugcatDescriptor(Player));
@@ -66,8 +68,14 @@ class JumpSlugAI : ArtificialIntelligence {
             color = Color.white,
         };
 
+        _jumpBoostLabel = new FLabel(Custom.GetFont(), "None") {
+            alignment = FLabelAlignment.Center,
+            color = Color.white,
+        };
+
         var container = Room!.game.cameras[0].ReturnFContainer("Foreground");
         container.AddChild(_currentConnectionLabel);
+        container.AddChild(_jumpBoostLabel);
         Room!.AddObject(_inputDirSprite);
         Room!.AddObject(_currentNodeSprite);
         foreach (var sprite in _predictedIntersectionSprites) {
@@ -117,9 +125,13 @@ class JumpSlugAI : ArtificialIntelligence {
             _ => throw new InvalidUnionVariantException(),
         };
 
+        _jumpBoostLabel.text = Player.jumpBoost.ToString();
+
         var labelPos = Player.bodyChunks[0].pos - Room.game.cameras[0].pos;
         labelPos.y += 60;
         _currentConnectionLabel.SetPosition(labelPos);
+        labelPos.y += 20;
+        _jumpBoostLabel.SetPosition(labelPos);
 
         if (_path?.CurrentNode() is IVec2 current) {
             _currentNodeSprite.sprite.isVisible = true;
@@ -535,15 +547,11 @@ class JumpSlugAI : ArtificialIntelligence {
                         }
                     }
                 } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
-                    input.jmp = true;
+                    if (Player.jumpBoost > 0) {
+                        input.jmp = true;
+                    }
                     input.x = jumpDir;
                 }
-                if (Player.bodyMode == Player.BodyModeIndex.WallClimb
-                    || Player.flipDirection == jumpDir
-                ) {
-                    input.jmp = true;
-                }
-                input.x = jumpDir;
             }
         } else if (currentConnection is ConnectionType.WalkOffEdge(int walkDir)) {
             input.x = walkDir;
