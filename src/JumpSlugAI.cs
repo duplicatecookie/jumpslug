@@ -25,6 +25,8 @@ class JumpSlugAI : ArtificialIntelligence {
     private IVec2? _destination;
     private readonly Pathfinder _pathfinder;
     private Path? _path;
+    private int _ticksSinceFallingTowardsPath;
+    private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 10;
     private const int MAX_SPRITES = 16;
     private readonly PathVisualizer _visualizer;
     private readonly DebugSprite _inputDirSprite;
@@ -163,6 +165,18 @@ class JumpSlugAI : ArtificialIntelligence {
         }
     }
 
+    private void FindPathIfNotFallingTowardsPathForTooLong() {
+        if (!FallingTowardsPath()) {
+            _ticksSinceFallingTowardsPath += 1;
+            if (_ticksSinceFallingTowardsPath > MAX_TICKS_NOT_FALLING_TOWARDS_PATH) {
+                FindPath();
+                _ticksSinceFallingTowardsPath = 0;
+            }
+        } else {
+            _ticksSinceFallingTowardsPath = 0;
+        }
+    }
+
     private bool FallingTowardsPath() {
         if (_path is null) {
             return false;
@@ -291,12 +305,18 @@ class JumpSlugAI : ArtificialIntelligence {
                 FindPath();
             }
         } else if (Player.bodyMode == Player.BodyModeIndex.Stand) {
-            if (!_path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1))
-                && (_path.CurrentConnection() is not (ConnectionType.Drop or ConnectionType.Jump or ConnectionType.WalkOffEdge)
-                    || !(fallingTowardsPath = FallingTowardsPath()))
-                && CurrentNode() is not null
+            if (CurrentNode() is not null
+                && !_path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1))
             ) {
-                FindPath();
+                if (_path.CurrentConnection()
+                    is ConnectionType.Drop
+                    or ConnectionType.Jump
+                    or ConnectionType.WalkOffEdge
+                ) {
+                    FindPathIfNotFallingTowardsPathForTooLong();
+                } else {
+                    FindPath();
+                }
             }
         } else if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
             && (Player.animation == Player.AnimationIndex.StandOnBeam
@@ -310,14 +330,19 @@ class JumpSlugAI : ArtificialIntelligence {
                 FindPath();
             }
         } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
-            if (!_path.FindNodeAhead(footPos)
+            if (CurrentNode() is not null
+                &&!_path.FindNodeAhead(footPos)
                 && !_path.FindNodeAhead(headPos)
-                && !(fallingTowardsPath = FallingTowardsPath())
-                //&& !_path.FindNodeBehind(footPos)
-                //&& !_path.FindNodeBehind(headPos)
-                && CurrentNode() is not null
             ) {
-                FindPath();
+                if (_path.CurrentConnection()
+                    is ConnectionType.Drop
+                    or ConnectionType.Jump
+                    or ConnectionType.WalkOffEdge
+                ) {
+                    FindPathIfNotFallingTowardsPathForTooLong();
+                } else {
+                    FindPath();
+                }
             }
         } else if (!_path.FindNode(headPos)
             && !_path.FindNode(footPos)
