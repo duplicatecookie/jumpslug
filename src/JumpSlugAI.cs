@@ -416,9 +416,7 @@ class JumpSlugAI : ArtificialIntelligence {
                     input.x = climbDir.x;
                     if (climbDir.x != 0 && (Player.flipDirection != climbDir.x || Player.animation == Player.AnimationIndex.ClimbOnBeam)) {
                         _waitOneTick = true;
-                    }
-
-                    if (Player.animation == Player.AnimationIndex.StandOnBeam) {
+                    } else if (Player.animation == Player.AnimationIndex.StandOnBeam) {
                         if (climbDir.y != 0) {
                             input.y = 1;
                         }
@@ -501,7 +499,10 @@ class JumpSlugAI : ArtificialIntelligence {
                     } else if (Player.animation == Player.AnimationIndex.HangFromBeam) {
                         input.y = 1;
                     } else if (Player.animation == Player.AnimationIndex.StandOnBeam) {
-                        if (headPos.x == footPos.x && headPos.y == footPos.y + 1) {
+                        if (headPos.x == footPos.x
+                            && headPos.y == footPos.y + 1
+                            && Player.bodyChunks[0].vel.x < 5f
+                        ) {
                             input.jmp = true;
                             input.x = jumpDir;
                         } else {
