@@ -26,8 +26,8 @@ class JumpSlugAI : ArtificialIntelligence {
     private IVec2? _destination;
     private readonly Pathfinder _pathfinder;
     private Path? _path;
-    private int _ticksSinceFallingTowardsPath;
-    private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 10;
+    private int _offPathCounter;
+    private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 5;
     private const int MAX_SPRITES = 16;
     private readonly PathVisualizer _visualizer;
     private readonly DebugSprite _inputDirSprite;
@@ -179,13 +179,12 @@ class JumpSlugAI : ArtificialIntelligence {
 
     private void FindPathIfNotFallingTowardsPathForTooLong() {
         if (!FallingTowardsPath()) {
-            _ticksSinceFallingTowardsPath += 1;
-            if (_ticksSinceFallingTowardsPath > MAX_TICKS_NOT_FALLING_TOWARDS_PATH) {
+            if (++_offPathCounter > MAX_TICKS_NOT_FALLING_TOWARDS_PATH) {
                 FindPath();
-                _ticksSinceFallingTowardsPath = 0;
+                _offPathCounter = 0;
             }
-        } else {
-            _ticksSinceFallingTowardsPath = 0;
+        } else if (_offPathCounter > 0) {
+            _offPathCounter -= 1;
         }
     }
 
@@ -320,11 +319,7 @@ class JumpSlugAI : ArtificialIntelligence {
             if (CurrentNode() is not null
                 && !_path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1))
             ) {
-                if (_path.CurrentConnection()
-                    is ConnectionType.Drop
-                    or ConnectionType.Jump
-                    or ConnectionType.WalkOffEdge
-                ) {
+                if (_path.CurrentConnection() is ConnectionType.WalkOffEdge) {
                     FindPathIfNotFallingTowardsPathForTooLong();
                 } else {
                     FindPath();
