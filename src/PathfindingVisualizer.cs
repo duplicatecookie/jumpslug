@@ -43,7 +43,8 @@ class SharedGraphVisualizer {
                 NodeType.Floor => Color.white,
                 NodeType.Slope => Color.green,
                 NodeType.Corridor => Color.blue,
-                NodeType.ShortcutEntrance => Color.cyan,
+                NodeType.ShortcutEntrance
+                or NodeType.RoomExit => Color.cyan,
                 NodeType.Wall => Color.grey,
                 _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
             };

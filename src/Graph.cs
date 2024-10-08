@@ -44,6 +44,7 @@ public record NodeType {
     public record Slope() : NodeType();
     public record Corridor() : NodeType();
     public record ShortcutEntrance(int Index) : NodeType();
+    public record RoomExit() : NodeType();
     public record Wall(int Direction) : NodeType();
 
     private NodeType() { }
@@ -181,8 +182,13 @@ public class SharedGraph {
                     Nodes[x, y] = new GraphNode(new NodeType.Slope(), x, y);
                 } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.ShortcutEntrance) {
                     int index = Array.IndexOf(room.shortcutsIndex, new IVec2(x, y));
-                    if (index > -1 && room.shortcuts[index].shortCutType == ShortcutData.Type.Normal) {
-                        Nodes[x, y] = new GraphNode(new NodeType.ShortcutEntrance(index), x, y);
+                    if (index > -1) {
+                        var type = room.shortcuts[index].shortCutType;
+                        if (type == ShortcutData.Type.Normal) {
+                            Nodes[x, y] = new GraphNode(new NodeType.ShortcutEntrance(index), x, y);
+                        } else if (type == ShortcutData.Type.RoomExit) {
+                            Nodes[x, y] = new GraphNode(new NodeType.RoomExit(), x ,y);
+                        }
                     }
                 }
 
@@ -311,7 +317,7 @@ public class SharedGraph {
                 }
 
                 if (currentNode.Type is NodeType.Corridor) {
-                    if (rightNode?.Type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance) {
+                    if (rightNode?.Type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance or NodeType.RoomExit) {
                         ConnectNodes(
                             currentNode,
                             rightNode,
@@ -343,7 +349,7 @@ public class SharedGraph {
                             new ConnectionType.Walk(-1)
                         );
                     }
-                    if (aboveNode?.Type is NodeType.Corridor or NodeType.ShortcutEntrance or NodeType.Floor) {
+                    if (aboveNode?.Type is NodeType.Corridor or NodeType.ShortcutEntrance or NodeType.Floor or NodeType.RoomExit) {
                         ConnectNodes(
                             currentNode,
                             aboveNode,
@@ -409,6 +415,23 @@ public class SharedGraph {
                             shortcutData.length
                         )
                     );
+                    if (rightNode?.Type is NodeType.Corridor) {
+                        ConnectNodes(
+                            currentNode,
+                            rightNode,
+                            new ConnectionType.Crawl(new IVec2(1, 0)),
+                            new ConnectionType.Crawl(new IVec2(-1, 0))
+                        );
+                    }
+                    if (aboveNode?.Type is NodeType.Corridor) {
+                        ConnectNodes(
+                            currentNode,
+                            aboveNode,
+                            new ConnectionType.Crawl(new IVec2(0, 1)),
+                            new ConnectionType.Crawl(new IVec2(0, -1))
+                        );
+                    }
+                } else if (currentNode.Type is NodeType.RoomExit) {
                     if (rightNode?.Type is NodeType.Corridor) {
                         ConnectNodes(
                             currentNode,
@@ -556,7 +579,8 @@ public class DynamicGraph {
         }
         if (graphNode.VerticalBeam && !graphNode.HorizontalBeam
             && graphNode.Type is NodeType.Air or NodeType.Wall
-            && sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is NodeType.Air or NodeType.Wall) {
+            && sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is NodeType.Air or NodeType.Wall
+        ) {
             Vector2 v0 = descriptor.VerticalPoleJumpVector(1);
             if (goRight) {
                 TraceJump(pos, pos, v0, new ConnectionType.Jump(1));
