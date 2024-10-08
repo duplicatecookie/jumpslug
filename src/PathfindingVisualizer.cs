@@ -195,11 +195,13 @@ class PathVisualizer {
                 // this node can be null only if the path is constructed incorrectly so this should throw
                 GraphNode graphNode = sharedGraph.GetNode(startTile)!;
                 Vector2 v0 = Vector2.zero;
-                if (graphNode.VerticalBeam && !graphNode.HorizontalBeam) {
+                if (graphNode.Beam == GraphNode.BeamType.Vertical) {
                     v0 = slugcat.VerticalPoleJumpVector(jump.Direction);
                     VisualizeJump(v0, startTile, endTile);
                     VisualizeJumpTracing(v0, startTile);
-                } else if (graphNode.HorizontalBeam || graphNode.Type is NodeType.Floor) {
+                } else if (graphNode.Beam == GraphNode.BeamType.Horizontal
+                    || graphNode.Type is NodeType.Floor
+                ) {
                     var headPos = new IVec2(startTile.x, startTile.y + 1);
                     v0 = slugcat.HorizontalPoleJumpVector(jump.Direction);
                     VisualizeJump(v0, headPos, endTile);
@@ -381,18 +383,20 @@ class PathVisualizer {
             if (shiftedNode.Type is NodeType.Wall wall && wall.Direction == direction) {
                 AddSquare(new IVec2(x, y), Color.cyan);
                 break;
-            } else if (shiftedNode.VerticalBeam) {
+            } else if (shiftedNode.Beam == GraphNode.BeamType.Vertical) {
                 float poleResult = DynamicGraph.Parabola(pathOffset.y, v0, _room.gravity, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
                 if (poleResult > y && poleResult < y + 1) {
                     AddSquare(new IVec2(x, y), Color.cyan);
                 }
-            } else if (shiftedNode.HorizontalBeam) {
+            } else if (shiftedNode.Beam == GraphNode.BeamType.Horizontal) {
                 float leftHeight = DynamicGraph.Parabola(pathOffset.y, v0, _room.gravity, (20 * x - pathOffset.x) / v0.x);
                 float rightHeight = DynamicGraph.Parabola(pathOffset.y, v0, _room.gravity, (20 * (x + 1) - pathOffset.x) / v0.x);
                 float poleHeight = 20 * y + 10;
                 if (direction * leftHeight < direction * poleHeight && direction * poleHeight < direction * rightHeight) {
                     AddSquare(new IVec2(x, y), Color.cyan);
                 }
+            } else if (shiftedNode.Beam == GraphNode.BeamType.Cross) {
+                AddSquare(new IVec2(x, y), Color.cyan);
             }
         }
     }

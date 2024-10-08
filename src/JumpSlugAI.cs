@@ -464,7 +464,7 @@ class JumpSlugAI : ArtificialIntelligence {
                             }
                         }
                     } else if (Player.animation != Player.AnimationIndex.GetUpOnBeam
-                        && currentNode.VerticalBeam == false
+                        && currentNode.Beam == GraphNode.BeamType.Horizontal
                         && Room!.GetTile(currentPathPos.x, currentPathPos.y + 1).Terrain == Room.Tile.TerrainType.Air
                         && Player.input[1].y != 1
                     ) {
