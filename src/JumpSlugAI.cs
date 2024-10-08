@@ -10,8 +10,6 @@ using UnityEngine;
 
 using JumpSlug.Pathfinding;
 using RWCustom;
-using System.Diagnostics.Tracing;
-using System.Media;
 
 namespace JumpSlug;
 
@@ -29,6 +27,7 @@ class JumpSlugAI : ArtificialIntelligence {
     private int _offPathCounter;
     private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 5;
     private const int MAX_SPRITES = 16;
+    private bool _visualize;
     private readonly PathVisualizer _visualizer;
     private readonly DebugSprite _inputDirSprite;
     private readonly DebugSprite _currentNodeSprite;
@@ -104,13 +103,32 @@ class JumpSlugAI : ArtificialIntelligence {
             _destination = Room.GetTilePosition(mousePos);
             FindPath();
         }
-
-        foreach (var sprite in _predictedIntersectionSprites) {
-            sprite.sprite.isVisible = false;
+        if (InputHelper.JustPressed(KeyCode.P)) {
+            _visualize = !_visualize;
+            if (_visualize && _path is not null) {
+                _visualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
+            } else {
+                _visualizer.ClearPath();
+            }
+            _jumpBoostLabel.isVisible = _visualize;
+            _currentConnectionLabel.isVisible = _visualize;
+            _inputDirSprite.sprite.isVisible = _visualize;
+            _currentNodeSprite.sprite.isVisible = _visualize;
+            foreach (var sprite in _predictedIntersectionSprites) {
+                sprite.sprite.isVisible = false;
+            }
         }
 
         FollowPath();
+        if (_visualize) {
+            UpdateVisualization();
+        }
+    }
 
+    private void UpdateVisualization() {
+        foreach (var sprite in _predictedIntersectionSprites) {
+            sprite.sprite.isVisible = false;
+        }
         _currentConnectionLabel.text = _path?.CurrentConnection() switch {
             null => "None",
             ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
@@ -127,7 +145,7 @@ class JumpSlugAI : ArtificialIntelligence {
 
         _jumpBoostLabel.text = Player.jumpBoost.ToString();
 
-        var labelPos = Player.bodyChunks[0].pos - Room.game.cameras[0].pos;
+        var labelPos = Player.bodyChunks[0].pos - Room!.game.cameras[0].pos;
         labelPos.y += 60;
         _currentConnectionLabel.SetPosition(labelPos);
         labelPos.y += 20;
@@ -170,10 +188,12 @@ class JumpSlugAI : ArtificialIntelligence {
                 _destination.Value,
                 new SlugcatDescriptor(Player)
             );
-        if (_path is null) {
-            _visualizer.ClearPath();
-        } else {
-            _visualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
+        if (_visualize) {
+            if (_path is null) {
+                _visualizer.ClearPath();
+            } else {
+                _visualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
+            }
         }
     }
 
@@ -253,7 +273,7 @@ class JumpSlugAI : ArtificialIntelligence {
                     continue;
                 }
 
-                if (spriteIndex < MAX_SPRITES) {
+                if (_visualize && spriteIndex < MAX_SPRITES) {
                     var sprite = _predictedIntersectionSprites[spriteIndex];
                     sprite.pos = RoomHelper.MiddleOfTile(x, y);
                     sprite.sprite.isVisible = true;
@@ -338,7 +358,7 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
             if (CurrentNode() is not null
-                &&!_path.FindNodeAhead(footPos)
+                && !_path.FindNodeAhead(footPos)
                 && !_path.FindNodeAhead(headPos)
             ) {
                 if (_path.CurrentConnection()
