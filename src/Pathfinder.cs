@@ -459,6 +459,10 @@ public class Pathfinder {
     private Room _room;
     private SlugcatDescriptor _lastDescriptor;
     public readonly DynamicGraph DynamicGraph;
+    public PathNodePool PathNodePool;
+    public BitGrid OpenNodes;
+    public BitGrid ClosedNodes;
+    public PathNodeQueue NodeQueue;
 
     /// <summary>
     /// Create new pathfinder in the specified room.
@@ -473,6 +477,13 @@ public class Pathfinder {
         _room = room;
         _lastDescriptor = descriptor;
         DynamicGraph = new DynamicGraph(room);
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        PathNodePool = new PathNodePool(sharedGraph);
+        int width = sharedGraph.Width;
+        int height = sharedGraph.Height;
+        OpenNodes = new BitGrid(width, height);
+        ClosedNodes = new BitGrid(width, height);
+        NodeQueue = new PathNodeQueue(PathNodePool.NonNullCount, width, height);
     }
 
     /// <summary>
@@ -482,6 +493,13 @@ public class Pathfinder {
         if (room != _room) {
             _room = room;
             DynamicGraph.NewRoom(room);
+            var sharedGraph = _room.GetCWT().SharedGraph!;
+            PathNodePool = new PathNodePool(sharedGraph);
+            int width = sharedGraph.Width;
+            int height = sharedGraph.Height;
+            OpenNodes = new BitGrid(width, height);
+            ClosedNodes = new BitGrid(width, height);
+            NodeQueue = new PathNodeQueue(PathNodePool.NonNullCount, width, height);
         }
     }
 
@@ -516,19 +534,15 @@ public class Pathfinder {
         if (Timers.Active) {
             Timers.FindPath.Start();
         }
-        var pathNodePool = _room.GetCWT().PathNodePool!.Value;
-        var openNodes = _room.GetCWT().OpenNodes!;
-        openNodes.Reset();
-        var closedNodes = _room.GetCWT().ClosedNodes!;
-        closedNodes.Reset();
-        var startNode = pathNodePool[start]!;
+        OpenNodes.Reset();
+        ClosedNodes.Reset();
+        var startNode = PathNodePool[start]!;
         startNode.Reset(destination, null, 0);
-        var nodeQueue = _room.GetCWT().NodeQueue!;
-        nodeQueue.Reset();
-        nodeQueue.Add(startNode);
-        openNodes[start] = true;
-        while (nodeQueue.Count > 0) {
-            PathNode currentNode = nodeQueue.Root!;
+        NodeQueue.Reset();
+        NodeQueue.Add(startNode);
+        OpenNodes[start] = true;
+        while (NodeQueue.Count > 0) {
+            PathNode currentNode = NodeQueue.Root!;
             var currentPos = currentNode.GridPos;
             if (currentPos == destination) {
                 if (Timers.Active) {
@@ -537,9 +551,9 @@ public class Pathfinder {
                 _lastDescriptor = descriptor;
                 return new Path(currentNode);
             }
-            nodeQueue.RemoveRoot();
-            openNodes[currentPos] = false;
-            closedNodes[currentPos] = true;
+            NodeQueue.RemoveRoot();
+            OpenNodes[currentPos] = false;
+            ClosedNodes[currentPos] = true;
 
             var graphNode = sharedGraph.Nodes[currentPos.x, currentPos.y]!;
             var adjacencyList = DynamicGraph.AdjacencyLists[currentPos.x, currentPos.y]!;
@@ -553,23 +567,23 @@ public class Pathfinder {
 
             void CheckConnection(NodeConnection connection) {
                 IVec2 neighbourPos = connection.Next.GridPos;
-                PathNode currentNeighbour = pathNodePool[neighbourPos]!;
-                if (closedNodes[neighbourPos]) {
+                PathNode currentNeighbour = PathNodePool[neighbourPos]!;
+                if (ClosedNodes[neighbourPos]) {
                     return;
                 }
-                if (!openNodes[neighbourPos]) {
-                    openNodes[neighbourPos] = true;
+                if (!OpenNodes[neighbourPos]) {
+                    OpenNodes[neighbourPos] = true;
                     currentNeighbour.Reset(
                         destination,
                         new PathConnection(connection.Type, currentNode),
                         currentNode.PathCost + connection.Weight
                     );
-                    nodeQueue.Add(currentNeighbour);
+                    NodeQueue.Add(currentNeighbour);
                 }
                 if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
                     currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
                     currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
-                    nodeQueue.DecreasePriority(currentNeighbour.GridPos);
+                    NodeQueue.DecreasePriority(currentNeighbour.GridPos);
                 }
             }
 

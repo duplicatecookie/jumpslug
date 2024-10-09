@@ -8,10 +8,6 @@ static class RoomCWT {
     public class RoomExtension {
         public SharedGraph? SharedGraph;
         public SharedGraphVisualizer? Visualizer;
-        public PathNodePool? PathNodePool;
-        public BitGrid? OpenNodes;
-        public BitGrid? ClosedNodes;
-        public PathNodeQueue? NodeQueue;
         public RoomExtension() {
         }
     }
@@ -36,16 +32,6 @@ static class RoomHooks {
             var roomExt = self.room.GetCWT();
             roomExt.SharedGraph = new SharedGraph(self.room);
             roomExt.Visualizer = new SharedGraphVisualizer(self.room);
-            int width = roomExt.SharedGraph.Width;
-            int height = roomExt.SharedGraph.Height;
-            roomExt.OpenNodes = new BitGrid(width, height);
-            roomExt.ClosedNodes = new BitGrid(width, height);
-            roomExt.PathNodePool = new PathNodePool(roomExt.SharedGraph);
-            roomExt.NodeQueue = new PathNodeQueue(
-                roomExt.PathNodePool!.Value.NonNullCount,
-                width,
-                height
-            );
         }
     }
 
