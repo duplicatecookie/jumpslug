@@ -75,9 +75,9 @@ class SharedGraphVisualizer {
             if (node is null) {
                 continue;
             }
-            var start = RoomHelper.MiddleOfTile(node.GridPos);
+            var end = RoomHelper.MiddleOfTile(node.GridPos);
             foreach (var connection in node.Connections) {
-                var end = RoomHelper.MiddleOfTile(connection.Next.GridPos);
+                var start = RoomHelper.MiddleOfTile(connection.Next.GridPos);
                 var mesh = LineHelper.MakeLine(start, end, Color.white);
                 var line = new DebugSprite(start, mesh, _room);
                 _room.AddObject(line);
@@ -173,8 +173,8 @@ class PathVisualizer {
         }
 
         for (int i = 0; i < path.ConnectionCount; i++) {
-            IVec2 startTile = path.Nodes[i + 1];
-            IVec2 endTile = path.Nodes[i];
+            IVec2 startTile = path.Nodes[i];
+            IVec2 endTile = path.Nodes[i + 1];
             var start = RoomHelper.MiddleOfTile(startTile);
             var end = RoomHelper.MiddleOfTile(endTile);
             var color = path.Connections[i] switch {
@@ -248,7 +248,11 @@ class PathVisualizer {
 
     private void AddLabel(ConnectionType connectionType, IVec2 startTile, IVec2 endTile, Vector2 v0) {
         NodeConnection? nodeConnection = null;
-        foreach (var connection in _pathfinder.DynamicGraph.AdjacencyLists[startTile.x, startTile.y]) {
+        var list = _pathfinder.DynamicGraph.AdjacencyLists[startTile.x, startTile.y];
+        if (list is null) {
+            return;
+        }
+        foreach (var connection in list) {
             if (connection.Type == connectionType && connection.Next.GridPos == endTile) {
                 nodeConnection = connection;
                 break;
@@ -434,7 +438,7 @@ public class DebugPathfinder {
         var sharedGraph = room.GetCWT().SharedGraph!;
         _room = room;
         _descriptor = descriptor;
-        _dynamicGraph = new DynamicGraph(room);
+        _dynamicGraph = new DynamicGraph(room, descriptor);
         _pathNodePool = new PathNodePool(sharedGraph);
         _nodeSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
         _connectionSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
@@ -527,18 +531,14 @@ public class DebugPathfinder {
         Start = start;
         Destination = destination;
         if (_descriptor != descriptor) {
-            for (int y = 0; y < _dynamicGraph.Height; y++) {
-                for (int x = 0; x < _dynamicGraph.Width; x++) {
-                    _dynamicGraph.AdjacencyLists[x, y]?.Clear();
-                }
-            }
+            _dynamicGraph.Reset(descriptor);
             _descriptor = descriptor;
         }
-        var startNode = _pathNodePool[Start]!;
-        startNode.Reset(Destination, null, 0);
+        var destNode = _pathNodePool[Destination]!;
+        destNode.Reset(Start, null, 0);
         _nodeQueue.Reset();
-        _nodeQueue.Add(startNode);
-        _openNodes[Start] = true;
+        _nodeQueue.Add(destNode);
+        _openNodes[Destination] = true;
         var startNodeSprite = _nodeSprites[Start.x, Start.y]!.sprite;
         startNodeSprite.isVisible = true;
         startNodeSprite.scale = 10f;
@@ -562,8 +562,8 @@ public class DebugPathfinder {
             }
             PathNode currentNode = _nodeQueue.Root!;
             var currentPos = currentNode.GridPos;
-            if (currentPos == Destination) {
-                PathNode? cursor = _pathNodePool[Destination];
+            if (currentPos == Start) {
+                PathNode? cursor = _pathNodePool[Start];
                 if (cursor is null) {
                     return;
                 }
@@ -581,10 +581,6 @@ public class DebugPathfinder {
             var graphNode = _room.GetCWT().SharedGraph!.Nodes[currentPos.x, currentPos.y]!;
             var adjacencyList = _dynamicGraph.AdjacencyLists[currentPos.x, currentPos.y]!;
 
-            if (adjacencyList.Count == 0) {
-                _dynamicGraph.TraceFromNode(currentPos, _descriptor);
-            }
-
             void CheckConnection(NodeConnection connection) {
                 IVec2 neighbourPos = connection.Next.GridPos;
                 PathNode currentNeighbour = _pathNodePool[neighbourPos]!;
@@ -594,7 +590,7 @@ public class DebugPathfinder {
                 if (!_openNodes[neighbourPos]) {
                     _openNodes[neighbourPos] = true;
                     currentNeighbour.Reset(
-                        Destination,
+                        Start,
                         new PathConnection(connection.Type, currentNode),
                         currentNode.PathCost + connection.Weight
                     );
