@@ -103,6 +103,121 @@ class SharedGraphVisualizer {
     }
 }
 
+class NodeVisualizer {
+    private Room _room;
+    private DynamicGraph _dynamicGraph;
+    private readonly DebugSprite _nodeSprite;
+    private int _connectionIndex;
+    private readonly List<DebugSprite> _connectionSprites;
+    public NodeVisualizer(Room room, DynamicGraph dynamicGraph) {
+        _room = room;
+        _dynamicGraph = dynamicGraph;
+        _nodeSprite = new DebugSprite(
+            Vector2.zero,
+            new FSprite("pixel") {
+                isVisible = false,
+                scale = 10f,
+            },
+            _room
+        );
+        _room.AddObject(_nodeSprite);
+        _connectionSprites = new();
+    }
+
+    public void NewRoom(Room room, DynamicGraph dynamicGraph) {
+        if (_room != room) {
+            _room = room;
+            _dynamicGraph = dynamicGraph;
+            _nodeSprite.sprite.isVisible = false;
+            _room.AddObject(_nodeSprite);
+            foreach (var sprite in _connectionSprites) {
+                sprite.sprite.isVisible = false;
+                _room.AddObject(sprite);
+            }
+        }
+    }
+
+    public void VisualizeNode(GraphNode node) {
+        Vector2 pixelPos = RoomHelper.MiddleOfTile(node.GridPos);
+        _nodeSprite.pos = pixelPos;
+        _nodeSprite.sprite.color = node.Type switch {
+            NodeType.Air => Color.red,
+            NodeType.Floor => Color.white,
+            NodeType.Slope => Color.green,
+            NodeType.Corridor => Color.blue,
+            NodeType.ShortcutEntrance
+            or NodeType.RoomExit => Color.cyan,
+            NodeType.Wall => Color.grey,
+            _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
+        };
+        _connectionIndex = 0;
+        foreach (var connection in node.Connections) {
+            AddConnection(node.GridPos, connection);
+        }
+        var dynamicConnections = _dynamicGraph.AdjacencyLists[node.GridPos.x, node.GridPos.y]!;
+        foreach (var connection in dynamicConnections) {
+            AddConnection(node.GridPos, connection);
+        }
+        for (int i = _connectionIndex; i < _connectionSprites.Count; i++) {
+            _connectionSprites[i].sprite.isVisible = false;
+        }
+    }
+
+    private void AddConnection(IVec2 pos, NodeConnection connection) {
+        if (connection.Next is null) {
+            return;
+        }
+        Vector2 pixelPos = RoomHelper.MiddleOfTile(pos);
+        var color = connection.Type switch {
+            ConnectionType.Jump
+            or ConnectionType.WalkOffEdge
+            or ConnectionType.Pounce => Color.blue,
+            ConnectionType.Drop => Color.red,
+            ConnectionType.Shortcut => Color.cyan,
+            ConnectionType.Crawl => Color.green,
+            ConnectionType.Climb => Color.magenta,
+            ConnectionType.Walk => Color.white,
+            ConnectionType.SlideOnWall => Color.yellow,
+            _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
+        };
+        if (_connectionIndex >= _connectionSprites.Count) {
+            var sprite = new DebugSprite(
+                    pixelPos,
+                    LineHelper.MakeLine(
+                        pixelPos,
+                        RoomHelper.MiddleOfTile(connection.Next.GridPos),
+                        color
+                    ),
+                    _room
+                );
+            _connectionSprites.Add(
+                sprite
+            );
+            _room.AddObject(sprite);
+            _connectionIndex = _connectionSprites.Count;
+        } else {
+            var sprite = _connectionSprites[_connectionIndex];
+            sprite.pos = pixelPos;
+            LineHelper.ReshapeLine(
+                (TriangleMesh)sprite.sprite,
+                pixelPos,
+                RoomHelper.MiddleOfTile(connection.Next.GridPos)
+            );
+            sprite.sprite.color = color;
+            sprite.sprite.isVisible = true;
+            _connectionIndex += 1;
+        }
+    }
+
+    public void ResetSprites() {
+        _nodeSprite.sprite.isVisible = false;
+        _connectionIndex = 0;
+        foreach (var sprite in _connectionSprites) {
+            sprite.sprite.isVisible = false;
+        }
+    }
+}
+
 class PathVisualizer {
     private Room _room;
     private readonly Pathfinder _pathfinder;

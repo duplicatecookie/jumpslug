@@ -28,7 +28,9 @@ class JumpSlugAI : ArtificialIntelligence {
     private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 5;
     private const int MAX_SPRITES = 16;
     private bool _visualize;
-    private readonly PathVisualizer _visualizer;
+    private bool _visualizeNode;
+    private readonly PathVisualizer _pathVisualizer;
+    private readonly NodeVisualizer _nodeVisualizer;
     private readonly DebugSprite _inputDirSprite;
     private readonly DebugSprite _currentNodeSprite;
     private readonly DebugSprite[] _predictedIntersectionSprites;
@@ -37,7 +39,8 @@ class JumpSlugAI : ArtificialIntelligence {
 
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         _pathfinder = new Pathfinder(Room!, new SlugcatDescriptor(Player));
-        _visualizer = new PathVisualizer(Room!, _pathfinder);
+        _pathVisualizer = new PathVisualizer(Room!, _pathfinder);
+        _nodeVisualizer = new NodeVisualizer(Room!, _pathfinder.DynamicGraph);
         _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Room);
         _inputDirSprite.sprite.color = Color.red;
         _inputDirSprite.sprite.isVisible = false;
@@ -85,7 +88,8 @@ class JumpSlugAI : ArtificialIntelligence {
     public override void NewRoom(Room room) {
         base.NewRoom(room);
         _pathfinder.NewRoom(room);
-        _visualizer.NewRoom(room);
+        _pathVisualizer.NewRoom(room);
+        _nodeVisualizer.NewRoom(room, _pathfinder.DynamicGraph);
         room.AddObject(_inputDirSprite);
         Room!.AddObject(_currentNodeSprite);
         foreach (var sprite in _predictedIntersectionSprites) {
@@ -106,9 +110,9 @@ class JumpSlugAI : ArtificialIntelligence {
         if (InputHelper.JustPressed(KeyCode.P)) {
             _visualize = !_visualize;
             if (_visualize && _path is not null) {
-                _visualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
+                _pathVisualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
             } else {
-                _visualizer.ClearPath();
+                _pathVisualizer.ClearPath();
             }
             _jumpBoostLabel.isVisible = _visualize;
             _currentConnectionLabel.isVisible = _visualize;
@@ -118,10 +122,23 @@ class JumpSlugAI : ArtificialIntelligence {
                 sprite.sprite.isVisible = false;
             }
         }
+        if (InputHelper.JustPressed(KeyCode.M)) {
+            _visualizeNode = !_visualizeNode;
+        }
 
         FollowPath();
         if (_visualize) {
             UpdateVisualization();
+        }
+        if (_visualizeNode) {
+            var node = CurrentNode();
+            if (node is null) {
+                _nodeVisualizer.ResetSprites();
+            } else {
+                _nodeVisualizer.VisualizeNode(node);
+            }
+        } else {
+            _nodeVisualizer.ResetSprites();
         }
     }
 
@@ -190,9 +207,9 @@ class JumpSlugAI : ArtificialIntelligence {
             );
         if (_visualize) {
             if (_path is null) {
-                _visualizer.ClearPath();
+                _pathVisualizer.ClearPath();
             } else {
-                _visualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
+                _pathVisualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
             }
         }
     }
