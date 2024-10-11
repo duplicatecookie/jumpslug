@@ -54,6 +54,17 @@ public record NodeType {
     public record Wall(int Direction) : NodeType();
 
     private NodeType() { }
+
+    public Color VisualizationColor => this switch {
+        Air => Color.red,
+        Floor => Color.white,
+        Slope => Color.green,
+        Corridor => Color.blue,
+        ShortcutEntrance
+        or RoomExit => Color.cyan,
+        Wall => Color.grey,
+        _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
+    };
 }
 
 /// <summary>
@@ -89,6 +100,19 @@ public record ConnectionType {
     public record SlideOnWall(int Direction) : ConnectionType();
 
     private ConnectionType() { }
+
+    public Color VisualizationColor => this switch {
+        Jump
+        or WalkOffEdge
+        or Pounce => Color.blue,
+        Drop => Color.red,
+        Shortcut => Color.cyan,
+        Crawl => Color.green,
+        Climb => Color.magenta,
+        Walk => Color.white,
+        SlideOnWall => Color.yellow,
+        _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
+    };
 }
 
 /// <summary>

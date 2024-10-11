@@ -38,16 +38,7 @@ class SharedGraphVisualizer {
                 continue;
             }
 
-            var color = node.Type switch {
-                NodeType.Air => Color.red,
-                NodeType.Floor => Color.white,
-                NodeType.Slope => Color.green,
-                NodeType.Corridor => Color.blue,
-                NodeType.ShortcutEntrance
-                or NodeType.RoomExit => Color.cyan,
-                NodeType.Wall => Color.grey,
-                _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
-            };
+            var color = node.Type.VisualizationColor;
 
             var pos = RoomHelper.MiddleOfTile(node.GridPos);
             var fs = new FSprite("pixel") {
@@ -140,16 +131,7 @@ class NodeVisualizer {
     public void VisualizeNode(GraphNode node) {
         Vector2 pixelPos = RoomHelper.MiddleOfTile(node.GridPos);
         _nodeSprite.pos = pixelPos;
-        _nodeSprite.sprite.color = node.Type switch {
-            NodeType.Air => Color.red,
-            NodeType.Floor => Color.white,
-            NodeType.Slope => Color.green,
-            NodeType.Corridor => Color.blue,
-            NodeType.ShortcutEntrance
-            or NodeType.RoomExit => Color.cyan,
-            NodeType.Wall => Color.grey,
-            _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
-        };
+        _nodeSprite.sprite.color = node.Type.VisualizationColor;
         _connectionIndex = 0;
         foreach (var connection in node.Connections) {
             AddConnection(node.GridPos, connection);
@@ -168,18 +150,7 @@ class NodeVisualizer {
             return;
         }
         Vector2 pixelPos = RoomHelper.MiddleOfTile(pos);
-        var color = connection.Type switch {
-            ConnectionType.Jump
-            or ConnectionType.WalkOffEdge
-            or ConnectionType.Pounce => Color.blue,
-            ConnectionType.Drop => Color.red,
-            ConnectionType.Shortcut => Color.cyan,
-            ConnectionType.Crawl => Color.green,
-            ConnectionType.Climb => Color.magenta,
-            ConnectionType.Walk => Color.white,
-            ConnectionType.SlideOnWall => Color.yellow,
-            _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
-        };
+        var color = connection.Type.VisualizationColor;
         if (_connectionIndex >= _connectionSprites.Count) {
             var sprite = new DebugSprite(
                     pixelPos,
@@ -292,18 +263,7 @@ class PathVisualizer {
             IVec2 endTile = path.Nodes[i + 1];
             var start = RoomHelper.MiddleOfTile(startTile);
             var end = RoomHelper.MiddleOfTile(endTile);
-            var color = path.Connections[i] switch {
-                ConnectionType.Jump
-                or ConnectionType.WalkOffEdge
-                or ConnectionType.Pounce => Color.blue,
-                ConnectionType.Drop => Color.red,
-                ConnectionType.Shortcut => Color.cyan,
-                ConnectionType.Crawl => Color.green,
-                ConnectionType.Climb => Color.magenta,
-                ConnectionType.Walk => Color.white,
-                ConnectionType.SlideOnWall => Color.yellow,
-                _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
-            };
+            var color = path.Connections[i].VisualizationColor;
             var connectionType = path.Connections[i];
             var sharedGraph = _room.GetCWT().SharedGraph!;
             if (connectionType is ConnectionType.Jump jump) {
