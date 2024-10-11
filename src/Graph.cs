@@ -701,9 +701,11 @@ public class DynamicGraph {
             ) {
                 TraceDrop(pos);
             }
-        } else if (graphNode.Type is NodeType.Wall jumpWall) {
+        } else if (graphNode.Type is NodeType.Wall jumpWall
+            && sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is NodeType.Wall footJumpWall
+            && jumpWall.Direction == footJumpWall.Direction
+        ) {
             var v0 = descriptor.WallJumpVector(jumpWall.Direction);
-            Plugin.Logger!.LogDebug("wall jump");
             TraceJump(graphNode, pos, v0, new ConnectionType.Jump(-jumpWall.Direction));
         }
         if (Timers.Active) {
