@@ -638,75 +638,73 @@ public class DynamicGraph {
         ) {
             Vector2 v0 = descriptor.VerticalPoleJumpVector(1);
             if (goRight) {
-                TraceJump(pos, pos, v0, new ConnectionType.Jump(1));
+                TraceJump(graphNode, pos, v0, new ConnectionType.Jump(1));
             }
             if (goLeft) {
                 v0.x = -v0.x;
-                TraceJump(pos, pos, v0, new ConnectionType.Jump(-1));
+                TraceJump(graphNode, pos, v0, new ConnectionType.Jump(-1));
             }
         }
         if (graphNode.Beam == GraphNode.BeamType.Horizontal && graphNode.Type is NodeType.Air or NodeType.Wall) {
             var headPos = new IVec2(pos.x, pos.y + 1);
             var v0 = descriptor.HorizontalPoleJumpVector(1);
             if (goRight) {
-                TraceJump(pos, headPos, v0, new ConnectionType.Jump(1));
+                TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(1));
             }
             if (goLeft) {
                 v0.x = -v0.x;
-                TraceJump(pos, headPos, v0, new ConnectionType.Jump(-1));
+                TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(-1));
             }
-            TraceDrop(pos.x, pos.y);
+            TraceDrop(pos);
         }
 
         if (graphNode.Beam == GraphNode.BeamType.Above) {
-            TraceDrop(pos.x, pos.y);
+            TraceDrop(pos);
         } else if (graphNode.Beam == GraphNode.BeamType.Below) {
-            TraceDrop(pos.x, pos.y);
+            TraceDrop(pos);
         }
 
         if (graphNode.Type is NodeType.Floor) {
             var headPos = new IVec2(pos.x, pos.y + 1);
             var v0 = descriptor.FloorJumpVector(1);
             if (goRight) {
-                Plugin.Logger!.LogDebug("from floor right");
-                TraceJump(pos, headPos, v0, new ConnectionType.Jump(1));
+                TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(1));
                 if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
                     v0.y = 0f;
-                    TraceJump(pos, headPos, v0, new ConnectionType.WalkOffEdge(1));
+                    TraceJump(graphNode, headPos, v0, new ConnectionType.WalkOffEdge(1));
                 }
             }
             if (goLeft) {
                 v0.x = -v0.x;
-                Plugin.Logger!.LogDebug("from floor left");
-                TraceJump(pos, headPos, v0, new ConnectionType.Jump(-1));
+                TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(-1));
                 if (sharedGraph.GetNode(pos.x - 1, pos.y - 1)?.Type is NodeType.Wall) {
                     v0.y = 0f;
-                    TraceJump(pos, headPos, v0, new ConnectionType.WalkOffEdge(-1));
+                    TraceJump(graphNode, headPos, v0, new ConnectionType.WalkOffEdge(-1));
                 }
             }
             if (sharedGraph.GetNode(pos.x, pos.y - 1)?.HasPlatform == true) {
-                TraceDrop(pos.x, pos.y);
+                TraceDrop(pos);
             }
 
         } else if (graphNode.Type is NodeType.Corridor) {
             var v0 = descriptor.HorizontalCorridorFallVector(1);
             // v0.x might be too large
             if (sharedGraph.GetNode(pos.x + 1, pos.y) is null) {
-                TraceJump(pos, pos, v0, new ConnectionType.WalkOffEdge(1), upright: false);
+                TraceJump(graphNode, pos, v0, new ConnectionType.WalkOffEdge(1), upright: false);
             }
             if (sharedGraph.GetNode(pos.x - 1, pos.y) is null) {
                 v0.x = -v0.x;
-                TraceJump(pos, pos, v0, new ConnectionType.WalkOffEdge(-1), upright: false);
+                TraceJump(graphNode, pos, v0, new ConnectionType.WalkOffEdge(-1), upright: false);
             }
             if (sharedGraph.GetNode(pos.x, pos.y - 1) is null
                 && _room.Tiles[pos.x, pos.y - 1].Terrain == Room.Tile.TerrainType.Air
             ) {
-                TraceDrop(pos.x, pos.y);
+                TraceDrop(pos);
             }
         } else if (graphNode.Type is NodeType.Wall jumpWall) {
             var v0 = descriptor.WallJumpVector(jumpWall.Direction);
             Plugin.Logger!.LogDebug("wall jump");
-            TraceJump(pos, pos, v0, new ConnectionType.Jump(-jumpWall.Direction));
+            TraceJump(graphNode, pos, v0, new ConnectionType.Jump(-jumpWall.Direction));
         }
         if (Timers.Active) {
             Timers.TraceFromNode.Stop();
@@ -746,7 +744,7 @@ public class DynamicGraph {
     /// whether the slugcat should be treated as falling upright or head first during.
     /// </param>
     private void TraceJump(
-        IVec2 startPos,
+        GraphNode startNode,
         IVec2 headPos,
         Vector2 v0,
         ConnectionType type,
@@ -766,10 +764,6 @@ public class DynamicGraph {
         int xOffset = (direction + 1) / 2;
         var pathOffset = RoomHelper.MiddleOfTile(headPos);
 
-        var startNode = sharedGraph.GetNode(startPos);
-        if (startNode is null) {
-            return;
-        }
         while (true) {
             float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
             float result = Parabola(pathOffset.y, v0, _room.gravity, t) / 20;
@@ -782,7 +776,7 @@ public class DynamicGraph {
                 var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
                 var destConnectionList = AdjacencyLists[x, upright ? y - 1 : y];
                 if (destConnectionList is not null && currentNode?.Type is NodeType.Floor or NodeType.Slope) {
-                    destConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startPos) + 1));
+                    destConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
                 }
                 if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
                     break;
@@ -807,24 +801,28 @@ public class DynamicGraph {
                 break;
             }
             if (shiftedNode.Type is NodeType.Wall wall && wall.Direction == direction) {
-                shiftedConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startPos) + 1));
+                shiftedConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
                 break;
             } else if (shiftedNode.Beam == GraphNode.BeamType.Vertical) {
                 float poleResult = Parabola(pathOffset.y, v0, _room.gravity, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
                 if (poleResult > y && poleResult < y + 1) {
-                    shiftedConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startPos) + 1));
+                    shiftedConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
                 }
             } else if (shiftedNode.Beam == GraphNode.BeamType.Horizontal) {
                 float leftHeight = Parabola(pathOffset.y, v0, _room.gravity, (20 * x - pathOffset.x) / v0.x);
                 float rightHeight = Parabola(pathOffset.y, v0, _room.gravity, (20 * (x + 1) - pathOffset.x) / v0.x);
                 float poleHeight = 20 * y + 10;
                 if (direction * leftHeight < direction * poleHeight && direction * poleHeight < direction * rightHeight) {
-                    shiftedConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startPos) + 2));
+                    shiftedConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 2));
                 }
             } else if (shiftedNode.Beam == GraphNode.BeamType.Cross) {
-                shiftedConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startPos) + 1));
+                shiftedConnectionList.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
             }
         }
+    }
+
+    private void TraceDrop(IVec2 pos) {
+        TraceDrop(pos.x, pos.y);
     }
 
     /// <summary>
