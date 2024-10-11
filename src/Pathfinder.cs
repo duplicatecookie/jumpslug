@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using IVec2 = RWCustom.IntVector2;
+using JetBrains.Annotations;
 
 namespace JumpSlug.Pathfinding;
 
@@ -194,6 +195,10 @@ public class PathNode {
     public void Reset(IVec2 start, PathConnection? connection, float cost) {
         PathCost = cost;
         Connection = connection;
+        ResetHeuristic(start);
+    }
+
+    public void ResetHeuristic(IVec2 start) {
         IVec2 distance = GridPos - start;
         Heuristic = Mathf.Sqrt(
             distance.x * distance.x
@@ -350,21 +355,9 @@ public class PathNodeQueue {
         }
     }
 
-    private void Swap(int i, int j) {
-        (_nodes[i], _nodes[j]) = (_nodes[j], _nodes[i]);
-        IVec2 a = _nodes[i].GridPos;
-        IVec2 b = _nodes[j].GridPos;
-        (_indexMap[b.x, b.y], _indexMap[a.x, a.y]) = (_indexMap[a.x, a.y], _indexMap[b.x, b.y]);
-    }
-
-    public void RemoveRoot() {
-        _nodes[0] = _nodes[_nodes.Count - 1];
-        IVec2 pos = _nodes[0].GridPos;
-        _indexMap[pos.x, pos.y] = 0;
-        _nodes.Pop();
-        int index = 0;
-        int leftIndex = 1;
-        int rightIndex = 2;
+    private void MoveDown(int index) {
+        int leftIndex = 2 * index + 1;
+        int rightIndex = 2 * index + 2;
         while (true) {
             if (rightIndex < _nodes.Count) {
                 float parentCost = _nodes[index].FCost;
@@ -409,6 +402,31 @@ public class PathNodeQueue {
         }
     }
 
+    private void Swap(int i, int j) {
+        (_nodes[i], _nodes[j]) = (_nodes[j], _nodes[i]);
+        IVec2 a = _nodes[i].GridPos;
+        IVec2 b = _nodes[j].GridPos;
+        (_indexMap[b.x, b.y], _indexMap[a.x, a.y]) = (_indexMap[a.x, a.y], _indexMap[b.x, b.y]);
+    }
+
+    public void RemoveRoot() {
+        _nodes[0] = _nodes[_nodes.Count - 1];
+        IVec2 pos = _nodes[0].GridPos;
+        _indexMap[pos.x, pos.y] = 0;
+        _nodes.Pop();
+        MoveDown(0);
+    }
+
+    public void ResetHeuristics(IVec2 start) {
+        foreach (var node in _nodes) {
+            node.ResetHeuristic(start);
+        }
+        // broken piece of shit
+        for (int i = _nodes.Count / 2; i >= 0; i--) {
+            MoveDown(i);
+        }
+    }
+
     public bool Validate() {
         PathNode node;
         for (int i = 0; i < Count; i++) {
@@ -422,9 +440,16 @@ public class PathNodeQueue {
 
     public string DebugList() {
         var validationString = new StringBuilder();
+        int i = 1;
+        int k = 0;
         for (int j = 0; j < Count; j++) {
             validationString.Append(_nodes[j].FCost);
             validationString.Append(" ");
+            if ((j - k) % (int)Mathf.Pow(2, i) == 0) {
+                validationString.Append("\n");
+                k += (int)Mathf.Pow(2, i);
+                i += 1;
+            }
         }
         return validationString.ToString();
     }
@@ -458,6 +483,7 @@ public readonly struct PathNodePool {
 public class Pathfinder {
     private Room _room;
     private SlugcatDescriptor _lastDescriptor;
+    private IVec2 _lastDestination;
     public readonly DynamicGraph DynamicGraph;
     public PathNodePool PathNodePool;
     public BitGrid OpenNodes;
@@ -476,6 +502,7 @@ public class Pathfinder {
     public Pathfinder(Room room, SlugcatDescriptor descriptor) {
         _room = room;
         _lastDescriptor = descriptor;
+        _lastDestination = new IVec2(-1, -1);
         DynamicGraph = new DynamicGraph(room, descriptor);
         var sharedGraph = _room.GetCWT().SharedGraph!;
         PathNodePool = new PathNodePool(sharedGraph);
@@ -534,13 +561,23 @@ public class Pathfinder {
         if (Timers.Active) {
             Timers.FindPath.Start();
         }
-        OpenNodes.Reset();
-        ClosedNodes.Reset();
-        var startNode = PathNodePool[destination]!;
-        startNode.Reset(destination, null, 0);
-        NodeQueue.Reset();
-        NodeQueue.Add(startNode);
-        OpenNodes[destination] = true;
+
+        if (_lastDestination != destination) {
+            OpenNodes.Reset();
+            ClosedNodes.Reset();
+            var destNode = PathNodePool[destination]!;
+            destNode.Reset(start, null, 0);
+            NodeQueue.Reset();
+            NodeQueue.Add(destNode);
+            OpenNodes[destination] = true;
+            _lastDestination = destination;
+        } else {
+            if (ClosedNodes[start]) {
+                return new Path(PathNodePool[start]!);
+            } else {
+                NodeQueue.ResetHeuristics(start);
+            }
+        }
 
         if (_lastDescriptor != descriptor) {
             DynamicGraph.Reset(descriptor);

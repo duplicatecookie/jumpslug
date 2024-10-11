@@ -411,8 +411,8 @@ class PathVisualizer {
 /// </summary>
 public class DebugPathfinder {
     private Room _room;
-    private readonly DebugSprite?[,] _nodeSprites;
-    private readonly DebugSprite?[,] _connectionSprites;
+    private DebugSprite?[,] _nodeSprites;
+    private DebugSprite?[,] _connectionSprites;
     private SlugcatDescriptor _descriptor;
     private PathNodePool _pathNodePool;
     private BitGrid _openNodes;
@@ -423,6 +423,7 @@ public class DebugPathfinder {
     public IVec2 Destination { get; private set; }
     public bool IsInit { get; private set; }
     public bool IsFinished { get; private set; }
+    public bool DisplayingSprites { get; private set; }
 
 
     /// <summary>
@@ -442,8 +443,19 @@ public class DebugPathfinder {
         _pathNodePool = new PathNodePool(sharedGraph);
         _nodeSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
         _connectionSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
-        for (int y = 0; y < sharedGraph.Height; y++) {
-            for (int x = 0; x < sharedGraph.Width; x++) {
+        ResetSprites();
+        _openNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
+        _closedNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
+        _nodeQueue = new PathNodeQueue(
+            _pathNodePool.NonNullCount,
+            _pathNodePool.Width,
+            _pathNodePool.Height
+        );
+    }
+
+    private void ResetSprites() {
+        for (int y = 0; y < _pathNodePool.Height; y++) {
+            for (int x = 0; x < _pathNodePool.Width; x++) {
                 if (_pathNodePool[x, y] is not null) {
                     var pos = RoomHelper.MiddleOfTile(x, y);
                     var nodeSprite = new DebugSprite(
@@ -452,28 +464,21 @@ public class DebugPathfinder {
                             scale = 5f,
                             isVisible = false,
                         },
-                        room
+                        _room
                     );
                     _nodeSprites[x, y] = nodeSprite;
-                    room.AddObject(nodeSprite);
+                    _room.AddObject(nodeSprite);
                     var connectionSprite = new DebugSprite(
                         pos,
                         TriangleMesh.MakeLongMesh(1, false, true),
-                        room
+                        _room
                     );
                     connectionSprite.sprite.isVisible = false;
                     _connectionSprites[x, y] = connectionSprite;
-                    room.AddObject(connectionSprite);
+                    _room.AddObject(connectionSprite);
                 }
             }
         }
-        _openNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
-        _closedNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
-        _nodeQueue = new PathNodeQueue(
-            _pathNodePool.NonNullCount,
-            _pathNodePool.Width,
-            _pathNodePool.Height
-        );
     }
 
     /// <summary>
@@ -489,34 +494,12 @@ public class DebugPathfinder {
                 _pathNodePool.Width,
                 _pathNodePool.Height
             );
-            Reset();
-            foreach (var nodeSprite in _nodeSprites) {
-                if (nodeSprite is not null) {
-                    room.AddObject(nodeSprite);
-                }
-            }
-            foreach (var connectionSprite in _connectionSprites) {
-                if (connectionSprite is not null) {
-                    room.AddObject(connectionSprite);
-                }
-            }
-        }
-    }
-
-    public void Reset() {
-        IsInit = false;
-        _openNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
-        _closedNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
-        foreach (var nodeSprite in _nodeSprites) {
-            if (nodeSprite is not null) {
-                nodeSprite.sprite.color = Color.white;
-                nodeSprite.sprite.isVisible = false;
-            }
-        }
-        foreach (var connectionSprite in _connectionSprites) {
-            if (connectionSprite is not null) {
-                connectionSprite.sprite.isVisible = false;
-            }
+            _openNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
+            _closedNodes = new BitGrid(_dynamicGraph.Width, _dynamicGraph.Height);
+            _nodeSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
+            _connectionSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
+            ResetSprites();
+            IsInit = false;
         }
     }
 
@@ -528,50 +511,86 @@ public class DebugPathfinder {
         if (sharedGraph.GetNode(destination) is null) {
             return;
         }
-        Start = start;
-        Destination = destination;
+
+        var oldStartSprite = _nodeSprites[Start.x, Start.y];
+        if (oldStartSprite is not null) {
+            oldStartSprite.sprite.color = Color.white;
+            if (_closedNodes[Start]) {
+                oldStartSprite.sprite.scale = 5f;
+            } else if (!_openNodes[Start]) {
+                oldStartSprite.sprite.isVisible = false;
+            }
+        }
+
+        if (Destination != destination) {
+            _openNodes.Reset();
+            _closedNodes.Reset();
+            var destNode = _pathNodePool[destination]!;
+            destNode.Reset(start, null, 0);
+            _nodeQueue.Reset();
+            _nodeQueue.Add(destNode);
+            _openNodes[destination] = true;
+            var oldDestSprite = _nodeSprites[Destination.x, Destination.y];
+            if (oldDestSprite is not null) {
+                oldDestSprite.sprite.color = Color.white;
+            }
+            Destination = destination;
+            RemovePathHighlight();
+            HideSprites();
+            Start = start;
+            IsFinished = false;
+        } else {
+            DisplaySprites();
+            if (_closedNodes[start]) {
+                RemovePathHighlight();
+                Start = start;
+                HighlightPath();
+                IsFinished = true;
+            } else {
+                _nodeQueue.ResetHeuristics(start);
+                RemovePathHighlight();
+                Start = start;
+                IsFinished = false;
+            }
+        }
+
         if (_descriptor != descriptor) {
             _dynamicGraph.Reset(descriptor);
             _descriptor = descriptor;
         }
-        var destNode = _pathNodePool[Destination]!;
-        destNode.Reset(Start, null, 0);
-        _nodeQueue.Reset();
-        _nodeQueue.Add(destNode);
-        _openNodes[Destination] = true;
-        var startNodeSprite = _nodeSprites[Start.x, Start.y]!.sprite;
-        startNodeSprite.isVisible = true;
-        startNodeSprite.scale = 10f;
-        startNodeSprite.color = Color.red;
-        var destNodeSprite = _nodeSprites[Destination.x, Destination.y]!.sprite;
-        destNodeSprite.isVisible = true;
-        destNodeSprite.color = Color.blue;
+
+        var startSprite = _nodeSprites[Start.x, Start.y]!.sprite;
+        startSprite.isVisible = true;
+        startSprite.color = Color.red;
+        startSprite.scale = 10f;
+
+        var destSprite = _nodeSprites[Destination.x, Destination.y]!.sprite;
+        destSprite.isVisible = true;
+        destSprite.color = Color.blue;
+        destSprite.scale = 10f;
+
+        DisplayingSprites = true;
+
         IsInit = true;
-        IsFinished = false;
         return;
     }
 
     public void Poll() {
-        if (!IsInit || IsFinished) {
+        if (!IsInit || IsFinished || !DisplayingSprites) {
             return;
         }
         if (_nodeQueue.Count > 0) {
             if (!_nodeQueue.Validate()) {
+                Plugin.Logger!.LogError($"min heap does not satisfy heap property\n{_nodeQueue.DebugList()}");
                 IsFinished = true;
                 return;
             }
             PathNode currentNode = _nodeQueue.Root!;
             var currentPos = currentNode.GridPos;
             if (currentPos == Start) {
-                PathNode? cursor = _pathNodePool[Start];
-                if (cursor is null) {
-                    return;
-                }
-                while (cursor.Connection is not null) {
-                    _connectionSprites[cursor.GridPos.x, cursor.GridPos.y]!.sprite.color = Color.red;
-                    cursor = cursor.Connection.Value.Next;
-                }
+                HighlightPath();
                 IsFinished = true;
+                return;
             }
             _nodeQueue.RemoveRoot();
             _openNodes[currentPos] = false;
@@ -655,6 +674,70 @@ public class DebugPathfinder {
             IsFinished = true;
         }
     }
+
+    private void HighlightPath() {
+        PathNode? cursor = _pathNodePool[Start];
+        if (cursor is null) {
+            return;
+        }
+        while (cursor.Connection is not null) {
+            _connectionSprites[cursor.GridPos.x, cursor.GridPos.y]!.sprite.color = Color.red;
+            cursor = cursor.Connection.Value.Next;
+        }
+    }
+
+    private void RemovePathHighlight() {
+        PathNode? cursor = _pathNodePool[Start];
+        if (cursor is null) {
+            return;
+        }
+        while (cursor.Connection is not null) {
+
+            _connectionSprites[cursor.GridPos.x, cursor.GridPos.y]!.sprite.color = cursor.Connection.Value.Type switch {
+                ConnectionType.Drop
+                or ConnectionType.Jump
+                or ConnectionType.Pounce
+                or ConnectionType.Shortcut
+                or ConnectionType.WalkOffEdge => Color.grey,
+                _ => Color.white,
+            };
+            cursor = cursor.Connection.Value.Next;
+        }
+    }
+
+    public void DisplaySprites() {
+        if (DisplayingSprites || !IsInit) {
+            return;
+        }
+        for (int y = 0; y < _closedNodes.Height; y++) {
+            for (int x = 0; x < _closedNodes.Width; x++) {
+                if (_closedNodes[x, y] || _openNodes[x, y]) {
+                    _nodeSprites[x, y]!.sprite.isVisible = true;
+                    _connectionSprites[x, y]!.sprite.isVisible = true;
+                }
+            }
+        }
+        DisplayingSprites = true;
+    }
+
+    public void HideSprites() {
+        if (!DisplayingSprites) {
+            return;
+        }
+        for (int y = 0; y < _closedNodes.Height; y++) {
+            for (int x = 0; x < _closedNodes.Width; x++) {
+                var nodeSprite = _nodeSprites[x, y];
+                var connectionSprite = _connectionSprites[x, y];
+                if (nodeSprite is not null) {
+                    nodeSprite.sprite.isVisible = false;
+                }
+                if (connectionSprite is not null) {
+                    connectionSprite.sprite.isVisible = false;
+                }
+            }
+        }
+        DisplayingSprites = false;
+    }
 }
 
 static class VisualizerHooks {
@@ -680,17 +763,26 @@ static class VisualizerHooks {
                 self.GetCWT().DebugPathfinder = new DebugPathfinder(self.room, new SlugcatDescriptor(self));
             }
         } else {
-            if (debugPathfinder.IsInit && !debugPathfinder.IsFinished) {
-                debugPathfinder.Poll();
+            if (InputHelper.JustPressed(KeyCode.V)) {
+                if (debugPathfinder.DisplayingSprites) {
+                    debugPathfinder.HideSprites();
+                } else {
+                    debugPathfinder.DisplaySprites();
+                }
             }
             if (InputHelper.JustPressedMouseButton(0)) {
-                debugPathfinder.Reset();
                 var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
                 debugPathfinder.InitPathfinding(
                     RoomHelper.TilePosition(self.bodyChunks[1].pos),
                     RoomHelper.TilePosition(mousePos),
                     new SlugcatDescriptor(self)
                 );
+            }
+            if (debugPathfinder.IsInit
+                && !debugPathfinder.IsFinished
+                && debugPathfinder.DisplayingSprites
+            ) {
+                debugPathfinder.Poll();
             }
         }
         orig(self, eu);
