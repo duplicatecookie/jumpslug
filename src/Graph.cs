@@ -547,14 +547,7 @@ public class DynamicGraph {
         Width = sharedGraph.Width;
         Height = sharedGraph.Height;
         AdjacencyLists = new List<NodeConnection>[Width, Height];
-        for (int y = 0; y < Height; y++) {
-            for (int x = 0; x < Width; x++) {
-                if (sharedGraph.Nodes[x, y] is not null) {
-                    AdjacencyLists[x, y] = new();
-                    TraceFromNode(new IVec2(x, y), _descriptor);
-                }
-            }
-        }
+        ResetLists();
     }
 
     /// <summary>
@@ -567,12 +560,23 @@ public class DynamicGraph {
             Width = sharedGraph.Width;
             Height = sharedGraph.Height;
             AdjacencyLists = new List<NodeConnection>[Width, Height];
-            for (int y = 0; y < Height; y++) {
-                for (int x = 0; x < Width; x++) {
-                    if (sharedGraph.Nodes[x, y] is not null) {
-                        AdjacencyLists[x, y] = new();
-                        TraceFromNode(new IVec2(x, y), _descriptor);
-                    }
+            ResetLists();
+        }
+    }
+
+    private void ResetLists() {
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        for (int y = 0; y < Height; y++) {
+            for (int x = 0; x < Width; x++) {
+                if (sharedGraph.Nodes[x, y] is not null) {
+                    AdjacencyLists[x, y] = new();
+                }
+            }
+        }
+        for (int y = 0; y < Height; y++) {
+            for (int x = 0; x < Width; x++) {
+                if (AdjacencyLists[x, y] is not null) {
+                    TraceFromNode(new IVec2(x, y), _descriptor);
                 }
             }
         }
@@ -580,15 +584,12 @@ public class DynamicGraph {
 
     public void Reset(SlugcatDescriptor descriptor) {
         _descriptor = descriptor;
-        var sharedGraph = _room.GetCWT().SharedGraph!;
         for (int y = 0; y < Height; y++) {
             for (int x = 0; x < Width; x++) {
                 var list = AdjacencyLists[x, y];
                 if (list is not null) {
                     list.Clear();
-                    if (sharedGraph.GetNode(x, y) is not null) {
-                        TraceFromNode(new IVec2(x, y), _descriptor);
-                    }
+                    TraceFromNode(new IVec2(x, y), _descriptor);
                 }
             }
         }
