@@ -610,7 +610,7 @@ public class DynamicGraph {
         }
         var sharedGraph = _room.GetCWT().SharedGraph!;
         var graphNode = sharedGraph.GetNode(pos);
-        if (graphNode is null) {
+        if (graphNode is null || graphNode.Type is NodeType.ShortcutEntrance or NodeType.RoomExit) {
             if (Timers.Active) {
                 Timers.TraceFromNode.Stop();
             }
