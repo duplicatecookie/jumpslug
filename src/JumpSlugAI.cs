@@ -369,6 +369,10 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.x = edgeWalk.Direction;
                     } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
                         input.x = pounce.Direction;
+                    } else if (currentConnection.Type is ConnectionType.Drop
+                        && node?.Type is NodeType.Floor
+                    ) {
+                        input.y = -1;
                     }
                 }
                 Player.input[0] = input;
