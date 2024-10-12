@@ -23,7 +23,9 @@ class JumpSlugAI : ArtificialIntelligence {
     private bool _waitOneTick;
     private IVec2? _destination;
     private readonly Pathfinder _pathfinder;
-    private Path? _path;
+    private GraphNode? _currentNode;
+    private PathConnection? _currentConnection;
+    private bool _performingAirMovement;
     private int _offPathCounter;
     private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 5;
     private const int MAX_SPRITES = 16;
@@ -109,10 +111,14 @@ class JumpSlugAI : ArtificialIntelligence {
         }
         if (InputHelper.JustPressed(KeyCode.P)) {
             _visualize = !_visualize;
-            if (_visualize && _path is not null) {
-                _pathVisualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
-            } else {
+            if (!_visualize || _currentConnection is null || _currentNode is null) {
                 _pathVisualizer.ClearPath();
+            } else {
+                _pathVisualizer.DisplayPath(
+                    _currentNode.GridPos,
+                    _currentConnection.Value,
+                    new SlugcatDescriptor(Player)
+                );
             }
             _jumpBoostLabel.isVisible = _visualize;
             _currentConnectionLabel.isVisible = _visualize;
@@ -126,7 +132,7 @@ class JumpSlugAI : ArtificialIntelligence {
             _visualizeNode = !_visualizeNode;
         }
 
-        FollowPath();
+        Move();
         if (_visualize) {
             UpdateVisualization();
         }
@@ -146,7 +152,7 @@ class JumpSlugAI : ArtificialIntelligence {
         foreach (var sprite in _predictedIntersectionSprites) {
             sprite.sprite.isVisible = false;
         }
-        _currentConnectionLabel.text = _path?.CurrentConnection() switch {
+        _currentConnectionLabel.text = _currentConnection?.Type switch {
             null => "None",
             ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
             ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
@@ -168,9 +174,9 @@ class JumpSlugAI : ArtificialIntelligence {
         labelPos.y += 20;
         _jumpBoostLabel.SetPosition(labelPos);
 
-        if (_path?.CurrentNode() is IVec2 current) {
+        if (_currentNode is not null) {
             _currentNodeSprite.sprite.isVisible = true;
-            _currentNodeSprite.pos = RoomHelper.MiddleOfTile(current);
+            _currentNodeSprite.pos = RoomHelper.MiddleOfTile(_currentNode.GridPos);
         } else {
             _currentNodeSprite.sprite.isVisible = false;
         }
@@ -197,19 +203,26 @@ class JumpSlugAI : ArtificialIntelligence {
     }
 
     private void FindPath() {
-        var start = CurrentNode();
-        _path = start is null || _destination is null
-            ? null
-            : _pathfinder.FindPath(
-                start.GridPos,
+        if (_currentNode is null || _destination is null) {
+            _currentConnection = null;
+            return;
+        } else {
+            _currentConnection = _pathfinder.FindPath(
+                _currentNode.GridPos,
                 _destination.Value,
                 new SlugcatDescriptor(Player)
             );
+
+        }
         if (_visualize) {
-            if (_path is null) {
+            if (_currentConnection is null) {
                 _pathVisualizer.ClearPath();
             } else {
-                _pathVisualizer.DisplayPath(_path, new SlugcatDescriptor(Player));
+                _pathVisualizer.DisplayPath(
+                    _currentNode.GridPos,
+                    _currentConnection.Value,
+                    new SlugcatDescriptor(Player)
+                );
             }
         }
     }
@@ -226,9 +239,10 @@ class JumpSlugAI : ArtificialIntelligence {
     }
 
     private bool FallingTowardsPath() {
-        if (_path is null) {
+        if (_currentConnection is null) {
             return false;
         }
+        var currentConnection = _currentConnection.Value;
         var sharedGraph = Player.room.GetCWT().SharedGraph!;
         IVec2 headPos = RoomHelper.TilePosition(Player.bodyChunks[0].pos);
         int x = headPos.x;
@@ -254,9 +268,7 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
 
                 // TODO: extenally messing with the cursor like this is bad, fix when reworking how nodes are found inside the path 
-                int initialCursor = _path.Cursor;
-                if (_path.FindNodeAhead(new IVec2(x, y))) {
-                    _path.Cursor = initialCursor;
+                if (currentConnection.FindInPath(new IVec2(x, y)) is not null) {
                     return true;
                 }
                 if (currentNode.Type is NodeType.Floor or NodeType.Slope) {
@@ -297,10 +309,7 @@ class JumpSlugAI : ArtificialIntelligence {
                     spriteIndex++;
                 }
 
-                // TODO: extenally messing with the cursor like this is bad, fix when reworking how nodes are found inside the path 
-                int initialCursor = _path.Cursor;
-                if (_path.FindNodeAhead(new IVec2(x, y))) {
-                    _path.Cursor = initialCursor;
+                if (currentConnection.FindInPath(new IVec2(x, y)) is not null) {
                     return true;
                 }
             }
@@ -329,244 +338,228 @@ class JumpSlugAI : ArtificialIntelligence {
         return sharedGraph.GetNode(headPos);
     }
 
-    private void FollowPath() {
+    private void Move() {
         Player.InputPackage input = default;
-        if (_path is null || _waitOneTick) {
+        if (_waitOneTick || _destination is null) {
             Player.input[0] = input;
             _waitOneTick = false;
             return;
         }
+
         if (Timers.Active) {
             Timers.FollowPath.Start();
         }
-        // checked in outher scope
-        var sharedGraph = Room!.GetCWT().SharedGraph!;
+
         IVec2 headPos = RoomHelper.TilePosition(Player.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(Player.bodyChunks[1].pos);
 
-        bool fallingTowardsPath = false;
-        if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
-            if (!_path.FindNode(headPos)
-                && !_path.FindEitherNode(footPos, new IVec2(headPos.x, headPos.y - 1))
-                && CurrentNode() is not null
-            ) {
-                FindPath();
-            }
-        } else if (Player.bodyMode == Player.BodyModeIndex.Stand) {
-            if (CurrentNode() is not null
-                && !_path.FindEitherNode(footPos, new IVec2(footPos.x, footPos.y - 1))
-            ) {
-                if (_path.CurrentConnection() is ConnectionType.WalkOffEdge) {
-                    FindPathIfNotFallingTowardsPathForTooLong();
+        if (_performingAirMovement) {
+            var node = CurrentNode();
+            if (node is null || node == _currentNode) {
+                if (_currentConnection is null) {
+                    _performingAirMovement = false;
                 } else {
+                    var currentConnection = _currentConnection!.Value;
+                    if (currentConnection.Type is ConnectionType.Jump jump) {
+                        input.x = jump.Direction;
+                        if (Player.jumpBoost > 0) {
+                            input.jmp = true;
+                        }
+                    } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
+                        input.x = edgeWalk.Direction;
+                    } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
+                        input.x = pounce.Direction;
+                    }
+                }
+                Player.input[0] = input;
+                if (Timers.Active) {
+                    Timers.FollowPath.Stop();
+                }
+                return;
+            } else {
+                var connection = _currentConnection!.Value.FindInPath(node.GridPos);
+                if (connection is not null) {
+                    _currentNode = node;
+                    _currentConnection = connection;
+                    _performingAirMovement = false;
+                } else if (FallingTowardsPath()) {
+                    var currentConnection = _currentConnection.Value;
+                    if (currentConnection.Type is ConnectionType.Jump jump) {
+                        input.x = jump.Direction;
+                        if (Player.jumpBoost > 0) {
+                            input.jmp = true;
+                        }
+                    } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
+                        input.x = edgeWalk.Direction;
+                    } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
+                        input.x = pounce.Direction;
+                    }
+
+                    if (Timers.Active) {
+                        Timers.FollowPath.Stop();
+                    }
+                    return;
+                } else {
+                    _performingAirMovement = false;
+                    _currentNode = node;
                     FindPath();
                 }
             }
-        } else if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
-            && (Player.animation == Player.AnimationIndex.StandOnBeam
-                || Player.animation == Player.AnimationIndex.BeamTip
-            )
-        ) {
-            if (!_path.FindNode(footPos)
-                && !_path.FindNode(new IVec2(footPos.x, footPos.y - 1))
-                && CurrentNode() is not null
-            ) {
-                FindPath();
-            }
-        } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
-            if (CurrentNode() is not null
-                && !_path.FindNodeAhead(footPos)
-                && !_path.FindNodeAhead(headPos)
-            ) {
-                if (_path.CurrentConnection()
-                    is ConnectionType.Drop
-                    or ConnectionType.Jump
-                    or ConnectionType.WalkOffEdge
-                ) {
-                    FindPathIfNotFallingTowardsPathForTooLong();
-                } else {
-                    FindPath();
+        } else {
+            _currentNode = CurrentNode();
+            if (_currentNode is null || _currentNode.GridPos == _destination) {
+                _currentConnection = null;
+                Player.input[0] = input;
+                if (Timers.Active) {
+                    Timers.FollowPath.Stop();
                 }
+                return;
             }
-        } else if (!_path.FindNode(headPos)
-            && !_path.FindNode(footPos)
-            && CurrentNode() is not null
-        ) {
             FindPath();
         }
 
-        GraphNode? currentNode;
-        if (_path?.CurrentNode() is null || fallingTowardsPath) {
-            if (_path?.CurrentConnection() is ConnectionType.Jump(int jumpDir) && Player.jumpBoost > 0) {
-                input.x = jumpDir;
-                input.jmp = true;
-            }
-            Player.input[0] = input;
-            // can't move on non-existent node, wait instead
-            if (Timers.Active) {
-                Timers.FollowPath.Stop();
-            }
-            return;
-        } else {
-            // this should never be null assuming correct path generation
-            currentNode = sharedGraph.GetNode(_path.CurrentNode()!.Value)!;
-        }
-
-        var currentPathPos = _path.CurrentNode()!.Value;
-        var currentConnection = _path.CurrentConnection();
-
-        if (currentConnection is null) {
-            if (currentNode.HasBeam
-                && Player.bodyMode != Player.BodyModeIndex.ClimbingOnBeam
-            ) {
+        if (_currentConnection is null) {
+            if (_currentNode.HasBeam && Player.bodyMode != Player.BodyModeIndex.ClimbingOnBeam) {
                 input.y = 1;
             }
-            _path = null;
-        } else if (currentConnection is ConnectionType.Walk(int direction)) {
-            if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                if (currentPathPos.y == headPos.y) {
-                    input.y = 1;
-                } else {
-                    input.y = -1;
-                    input.jmp = true;
-                }
-            } else {
-                if (_path.PeekConnection(1) is ConnectionType.Crawl(IVec2 crawlDir)) {
-                    if (crawlDir.y < 0) {
+        } else {
+            var currentConnection = _currentConnection.Value;
+            if (currentConnection.Type is ConnectionType.Walk(int direction)) {
+                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                    if (_currentNode.GridPos.y == headPos.y) {
+                        input.y = 1;
+                    } else {
                         input.y = -1;
-                        if (Player.animation != Player.AnimationIndex.DownOnFours
-                            && Player.bodyMode != Player.BodyModeIndex.Default
-                        ) {
+                        input.jmp = true;
+                    }
+                } else {
+                    if (currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 crawlDir)) {
+                        if (crawlDir.y < 0) {
+                            input.y = -1;
+                            if (Player.animation != Player.AnimationIndex.DownOnFours
+                                && Player.bodyMode != Player.BodyModeIndex.Default
+                            ) {
+                                input.x = direction;
+                            }
+                        } else {
                             input.x = direction;
+                            if (crawlDir.x != 0 && currentConnection.PeekPos(2)?.y == _currentNode.GridPos.y) {
+                                input.y = -1;
+                            }
                         }
                     } else {
                         input.x = direction;
-                        if (crawlDir.x != 0 && _path.PeekNode(2)?.y == currentPathPos.y) {
-                            input.y = -1;
-                        }
-                    }
-                } else {
-                    input.x = direction;
-                    if (_path.PeekConnection(1) is ConnectionType.Drop
-                        || _path.PeekConnection(2) is ConnectionType.Drop
-                    ) {
-                        if (Player.bodyMode == Player.BodyModeIndex.Stand) {
-                            input.y = -1;
-                        }
-                    } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
-                        input.y = 1;
-                    }
-                }
-            }
-        } else if (currentConnection is ConnectionType.Crawl(IVec2 dir)) {
-            input.x = dir.x;
-            input.y = dir.y;
-            bool backwards = (Player.bodyChunks[0].pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0;
-            if (Player.bodyMode != Player.BodyModeIndex.WallClimb
-                && _path.PeekConnection(1) is ConnectionType.Crawl(IVec2 nextDir)
-            ) {
-                if (backwards) {
-                    // turn around if going backwards
-                    // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
-                    if (dir == nextDir) {
-                        input.jmp = true;
-                    } else if (dir.Dot(nextDir) == 0) {
-                        input.x = nextDir.x;
-                        input.y = nextDir.y;
-                    }
-                }
-            }
-        } else if (currentConnection is ConnectionType.Climb(IVec2 climbDir)) {
-            if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                if (_path.PeekConnection(1) is ConnectionType.Walk && climbDir.y < 0) {
-                    input.y = -1;
-                    input.jmp = true;
-                } else {
-                    input.x = climbDir.x;
-                    if (climbDir.x != 0 && (Player.flipDirection != climbDir.x || Player.animation == Player.AnimationIndex.ClimbOnBeam)) {
-                        _waitOneTick = true;
-                    } else if (Player.animation == Player.AnimationIndex.StandOnBeam) {
-                        if (climbDir.y != 0) {
+                        if (currentConnection.PeekType(1) is ConnectionType.Drop
+                            || currentConnection.PeekType(2) is ConnectionType.Drop
+                        ) {
+                            if (Player.bodyMode == Player.BodyModeIndex.Stand) {
+                                input.y = -1;
+                            }
+                        } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
                             input.y = 1;
                         }
-                        if (climbDir.x != 0) {
-                            var nextPos = _path.PeekNode(2);
-                            if (nextPos is not null) {
-                                var terrain = Room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
-                                if (terrain == Room.Tile.TerrainType.Solid
-                                    || terrain == Room.Tile.TerrainType.Slope
-                                ) {
-                                    input.y = -1;
-                                }
-                            }
-                        }
-                    } else if (Player.animation != Player.AnimationIndex.GetUpOnBeam
-                        && currentNode.Beam == GraphNode.BeamType.Horizontal
-                        && Room!.GetTile(currentPathPos.x, currentPathPos.y + 1).Terrain == Room.Tile.TerrainType.Air
-                        && Player.input[1].y != 1
-                    ) {
-                        var nextPos = _path.PeekNode(2);
-                        if (nextPos is not null) {
-                            var terrain = Room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
-                            if (terrain != Room.Tile.TerrainType.Solid
-                                && terrain != Room.Tile.TerrainType.Slope
-                            ) {
-                                input.y = 1;
-                            }
-                        }
-                    } else {
-                        input.y = climbDir.y;
                     }
                 }
-            } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb) {
-                input.x = climbDir.x;
-                input.y = climbDir.y;
-            } else {
-                input.x = climbDir.x;
-                if (currentNode.HasBeam) {
-                    input.y = 1;
-                } else {
-                    Plugin.Logger!.LogWarning("trying to climb on node without pole");
-                }
-            }
-        } else if (currentConnection is ConnectionType.Drop) {
-            if (Mathf.Abs(Player.mainBodyChunk.vel.x) < 0.5f) {
-                if (Player.bodyMode != Player.BodyModeIndex.Default
-                    || currentNode.Type is NodeType.Floor
+            } else if (currentConnection.Type is ConnectionType.Crawl(IVec2 dir)) {
+                input.x = dir.x;
+                input.y = dir.y;
+                bool backwards = (Player.bodyChunks[0].pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0;
+                if (Player.bodyMode != Player.BodyModeIndex.WallClimb
+                    && currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 nextDir)
                 ) {
+                    if (backwards) {
+                        // turn around if going backwards
+                        // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
+                        if (dir == nextDir) {
+                            input.jmp = true;
+                        } else if (dir.Dot(nextDir) == 0) {
+                            input.x = nextDir.x;
+                            input.y = nextDir.y;
+                        }
+                    }
+                }
+            } else if (currentConnection.Type is ConnectionType.Climb(IVec2 climbDir)) {
+                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                    if (currentConnection.PeekType(1) is ConnectionType.Walk && climbDir.y < 0) {
+                        input.y = -1;
+                        input.jmp = true;
+                    } else {
+                        input.x = climbDir.x;
+                        if (climbDir.x != 0 && (Player.flipDirection != climbDir.x || Player.animation == Player.AnimationIndex.ClimbOnBeam)) {
+                            _waitOneTick = true;
+                        } else if (Player.animation == Player.AnimationIndex.StandOnBeam) {
+                            if (climbDir.y != 0) {
+                                input.y = 1;
+                            }
+                            if (climbDir.x != 0) {
+                                var nextPos = currentConnection.PeekPos(2);
+                                if (nextPos is not null) {
+                                    var terrain = Room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
+                                    if (terrain == Room.Tile.TerrainType.Solid
+                                        || terrain == Room.Tile.TerrainType.Slope
+                                    ) {
+                                        input.y = -1;
+                                    }
+                                }
+                            }
+                        } else if (Player.animation != Player.AnimationIndex.GetUpOnBeam
+                            && _currentNode.Beam == GraphNode.BeamType.Horizontal
+                            && Room!.GetTile(_currentNode.GridPos.x, _currentNode.GridPos.y + 1).Terrain == Room.Tile.TerrainType.Air
+                            && Player.input[1].y != 1
+                        ) {
+                            var nextPos = currentConnection.PeekPos(2);
+                            if (nextPos is not null) {
+                                var terrain = Room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
+                                if (terrain != Room.Tile.TerrainType.Solid
+                                    && terrain != Room.Tile.TerrainType.Slope
+                                ) {
+                                    input.y = 1;
+                                }
+                            }
+                        } else {
+                            input.y = climbDir.y;
+                        }
+                    }
+                } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb) {
+                    input.x = climbDir.x;
+                    input.y = climbDir.y;
+                } else {
+                    input.x = climbDir.x;
+                    if (_currentNode.HasBeam) {
+                        input.y = 1;
+                    } else {
+                        Plugin.Logger!.LogWarning("trying to climb on node without pole");
+                    }
+                }
+            } else if (currentConnection.Type is ConnectionType.Drop) {
+                if (Mathf.Abs(Player.mainBodyChunk.vel.x) < 0.5f) {
                     input.y = -1;
                     if (Player.animation == Player.AnimationIndex.HangUnderVerticalBeam) {
                         _waitOneTick = true;
                     }
+                    _performingAirMovement = true;
                 }
-            }
-        } else if (currentConnection is ConnectionType.Jump(int jumpDir)) {
-            if (currentNode.HasBeam
-                && Player.bodyMode != Player.BodyModeIndex.ClimbingOnBeam
-                && _path.PeekConnection(-1)
-                is null
-                or ConnectionType.Jump
-                or ConnectionType.WalkOffEdge
-                or ConnectionType.Drop
-            ) {
-                input.y = 1;
-            } else {
+            } else if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
                 if (Player.bodyMode == Player.BodyModeIndex.Stand) {
                     if (Player.flipDirection == jumpDir) {
+                        _performingAirMovement = true;
                         input.jmp = true;
                     }
                     input.x = jumpDir;
                 } else if (Player.bodyMode == Player.BodyModeIndex.WallClimb) {
                     input.jmp = true;
                     input.x = jumpDir;
+                    _performingAirMovement = true;
                 } else if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
                     if (Player.animation == Player.AnimationIndex.ClimbOnBeam) {
                         if (Player.flipDirection == jumpDir) {
                             input.jmp = true;
+                            _performingAirMovement = true;
                         }
                         input.x = jumpDir;
                     } else if (Player.animation == Player.AnimationIndex.HangFromBeam) {
                         input.y = 1;
+                        _waitOneTick = true;
                     } else if (Player.animation == Player.AnimationIndex.StandOnBeam) {
                         if (headPos.x == footPos.x
                             && headPos.y == footPos.y + 1
@@ -574,34 +567,34 @@ class JumpSlugAI : ArtificialIntelligence {
                         ) {
                             input.jmp = true;
                             input.x = jumpDir;
+                            _performingAirMovement = true;
                         } else {
                             input.y = 1;
                         }
-                    } else if (Player.animation == Player.AnimationIndex.None && Player.input[1].jmp) {
-                        input.jmp = true;
-                        input.x = jumpDir;
                     }
                 } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
-                    if (Player.jumpBoost > 0) {
-                        input.jmp = true;
+                    if (_currentNode.HasBeam) {
+                        input.y = 1;
                     }
-                    input.x = jumpDir;
                 }
+            } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
+                input.x = walkDir;
+                if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                    input.y = -1;
+                    input.jmp = true;
+                    _performingAirMovement = true;
+                } else if (Player.bodyMode == Player.BodyModeIndex.Stand) {
+                    _performingAirMovement = true;
+                } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
+                    input.y = 1;
+                }
+            } else if (currentConnection.Type is ConnectionType.SlideOnWall(int wallDir)) {
+                input.x = wallDir;
             }
-        } else if (currentConnection is ConnectionType.WalkOffEdge(int walkDir)) {
-            input.x = walkDir;
-            if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                input.y = -1;
-                input.jmp = true;
-            } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
-                input.y = 1;
+            Player.input[0] = input;
+            if (Timers.Active) {
+                Timers.FollowPath.Stop();
             }
-        } else if (currentConnection is ConnectionType.SlideOnWall(int wallDir)) {
-            input.x = wallDir;
-        }
-        Player.input[0] = input;
-        if (Timers.Active) {
-            Timers.FollowPath.Stop();
         }
     }
 }

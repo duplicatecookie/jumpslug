@@ -251,20 +251,17 @@ class PathVisualizer {
         }
     }
 
-    public void DisplayPath(Path path, SlugcatDescriptor slugcat) {
+    public void DisplayPath(IVec2 startPos, PathConnection startConnection, SlugcatDescriptor slugcat) {
         ClearPath();
-
-        if (path.NodeCount <= 2) {
-            return;
-        }
-
-        for (int i = 0; i < path.ConnectionCount; i++) {
-            IVec2 startTile = path.Nodes[i];
-            IVec2 endTile = path.Nodes[i + 1];
+        var cursor = startConnection;
+        var currentPos = startPos;
+        while (cursor.Next.Connection is not null) {
+            IVec2 startTile = currentPos;
+            IVec2 endTile = cursor.Next.GridPos;
             var start = RoomHelper.MiddleOfTile(startTile);
             var end = RoomHelper.MiddleOfTile(endTile);
-            var color = path.Connections[i].VisualizationColor;
-            var connectionType = path.Connections[i];
+            var connectionType = cursor.Type;
+            var color = connectionType.VisualizationColor;
             var sharedGraph = _room.GetCWT().SharedGraph!;
             if (connectionType is ConnectionType.Jump jump) {
                 // this node can be null only if the path is constructed incorrectly so this should throw
@@ -289,19 +286,21 @@ class PathVisualizer {
                 }
                 AddLabel(connectionType, startTile, endTile, v0);
             } else if (connectionType is ConnectionType.WalkOffEdge edgeWalk) {
-                var startPos = new IVec2(
+                var edgeWalkStart = new IVec2(
                     startTile.x,
                     sharedGraph.GetNode(startTile)?.Type is NodeType.Corridor ? startTile.y : startTile.y + 1
                 );
                 var v0 = slugcat.HorizontalCorridorFallVector(edgeWalk.Direction);
-                VisualizeJump(v0, startPos, endTile);
-                VisualizeJumpTracing(v0, startPos);
-                AddLine(start, RoomHelper.MiddleOfTile(startPos), Color.white);
+                VisualizeJump(v0, edgeWalkStart, endTile);
+                VisualizeJumpTracing(v0, edgeWalkStart);
+                AddLine(start, RoomHelper.MiddleOfTile(edgeWalkStart), Color.white);
                 AddLabel(connectionType, startTile, endTile, v0);
             } else if (connectionType is ConnectionType.Drop) {
                 AddLabel(connectionType, startTile, endTile, Vector2.zero);
             }
             AddLine(start, end, color);
+            currentPos = cursor.Next.GridPos;
+            cursor = cursor.Next.Connection.Value;
         }
     }
 
