@@ -480,9 +480,13 @@ class JumpSlugAI : ArtificialIntelligence {
                 }
             } else if (currentConnection.Type is ConnectionType.Climb(IVec2 climbDir)) {
                 if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                    if (currentConnection.PeekType(1) is ConnectionType.Walk && climbDir.y < 0) {
-                        input.y = -1;
-                        input.jmp = true;
+                    if (currentConnection.PeekType(1) is ConnectionType.Walk) {
+                        if (climbDir.y < 0) {
+                            input.y = -1;
+                            input.jmp = true;
+                        } else {
+                            input.y = 1;
+                        }
                     } else {
                         input.x = climbDir.x;
                         if (climbDir.x != 0 && (Player.flipDirection != climbDir.x || Player.animation == Player.AnimationIndex.ClimbOnBeam)) {
@@ -523,6 +527,13 @@ class JumpSlugAI : ArtificialIntelligence {
                 } else if (Player.bodyMode == Player.BodyModeIndex.CorridorClimb) {
                     input.x = climbDir.x;
                     input.y = climbDir.y;
+                } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
+                    if (currentConnection.PeekType(1) is ConnectionType.Walk(int walkDir) && climbDir.y < 0) {
+                        input.x = walkDir;
+                    } else {
+                        input.x = climbDir.x;
+                        input.y = 1;
+                    }
                 } else {
                     input.x = climbDir.x;
                     if (_currentNode.HasBeam) {
