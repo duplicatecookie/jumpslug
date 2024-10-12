@@ -334,6 +334,10 @@ class JumpSlugAI : ArtificialIntelligence {
             return sharedGraph.GetNode(footPos) is GraphNode node
                 ? node
                 : sharedGraph.GetNode(footPos.x, footPos.y - 1);
+        } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
+            return sharedGraph.GetNode(headPos) is GraphNode node
+                ? node
+                : sharedGraph.GetNode(footPos);
         }
         return sharedGraph.GetNode(headPos);
     }
@@ -350,6 +354,7 @@ class JumpSlugAI : ArtificialIntelligence {
             Timers.FollowPath.Start();
         }
 
+        var sharedGraph = Room!.GetCWT().SharedGraph!;
         IVec2 headPos = RoomHelper.TilePosition(Player.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(Player.bodyChunks[1].pos);
 
@@ -430,7 +435,9 @@ class JumpSlugAI : ArtificialIntelligence {
             var currentConnection = _currentConnection.Value;
             if (currentConnection.Type is ConnectionType.Walk(int direction)) {
                 if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                    if (_currentNode.GridPos.y == headPos.y) {
+                    if (sharedGraph.GetNode(footPos)?.Type is NodeType.Corridor) {
+                        input.x = direction;
+                    } else if (_currentNode.GridPos.y == headPos.y) {
                         input.y = 1;
                     } else {
                         input.y = -1;
@@ -470,6 +477,7 @@ class JumpSlugAI : ArtificialIntelligence {
                 bool backwards = (Player.bodyChunks[0].pos - Player.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0;
                 if (Player.bodyMode != Player.BodyModeIndex.WallClimb
                     && currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 nextDir)
+                    && _currentNode.Type is not NodeType.Floor
                 ) {
                     if (backwards) {
                         // turn around if going backwards

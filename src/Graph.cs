@@ -302,10 +302,10 @@ public class SharedGraph {
                         );
                     }
                     if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor or NodeType.Slope or NodeType.Floor) {
-                        currentNode.Connections.Add(
+                        Nodes[x + 1, y + 1]!.Connections.Add(
                             new NodeConnection(
                                 new ConnectionType.Walk(1),
-                                Nodes[x + 1, y + 1]!
+                                currentNode
                             )
                         );
                     }
