@@ -10,7 +10,6 @@ using UnityEngine;
 
 using JumpSlug.Pathfinding;
 using RWCustom;
-using IL.MoreSlugcats;
 
 namespace JumpSlug;
 
@@ -340,7 +339,9 @@ class JumpSlugAI : ArtificialIntelligence {
             return sharedGraph.GetNode(footPos) is GraphNode node
                 ? node
                 : sharedGraph.GetNode(footPos.x, footPos.y - 1);
-        } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {
+        } else if (Player.bodyMode == Player.BodyModeIndex.Crawl
+            || Player.bodyMode == Player.BodyModeIndex.CorridorClimb
+        ) {
             return sharedGraph.GetNode(headPos) is GraphNode node
                 ? node
                 : sharedGraph.GetNode(footPos);
@@ -429,7 +430,18 @@ class JumpSlugAI : ArtificialIntelligence {
         } else {
             _currentNode = CurrentNode();
             if (_currentNode is null || _currentNode.GridPos == _destination) {
-                _currentConnection = null;
+                if (_currentConnection?.Type is ConnectionType.Drop) {
+                    _performingAirMovement = true;
+                } else {
+                    _currentConnection = null;
+                }
+                Player.input[0] = input;
+                if (Timers.Active) {
+                    Timers.FollowPath.Stop();
+                }
+                return;
+            } else if (_currentNode.HasPlatform && Player.bodyMode == Player.BodyModeIndex.Default) {
+                _performingAirMovement = true;
                 Player.input[0] = input;
                 if (Timers.Active) {
                     Timers.FollowPath.Stop();
@@ -582,8 +594,10 @@ class JumpSlugAI : ArtificialIntelligence {
                     input.y = -1;
                     if (Player.animation == Player.AnimationIndex.HangUnderVerticalBeam) {
                         _waitOneTick = true;
+                    } else if (Player.animation == Player.AnimationIndex.ClimbOnBeam) {
+                        input.jmp = true;
+                        _performingAirMovement = true;
                     }
-                    _performingAirMovement = true;
                 }
             } else if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
                 if (Player.bodyMode == Player.BodyModeIndex.Stand) {
