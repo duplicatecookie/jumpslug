@@ -642,9 +642,23 @@ class JumpSlugAI : ArtificialIntelligence {
             } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
                 input.x = walkDir;
                 if (Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                    input.y = -1;
-                    input.jmp = true;
-                    _performingAirMovement = true;
+                    if (Player.animation == Player.AnimationIndex.ClimbOnBeam) {
+                        input.y = -1;
+                        input.jmp = true;
+                        _performingAirMovement = true;
+                    } else if (Player.animation == Player.AnimationIndex.StandOnBeam) {
+                        if (headPos.x == footPos.x
+                            && headPos.y == footPos.y + 1
+                            && Player.bodyChunks[0].vel.x < 5f
+                        ) {
+                            input.x = walkDir;
+                            input.y = -1;
+                            _performingAirMovement = true;
+                        }
+                    } else {
+                        input.y = -1;
+                        _performingAirMovement = true;
+                    }
                 } else if (Player.bodyMode == Player.BodyModeIndex.Stand) {
                     _performingAirMovement = true;
                 } else if (Player.bodyMode == Player.BodyModeIndex.Crawl) {

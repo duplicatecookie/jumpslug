@@ -648,12 +648,16 @@ public class DynamicGraph {
         if (graphNode.Beam == GraphNode.BeamType.Horizontal && graphNode.Type is NodeType.Air or NodeType.Wall) {
             var headPos = new IVec2(pos.x, pos.y + 1);
             var v0 = descriptor.HorizontalPoleJumpVector(1);
+            var fallV0 = v0 with { y = 0 };
             if (goRight) {
                 TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(1));
+                TraceJump(graphNode, headPos, fallV0, new ConnectionType.WalkOffEdge(1));
             }
             if (goLeft) {
                 v0.x = -v0.x;
+                fallV0.x = -fallV0.x;
                 TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(-1));
+                TraceJump(graphNode, headPos, fallV0, new ConnectionType.WalkOffEdge(-1));
             }
             TraceDrop(pos);
         }
@@ -849,7 +853,7 @@ public class DynamicGraph {
                             new NodeConnection(
                                 new ConnectionType.Drop(),
                                 startNode,
-                                Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
+                                y - i
                             )
                         );
                     }
@@ -858,7 +862,7 @@ public class DynamicGraph {
                         new NodeConnection(
                             new ConnectionType.Drop(),
                             startNode,
-                            Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
+                            y - i
                         )
                     );
                 }
@@ -869,7 +873,7 @@ public class DynamicGraph {
                     new NodeConnection(
                         new ConnectionType.Drop(),
                         startNode,
-                        Mathf.Sqrt(2 * 20 * (y - i) / _room.gravity) * 4.2f / 20
+                        y - 1
                     )
                 );
                 break;
