@@ -10,6 +10,7 @@ using UnityEngine;
 
 using JumpSlug.Pathfinding;
 using RWCustom;
+using IL.MoreSlugcats;
 
 namespace JumpSlug;
 
@@ -338,6 +339,12 @@ class JumpSlugAI : ArtificialIntelligence {
             return sharedGraph.GetNode(headPos) is GraphNode node
                 ? node
                 : sharedGraph.GetNode(footPos);
+        } else if (Player.bodyMode == Player.BodyModeIndex.Default) {
+            if (sharedGraph.GetNode(headPos) is GraphNode node) {
+                return node;
+            } else if (sharedGraph.GetNode(footPos.x, footPos.y - 1) is GraphNode footNode) {
+                return footNode.Type is NodeType.Slope ? footNode : null;
+            }
         }
         return sharedGraph.GetNode(headPos);
     }
@@ -439,9 +446,11 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.x = direction;
                     } else if (_currentNode.GridPos.y == headPos.y) {
                         input.y = 1;
-                    } else {
+                    } else if (Player.animation == Player.AnimationIndex.ClimbOnBeam) {
                         input.y = -1;
                         input.jmp = true;
+                    } else if (Player.animation == Player.AnimationIndex.StandOnBeam) {
+                        input.x = direction;
                     }
                 } else {
                     if (currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 crawlDir)) {
@@ -496,8 +505,10 @@ class JumpSlugAI : ArtificialIntelligence {
                         if (climbDir.y < 0) {
                             input.y = -1;
                             input.jmp = true;
-                        } else {
+                        } else if (climbDir.y > 0) {
                             input.y = 1;
+                        } else {
+                            input.x = climbDir.x;
                         }
                     } else {
                         input.x = climbDir.x;
@@ -546,10 +557,17 @@ class JumpSlugAI : ArtificialIntelligence {
                         input.x = climbDir.x;
                         input.y = 1;
                     }
+                } else if (Player.bodyMode == Player.BodyModeIndex.Stand
+                    && (_currentNode.GridPos == footPos
+                        || _currentNode.GridPos == new IVec2(footPos.x, footPos.y - 1))
+                    && climbDir.x != 0
+                ) {
+                    input.x = climbDir.x;
                 } else {
                     input.x = climbDir.x;
                     if (_currentNode.HasBeam) {
                         input.y = 1;
+                        _waitOneTick = true;
                     } else {
                         Plugin.Logger!.LogWarning("trying to climb on node without pole");
                     }
