@@ -380,7 +380,9 @@ class JumpSlugAI : ArtificialIntelligence {
                     var currentConnection = _currentConnection!.Value;
                     if (currentConnection.Type is ConnectionType.Jump jump) {
                         input.x = jump.Direction;
-                        if (Player.jumpBoost > 0) {
+                        if (Player.jumpBoost > 0
+                            || Player.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
+                        ) {
                             input.jmp = true;
                         }
                     } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
