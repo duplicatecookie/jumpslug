@@ -166,6 +166,11 @@ class JumpSlugAI : ArtificialIntelligence {
             ConnectionType.SlideOnWall(int dir) => $"SlideOnWall({dir})",
             _ => throw new InvalidUnionVariantException(),
         };
+        if (_performingAirMovement) {
+            _currentConnectionLabel.color = Color.green;
+        } else {
+            _currentConnectionLabel.color = Color.white;
+        }
 
         _jumpBoostLabel.text = Player.jumpBoost.ToString();
 
