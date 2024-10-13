@@ -253,14 +253,14 @@ class PathVisualizer {
 
     public void DisplayPath(IVec2 startPos, PathConnection startConnection, SlugcatDescriptor slugcat) {
         ClearPath();
-        var cursor = startConnection;
+        PathConnection? cursor = startConnection;
         var currentPos = startPos;
-        while (cursor.Next.Connection is not null) {
+        while (cursor is not null) {
             IVec2 startTile = currentPos;
-            IVec2 endTile = cursor.Next.GridPos;
+            IVec2 endTile = cursor.Value.Next.GridPos;
             var start = RoomHelper.MiddleOfTile(startTile);
             var end = RoomHelper.MiddleOfTile(endTile);
-            var connectionType = cursor.Type;
+            var connectionType = cursor.Value.Type;
             var color = connectionType.VisualizationColor;
             var sharedGraph = _room.GetCWT().SharedGraph!;
             if (connectionType is ConnectionType.Jump jump) {
@@ -299,8 +299,8 @@ class PathVisualizer {
                 AddLabel(connectionType, startTile, endTile, Vector2.zero);
             }
             AddLine(start, end, color);
-            currentPos = cursor.Next.GridPos;
-            cursor = cursor.Next.Connection.Value;
+            currentPos = cursor.Value.Next.GridPos;
+            cursor = cursor.Value.Next.Connection;
         }
     }
 
