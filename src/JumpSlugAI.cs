@@ -109,6 +109,11 @@ class JumpSlugAI : ArtificialIntelligence {
             _destination = Room.GetTilePosition(mousePos);
             FindPath();
         }
+        Move();
+        UpdateVisualization();
+    }
+
+    private void UpdateVisualization() {
         if (InputHelper.JustPressed(KeyCode.P)) {
             _visualize = !_visualize;
             if (!_visualize || _currentConnection is null || _currentNode is null) {
@@ -128,14 +133,70 @@ class JumpSlugAI : ArtificialIntelligence {
                 sprite.sprite.isVisible = false;
             }
         }
+
+        if (_visualize) {
+            foreach (var sprite in _predictedIntersectionSprites) {
+                sprite.sprite.isVisible = false;
+            }
+            _currentConnectionLabel.text = _currentConnection?.Type switch {
+                null => "None",
+                ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
+                ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
+                ConnectionType.Drop => "Drop",
+                ConnectionType.Jump(int dir) => $"Jump({dir})",
+                ConnectionType.Pounce(int dir) => $"Pounce({dir})",
+                ConnectionType.Shortcut => "Shortcut",
+                ConnectionType.Walk(int dir) => $"Walk({dir})",
+                ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
+                ConnectionType.SlideOnWall(int dir) => $"SlideOnWall({dir})",
+                _ => throw new InvalidUnionVariantException(),
+            };
+            if (_performingAirMovement) {
+                _currentConnectionLabel.color = Color.green;
+            } else {
+                _currentConnectionLabel.color = Color.white;
+            }
+
+            _jumpBoostLabel.text = Player.jumpBoost.ToString();
+
+            var labelPos = Player.bodyChunks[0].pos - Room!.game.cameras[0].pos;
+            labelPos.y += 60;
+            _currentConnectionLabel.SetPosition(labelPos);
+            labelPos.y += 20;
+            _jumpBoostLabel.SetPosition(labelPos);
+
+            if (_currentNode is not null) {
+                _currentNodeSprite.sprite.isVisible = true;
+                _currentNodeSprite.pos = RoomHelper.MiddleOfTile(_currentNode.GridPos);
+            } else {
+                _currentNodeSprite.sprite.isVisible = false;
+            }
+
+            if (Player.input[0].x == 0 && Player.input[0].y == 0) {
+                _inputDirSprite.sprite.isVisible = false;
+            } else {
+                _inputDirSprite.pos = Player.mainBodyChunk.pos;
+                _inputDirSprite.sprite.isVisible = true;
+                if (Player.input[0].jmp == true) {
+                    _inputDirSprite.sprite.color = Color.green;
+                } else {
+                    _inputDirSprite.sprite.color = Color.red;
+                }
+                LineHelper.ReshapeLine(
+                    (TriangleMesh)_inputDirSprite.sprite,
+                    Player.mainBodyChunk.pos,
+                    new Vector2(
+                        Player.mainBodyChunk.pos.x + Player.input[0].x * 50,
+                        Player.mainBodyChunk.pos.y + Player.input[0].y * 50
+                    )
+                );
+            }
+        }
+
         if (InputHelper.JustPressed(KeyCode.M)) {
             _visualizeNode = !_visualizeNode;
         }
-
-        Move();
-        if (_visualize) {
-            UpdateVisualization();
-        }
+        
         if (_visualizeNode) {
             var node = CurrentNode();
             if (node is null) {
@@ -145,65 +206,6 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         } else {
             _nodeVisualizer.ResetSprites();
-        }
-    }
-
-    private void UpdateVisualization() {
-        foreach (var sprite in _predictedIntersectionSprites) {
-            sprite.sprite.isVisible = false;
-        }
-        _currentConnectionLabel.text = _currentConnection?.Type switch {
-            null => "None",
-            ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
-            ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
-            ConnectionType.Drop => "Drop",
-            ConnectionType.Jump(int dir) => $"Jump({dir})",
-            ConnectionType.Pounce(int dir) => $"Pounce({dir})",
-            ConnectionType.Shortcut => "Shortcut",
-            ConnectionType.Walk(int dir) => $"Walk({dir})",
-            ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
-            ConnectionType.SlideOnWall(int dir) => $"SlideOnWall({dir})",
-            _ => throw new InvalidUnionVariantException(),
-        };
-        if (_performingAirMovement) {
-            _currentConnectionLabel.color = Color.green;
-        } else {
-            _currentConnectionLabel.color = Color.white;
-        }
-
-        _jumpBoostLabel.text = Player.jumpBoost.ToString();
-
-        var labelPos = Player.bodyChunks[0].pos - Room!.game.cameras[0].pos;
-        labelPos.y += 60;
-        _currentConnectionLabel.SetPosition(labelPos);
-        labelPos.y += 20;
-        _jumpBoostLabel.SetPosition(labelPos);
-
-        if (_currentNode is not null) {
-            _currentNodeSprite.sprite.isVisible = true;
-            _currentNodeSprite.pos = RoomHelper.MiddleOfTile(_currentNode.GridPos);
-        } else {
-            _currentNodeSprite.sprite.isVisible = false;
-        }
-
-        if (Player.input[0].x == 0 && Player.input[0].y == 0) {
-            _inputDirSprite.sprite.isVisible = false;
-        } else {
-            _inputDirSprite.pos = Player.mainBodyChunk.pos;
-            _inputDirSprite.sprite.isVisible = true;
-            if (Player.input[0].jmp == true) {
-                _inputDirSprite.sprite.color = Color.green;
-            } else {
-                _inputDirSprite.sprite.color = Color.red;
-            }
-            LineHelper.ReshapeLine(
-                (TriangleMesh)_inputDirSprite.sprite,
-                Player.mainBodyChunk.pos,
-                new Vector2(
-                    Player.mainBodyChunk.pos.x + Player.input[0].x * 50,
-                    Player.mainBodyChunk.pos.y + Player.input[0].y * 50
-                )
-            );
         }
     }
 
