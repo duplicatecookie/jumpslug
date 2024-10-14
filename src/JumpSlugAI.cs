@@ -28,75 +28,20 @@ class JumpSlugAI : ArtificialIntelligence {
     private bool _performingAirMovement;
     private int _offPathCounter;
     private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 5;
-    private const int MAX_SPRITES = 16;
-    private bool _visualize;
+    private Visualizer? _visualizer;
     private bool _visualizeNode;
-    private readonly PathVisualizer _pathVisualizer;
     private readonly NodeVisualizer _nodeVisualizer;
-    private readonly DebugSprite _inputDirSprite;
-    private readonly DebugSprite _currentNodeSprite;
-    private readonly DebugSprite[] _predictedIntersectionSprites;
-    private readonly FLabel _currentConnectionLabel;
-    private readonly FLabel _jumpBoostLabel;
 
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         _pathfinder = new Pathfinder(Room!, new SlugcatDescriptor(Player));
-        _pathVisualizer = new PathVisualizer(Room!, _pathfinder);
         _nodeVisualizer = new NodeVisualizer(Room!, _pathfinder.DynamicGraph);
-        _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), Room);
-        _inputDirSprite.sprite.color = Color.red;
-        _inputDirSprite.sprite.isVisible = false;
-        _currentNodeSprite = new DebugSprite(
-            Vector2.zero,
-            new FSprite("pixel") {
-                scale = 10f,
-                color = Color.blue,
-                isVisible = false
-            },
-            Room
-        );
-        _predictedIntersectionSprites = new DebugSprite[MAX_SPRITES];
-        for (int i = 0; i < MAX_SPRITES; i++) {
-            _predictedIntersectionSprites[i] = new DebugSprite(
-                Vector2.zero,
-                new FSprite("pixel") {
-                    scale = 10f,
-                    color = Color.green,
-                    isVisible = false,
-                },
-                Room
-            );
-        }
-        _currentConnectionLabel = new FLabel(Custom.GetFont(), "None") {
-            alignment = FLabelAlignment.Center,
-            color = Color.white,
-        };
-
-        _jumpBoostLabel = new FLabel(Custom.GetFont(), "None") {
-            alignment = FLabelAlignment.Center,
-            color = Color.white,
-        };
-
-        var container = Room!.game.cameras[0].ReturnFContainer("Foreground");
-        container.AddChild(_currentConnectionLabel);
-        container.AddChild(_jumpBoostLabel);
-        Room!.AddObject(_inputDirSprite);
-        Room!.AddObject(_currentNodeSprite);
-        foreach (var sprite in _predictedIntersectionSprites) {
-            Room.AddObject(sprite);
-        }
     }
 
     public override void NewRoom(Room room) {
         base.NewRoom(room);
         _pathfinder.NewRoom(room);
-        _pathVisualizer.NewRoom(room);
+        _visualizer?.NewRoom(room);
         _nodeVisualizer.NewRoom(room, _pathfinder.DynamicGraph);
-        room.AddObject(_inputDirSprite);
-        Room!.AddObject(_currentNodeSprite);
-        foreach (var sprite in _predictedIntersectionSprites) {
-            Room.AddObject(sprite);
-        }
     }
 
     public override void Update() {
@@ -115,88 +60,19 @@ class JumpSlugAI : ArtificialIntelligence {
 
     private void UpdateVisualization() {
         if (InputHelper.JustPressed(KeyCode.P)) {
-            _visualize = !_visualize;
-            if (!_visualize || _currentConnection is null || _currentNode is null) {
-                _pathVisualizer.ClearPath();
+            _visualizer ??= new Visualizer(this);
+            if (_visualizer.Active) {
+                _visualizer.Deactivate();
             } else {
-                _pathVisualizer.DisplayPath(
-                    _currentNode.GridPos,
-                    _currentConnection.Value,
-                    new SlugcatDescriptor(Player)
-                );
-            }
-            _jumpBoostLabel.isVisible = _visualize;
-            _currentConnectionLabel.isVisible = _visualize;
-            _inputDirSprite.sprite.isVisible = _visualize;
-            _currentNodeSprite.sprite.isVisible = _visualize;
-            foreach (var sprite in _predictedIntersectionSprites) {
-                sprite.sprite.isVisible = false;
+                _visualizer.Activate();
             }
         }
-
-        if (_visualize) {
-            foreach (var sprite in _predictedIntersectionSprites) {
-                sprite.sprite.isVisible = false;
-            }
-            _currentConnectionLabel.text = _currentConnection?.Type switch {
-                null => "None",
-                ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
-                ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
-                ConnectionType.Drop => "Drop",
-                ConnectionType.Jump(int dir) => $"Jump({dir})",
-                ConnectionType.Pounce(int dir) => $"Pounce({dir})",
-                ConnectionType.Shortcut => "Shortcut",
-                ConnectionType.Walk(int dir) => $"Walk({dir})",
-                ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
-                ConnectionType.SlideOnWall(int dir) => $"SlideOnWall({dir})",
-                _ => throw new InvalidUnionVariantException(),
-            };
-            if (_performingAirMovement) {
-                _currentConnectionLabel.color = Color.green;
-            } else {
-                _currentConnectionLabel.color = Color.white;
-            }
-
-            _jumpBoostLabel.text = Player.jumpBoost.ToString();
-
-            var labelPos = Player.bodyChunks[0].pos - Room!.game.cameras[0].pos;
-            labelPos.y += 60;
-            _currentConnectionLabel.SetPosition(labelPos);
-            labelPos.y += 20;
-            _jumpBoostLabel.SetPosition(labelPos);
-
-            if (_currentNode is not null) {
-                _currentNodeSprite.sprite.isVisible = true;
-                _currentNodeSprite.pos = RoomHelper.MiddleOfTile(_currentNode.GridPos);
-            } else {
-                _currentNodeSprite.sprite.isVisible = false;
-            }
-
-            if (Player.input[0].x == 0 && Player.input[0].y == 0) {
-                _inputDirSprite.sprite.isVisible = false;
-            } else {
-                _inputDirSprite.pos = Player.mainBodyChunk.pos;
-                _inputDirSprite.sprite.isVisible = true;
-                if (Player.input[0].jmp == true) {
-                    _inputDirSprite.sprite.color = Color.green;
-                } else {
-                    _inputDirSprite.sprite.color = Color.red;
-                }
-                LineHelper.ReshapeLine(
-                    (TriangleMesh)_inputDirSprite.sprite,
-                    Player.mainBodyChunk.pos,
-                    new Vector2(
-                        Player.mainBodyChunk.pos.x + Player.input[0].x * 50,
-                        Player.mainBodyChunk.pos.y + Player.input[0].y * 50
-                    )
-                );
-            }
-        }
+        _visualizer?.Update();
 
         if (InputHelper.JustPressed(KeyCode.M)) {
             _visualizeNode = !_visualizeNode;
         }
-        
+
         if (_visualizeNode) {
             var node = CurrentNode();
             if (node is null) {
@@ -221,17 +97,7 @@ class JumpSlugAI : ArtificialIntelligence {
             );
 
         }
-        if (_visualize) {
-            if (_currentConnection is null) {
-                _pathVisualizer.ClearPath();
-            } else {
-                _pathVisualizer.DisplayPath(
-                    _currentNode.GridPos,
-                    _currentConnection.Value,
-                    new SlugcatDescriptor(Player)
-                );
-            }
-        }
+        _visualizer?.UpdatePath();
     }
 
     private void FindPathIfNotFallingTowardsPathForTooLong() {
@@ -246,6 +112,7 @@ class JumpSlugAI : ArtificialIntelligence {
     }
 
     private bool FallingTowardsPath() {
+        _visualizer?.ResetPredictionSprites();
         if (_currentConnection is null) {
             return false;
         }
@@ -258,7 +125,6 @@ class JumpSlugAI : ArtificialIntelligence {
             return false;
         }
         Vector2 v0 = Player.mainBodyChunk.vel;
-        int spriteIndex = 0;
         if (v0.x == 0) {
             while (y > 0) {
                 y--;
@@ -267,14 +133,8 @@ class JumpSlugAI : ArtificialIntelligence {
                     continue;
                 }
 
-                if (spriteIndex < MAX_SPRITES) {
-                    var sprite = _predictedIntersectionSprites[spriteIndex];
-                    sprite.pos = RoomHelper.MiddleOfTile(x, y);
-                    sprite.sprite.isVisible = true;
-                    spriteIndex++;
-                }
+                _visualizer?.AddPredictionSprite(x, y);
 
-                // TODO: extenally messing with the cursor like this is bad, fix when reworking how nodes are found inside the path 
                 if (currentConnection.FindInPath(new IVec2(x, y)) is not null) {
                     return true;
                 }
@@ -309,12 +169,7 @@ class JumpSlugAI : ArtificialIntelligence {
                     continue;
                 }
 
-                if (_visualize && spriteIndex < MAX_SPRITES) {
-                    var sprite = _predictedIntersectionSprites[spriteIndex];
-                    sprite.pos = RoomHelper.MiddleOfTile(x, y);
-                    sprite.sprite.isVisible = true;
-                    spriteIndex++;
-                }
+                _visualizer?.AddPredictionSprite(x, y);
 
                 if (currentConnection.FindInPath(new IVec2(x, y)) is not null) {
                     return true;
@@ -673,6 +528,196 @@ class JumpSlugAI : ArtificialIntelligence {
             if (Timers.Active) {
                 Timers.FollowPath.Stop();
             }
+        }
+    }
+
+    private class Visualizer {
+        private const int MAX_SPRITES = 16;
+        private readonly JumpSlugAI _ai;
+        private Room _room;
+        private readonly PathVisualizer _pathVisualizer;
+        private readonly DebugSprite _inputDirSprite;
+        private readonly DebugSprite _currentNodeSprite;
+        private int _spriteIndex;
+        private readonly DebugSprite[] _predictedIntersectionSprites;
+        private readonly FLabel _currentConnectionLabel;
+        private readonly FLabel _jumpBoostLabel;
+        public bool Active { get; private set; }
+        public Visualizer(JumpSlugAI ai) {
+            _ai = ai;
+            _room = _ai.Room!;
+            _pathVisualizer = new PathVisualizer(_room, _ai._pathfinder);
+            _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), _room);
+            _inputDirSprite.sprite.color = Color.red;
+            _inputDirSprite.sprite.isVisible = false;
+            _currentNodeSprite = new DebugSprite(
+                Vector2.zero,
+                new FSprite("pixel") {
+                    scale = 10f,
+                    color = Color.blue,
+                    isVisible = false
+                },
+                _room
+            );
+            _spriteIndex = 0;
+            _predictedIntersectionSprites = new DebugSprite[MAX_SPRITES];
+            for (int i = 0; i < MAX_SPRITES; i++) {
+                _predictedIntersectionSprites[i] = new DebugSprite(
+                    Vector2.zero,
+                    new FSprite("pixel") {
+                        scale = 10f,
+                        color = Color.green,
+                        isVisible = false,
+                    },
+                    _room
+                );
+            }
+            _currentConnectionLabel = new FLabel(Custom.GetFont(), "None") {
+                alignment = FLabelAlignment.Center,
+                color = Color.white,
+            };
+
+            _jumpBoostLabel = new FLabel(Custom.GetFont(), "None") {
+                alignment = FLabelAlignment.Center,
+                color = Color.white,
+            };
+
+            var container = _room!.game.cameras[0].ReturnFContainer("Foreground");
+            container.AddChild(_currentConnectionLabel);
+            container.AddChild(_jumpBoostLabel);
+            _room.AddObject(_inputDirSprite);
+            _room.AddObject(_currentNodeSprite);
+            foreach (var sprite in _predictedIntersectionSprites) {
+                _room.AddObject(sprite);
+            }
+        }
+
+        public void NewRoom(Room room) {
+            if (room != _room) {
+                _room = room;
+                _pathVisualizer.NewRoom(room);
+                _room.AddObject(_inputDirSprite);
+                _room.AddObject(_currentNodeSprite);
+                foreach (var sprite in _predictedIntersectionSprites) {
+                    _room.AddObject(sprite);
+                }
+            }
+        }
+
+        public void Update() {
+            if (Active) {
+                _currentConnectionLabel.text = _ai._currentConnection?.Type switch {
+                    null => "None",
+                    ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
+                    ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
+                    ConnectionType.Drop => "Drop",
+                    ConnectionType.Jump(int dir) => $"Jump({dir})",
+                    ConnectionType.Pounce(int dir) => $"Pounce({dir})",
+                    ConnectionType.Shortcut => "Shortcut",
+                    ConnectionType.Walk(int dir) => $"Walk({dir})",
+                    ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
+                    ConnectionType.SlideOnWall(int dir) => $"SlideOnWall({dir})",
+                    _ => throw new InvalidUnionVariantException(),
+                };
+                if (_ai._performingAirMovement) {
+                    _currentConnectionLabel.color = Color.green;
+                } else {
+                    ResetPredictionSprites();
+                    _currentConnectionLabel.color = Color.white;
+                }
+
+                _jumpBoostLabel.text = _ai.Player.jumpBoost.ToString();
+
+                var labelPos = _ai.Player.bodyChunks[0].pos - _room.game.cameras[0].pos;
+                labelPos.y += 60;
+                _currentConnectionLabel.SetPosition(labelPos);
+                labelPos.y += 20;
+                _jumpBoostLabel.SetPosition(labelPos);
+
+                if (_ai._currentNode is not null) {
+                    _currentNodeSprite.sprite.isVisible = true;
+                    _currentNodeSprite.pos = RoomHelper.MiddleOfTile(_ai._currentNode.GridPos);
+                } else {
+                    _currentNodeSprite.sprite.isVisible = false;
+                }
+
+                if (_ai.Player.input[0].x == 0 && _ai.Player.input[0].y == 0) {
+                    _inputDirSprite.sprite.isVisible = false;
+                } else {
+                    _inputDirSprite.pos = _ai.Player.mainBodyChunk.pos;
+                    _inputDirSprite.sprite.isVisible = true;
+                    if (_ai.Player.input[0].jmp == true) {
+                        _inputDirSprite.sprite.color = Color.green;
+                    } else {
+                        _inputDirSprite.sprite.color = Color.red;
+                    }
+                    LineHelper.ReshapeLine(
+                        (TriangleMesh)_inputDirSprite.sprite,
+                        _ai.Player.mainBodyChunk.pos,
+                        new Vector2(
+                            _ai.Player.mainBodyChunk.pos.x + _ai.Player.input[0].x * 50,
+                            _ai.Player.mainBodyChunk.pos.y + _ai.Player.input[0].y * 50
+                        )
+                    );
+                }
+            }
+        }
+
+        public void UpdatePath() {
+            if (!Active || _ai._currentConnection is null || _ai._currentNode is null) {
+                _pathVisualizer.ClearPath();
+            } else {
+                _pathVisualizer.DisplayPath(
+                    _ai._currentNode.GridPos,
+                    _ai._currentConnection.Value,
+                    new SlugcatDescriptor(_ai.Player)
+                );
+            }
+        }
+
+        public void AddPredictionSprite(int x, int y) {
+            if (_spriteIndex < MAX_SPRITES) {
+                var sprite = _predictedIntersectionSprites[_spriteIndex];
+                sprite.pos = RoomHelper.MiddleOfTile(x, y);
+                sprite.sprite.isVisible = true;
+                _spriteIndex++;
+            }
+        }
+
+        public void ResetPredictionSprites() {
+            if (_spriteIndex > 0) {
+                foreach (var sprite in _predictedIntersectionSprites) {
+                    sprite.sprite.isVisible = false;
+                }
+                _spriteIndex = 0;
+            }
+        }
+
+        public void Activate() {
+            Active = true;
+            if (_ai._currentConnection is null || _ai._currentNode is null) {
+                _pathVisualizer.ClearPath();
+            } else {
+                _pathVisualizer.DisplayPath(
+                    _ai._currentNode.GridPos,
+                    _ai._currentConnection.Value,
+                    new SlugcatDescriptor(_ai.Player)
+                );
+            }
+            _jumpBoostLabel.isVisible = true;
+            _currentConnectionLabel.isVisible = true;
+            _inputDirSprite.sprite.isVisible = true;
+            _currentNodeSprite.sprite.isVisible = true;
+        }
+
+        public void Deactivate() {
+            Active = false;
+            _pathVisualizer.ClearPath();
+            _jumpBoostLabel.isVisible = false;
+            _currentConnectionLabel.isVisible = false;
+            _inputDirSprite.sprite.isVisible = false;
+            _currentNodeSprite.sprite.isVisible = false;
+            ResetPredictionSprites();
         }
     }
 }
