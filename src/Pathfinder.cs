@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using IVec2 = RWCustom.IntVector2;
+using System.IO;
+using RWCustom;
 
 namespace JumpSlug.Pathfinding;
 
@@ -382,6 +384,8 @@ public class Pathfinder {
     public BitGrid OpenNodes;
     public BitGrid ClosedNodes;
     public PathNodeQueue NodeQueue;
+    private readonly ThreatTracker _threatTracker;
+    private float[,] _threatMap;
 
     /// <summary>
     /// Create new pathfinder in the specified room.
@@ -392,7 +396,7 @@ public class Pathfinder {
     /// <param name="descriptor">
     /// relevant information about the slugcat using this pathfinder.
     /// </param>
-    public Pathfinder(Room room, SlugcatDescriptor descriptor) {
+    public Pathfinder(Room room, SlugcatDescriptor descriptor, ThreatTracker threatTracker) {
         _room = room;
         _lastDescriptor = descriptor;
         _lastDestination = new IVec2(-1, -1);
@@ -404,6 +408,8 @@ public class Pathfinder {
         OpenNodes = new BitGrid(width, height);
         ClosedNodes = new BitGrid(width, height);
         NodeQueue = new PathNodeQueue(PathNodePool.NonNullCount, width, height);
+        _threatTracker = threatTracker;
+        _threatMap = new float[_room.Width, _room.Height];
     }
 
     /// <summary>
@@ -420,6 +426,7 @@ public class Pathfinder {
             OpenNodes = new BitGrid(width, height);
             ClosedNodes = new BitGrid(width, height);
             NodeQueue = new PathNodeQueue(PathNodePool.NonNullCount, width, height);
+            _threatMap = new float[_room.Width, _room.Height];
         }
     }
 
@@ -439,7 +446,7 @@ public class Pathfinder {
     /// Null if no path could be found or the coordinates are invalid,
     /// otherwise returns a <see cref="Path">path</see> ready for use by the AI.
     /// </returns>
-    public PathConnection? FindPath(IVec2 start, IVec2 destination, SlugcatDescriptor descriptor) {
+    public PathConnection? FindPath(IVec2 start, IVec2 destination, SlugcatDescriptor descriptor, bool updateThreat = false) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
         if (sharedGraph.GetNode(start) is null) {
             Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
@@ -455,7 +462,7 @@ public class Pathfinder {
             Timers.FindPath.Start();
         }
 
-        if (_lastDestination != destination) {
+        if (_lastDestination != destination || updateThreat) {
             OpenNodes.Reset();
             ClosedNodes.Reset();
             var destNode = PathNodePool[destination]!;
@@ -464,6 +471,13 @@ public class Pathfinder {
             NodeQueue.Add(destNode);
             OpenNodes[destination] = true;
             _lastDestination = destination;
+            int width = _room.Width;
+            int height = _room.Height;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    _threatMap[x, y] = -1;
+                }
+            }
         } else {
             if (ClosedNodes[start]) {
                 return PathNodePool[start]!.Connection;
@@ -499,7 +513,16 @@ public class Pathfinder {
                 if (ClosedNodes[neighbourPos]) {
                     return;
                 }
+
                 if (!OpenNodes[neighbourPos]) {
+                    if (_threatMap[neighbourPos.x, neighbourPos.y] < 0) {
+                        _threatMap[neighbourPos.x, neighbourPos.y] = _threatTracker.ThreatOfTile(_room.ToWorldCoordinate(neighbourPos), true);
+                    }
+                    float threat = _threatMap[neighbourPos.x, neighbourPos.y];
+                    if (threat >= 1 && threat < _threatMap[currentPos.x, currentPos.y]) {
+                        return;
+                    }
+                    
                     OpenNodes[neighbourPos] = true;
                     currentNeighbour.Reset(
                         start,
@@ -508,6 +531,7 @@ public class Pathfinder {
                     );
                     NodeQueue.Add(currentNeighbour);
                 }
+
                 if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
                     currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
                     currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
@@ -527,5 +551,76 @@ public class Pathfinder {
         }
         _lastDescriptor = descriptor;
         return null;
+    }
+
+    public class ThreatMapVisualizer {
+        private Room _room;
+        private readonly Pathfinder _pathfinder;
+        private FLabel[,] _labels;
+        public bool Active { get; private set; }
+
+        public ThreatMapVisualizer(Pathfinder pathfinder) {
+            _pathfinder = pathfinder;
+            _room = _pathfinder._room;
+            _labels = new FLabel[_room.Width, _room.Height];
+            CreateLabels();
+        }
+
+        private void CreateLabels() {
+            int width = _room.Width;
+            int height = _room.Height;
+            var container = _room!.game.cameras[0].ReturnFContainer("Foreground");
+            var camPos = _room.game.cameras[0].pos;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    var label = new FLabel(Custom.GetFont(), ((int)_pathfinder._threatMap[x, y]).ToString()) {
+                        isVisible = false
+                    };
+                    label.SetPosition(RoomHelper.MiddleOfTile(x, y) - camPos);
+                    _labels[x, y] = label;
+                    container.AddChild(label);
+                }
+            }
+        }
+
+        public void NewRoom(Room room) {
+            if (_room == room) {
+                _room = room;
+                _labels = new FLabel[_room.Width, _room.Height];
+                CreateLabels();
+            }
+        }
+
+        public void Display() {
+            Active = true;
+            int width = _room.Width;
+            int height = _room.Height;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    var label = _labels[x, y];
+                    var threat = _pathfinder._threatMap[x, y];
+                    if (threat >= 0) {
+                        label.isVisible = true;
+                        float normalizedThreat = Mathf.InverseLerp(0, 10, threat);
+                        label.color = new Color(
+                            normalizedThreat,
+                            1 - normalizedThreat,
+                            0,
+                            1
+                        );
+                        label.text = ((int)_pathfinder._threatMap[x, y]).ToString();
+                    } else {
+                        label.isVisible = false;
+                    }
+                }
+            }
+        }
+
+        public void Hide() {
+            Active = false;
+            foreach (var label in _labels) {
+                label.isVisible = false;
+            }
+        }
     }
 }

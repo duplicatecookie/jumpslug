@@ -17,7 +17,7 @@ class JumpSlugAbstractAI : AbstractCreatureAI {
     public JumpSlugAbstractAI(AbstractCreature abstractCreature, World world) : base(world, abstractCreature) { }
 }
 
-class JumpSlugAI : ArtificialIntelligence {
+class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private readonly Player _slugcat;
     private Room _room;
     private bool _waitOneTick;
@@ -31,12 +31,32 @@ class JumpSlugAI : ArtificialIntelligence {
     private Visualizer? _visualizer;
     private bool _visualizeNode;
     private readonly NodeVisualizer _nodeVisualizer;
+    private bool _visualizeThreat;
+    private Pathfinder.ThreatMapVisualizer? _threatVisualizer;
 
     public JumpSlugAI(AbstractCreature abstractCreature, World world) : base(abstractCreature, world) {
         _slugcat = (Player)abstractCreature.realizedCreature;
         _room = creature.Room.realizedRoom;
-        _pathfinder = new Pathfinder(_room!, new SlugcatDescriptor(_slugcat));
+        AddModule(new Tracker(this, 10, 10, -1, 0.5f, 5, 5, 10));
+        AddModule(new ThreatTracker(this, 10));
+        AddModule(new RelationshipTracker(this, tracker));
+        _pathfinder = new Pathfinder(_room!, new SlugcatDescriptor(_slugcat), threatTracker);
         _nodeVisualizer = new NodeVisualizer(_room!, _pathfinder.DynamicGraph);
+    }
+
+    AIModule? IUseARelationshipTracker.ModuleToTrackRelationship(CreatureTemplate.Relationship relationship) {
+        if (relationship.type == CreatureTemplate.Relationship.Type.Afraid) {
+            return threatTracker;
+        }
+        return null;
+    }
+
+    CreatureTemplate.Relationship IUseARelationshipTracker.UpdateDynamicRelationship(RelationshipTracker.DynamicRelationship dRelation) {
+        return StaticRelationship(dRelation.trackerRep.representedCreature);
+    }
+
+    RelationshipTracker.TrackedCreatureState IUseARelationshipTracker.CreateTrackedCreatureState(RelationshipTracker.DynamicRelationship rel) {
+        return new RelationshipTracker.TrackedCreatureState();
     }
 
     public override void NewRoom(Room room) {
@@ -46,6 +66,7 @@ class JumpSlugAI : ArtificialIntelligence {
             _pathfinder.NewRoom(room);
             _visualizer?.NewRoom(room);
             _nodeVisualizer.NewRoom(room, _pathfinder.DynamicGraph);
+            _threatVisualizer?.NewRoom(room);
         }
     }
 
@@ -54,11 +75,31 @@ class JumpSlugAI : ArtificialIntelligence {
         if (_room is null) {
             return;
         }
+        foreach (var layer in _room.physicalObjects) {
+            foreach (var obj in layer) {
+                if (obj is Creature creature) {
+                    tracker.SeeCreature(creature.abstractCreature);
+                }
+            }
+        }
         if (InputHelper.JustPressedMouseButton(0)) {
             var mousePos = (Vector2)Input.mousePosition + _room!.game.cameras[0].pos;
             _destination = _room.GetTilePosition(mousePos);
             FindPath();
         }
+
+        if (!_performingAirMovement
+            && _currentNode is not null
+            && _currentConnection is not null
+            && threatTracker.ThreatAlongPath(
+                _room.ToWorldCoordinate(_currentNode.GridPos),
+                _currentConnection.Value,
+                20
+            ) > 1f
+        ) {
+            FindPath(updateThreat: true);
+        }
+
         Move();
         UpdateVisualization();
     }
@@ -73,6 +114,17 @@ class JumpSlugAI : ArtificialIntelligence {
             }
         }
         _visualizer?.Update();
+
+        if (InputHelper.JustPressed(KeyCode.T)) {
+            _threatVisualizer ??= new Pathfinder.ThreatMapVisualizer(_pathfinder);
+            _visualizeThreat = !_visualizeThreat;
+        }
+
+        if (_visualizeThreat) {
+            _threatVisualizer?.Display();
+        } else {
+            _threatVisualizer?.Hide();
+        }
 
         if (InputHelper.JustPressed(KeyCode.M)) {
             _visualizeNode = !_visualizeNode;
@@ -90,7 +142,7 @@ class JumpSlugAI : ArtificialIntelligence {
         }
     }
 
-    private void FindPath() {
+    private void FindPath(bool updateThreat = false) {
         if (_currentNode is null || _destination is null) {
             _currentConnection = null;
             return;
@@ -98,9 +150,9 @@ class JumpSlugAI : ArtificialIntelligence {
             _currentConnection = _pathfinder.FindPath(
                 _currentNode.GridPos,
                 _destination.Value,
-                new SlugcatDescriptor(_slugcat)
+                new SlugcatDescriptor(_slugcat),
+                updateThreat
             );
-
         }
         _visualizer?.UpdatePath();
     }
@@ -723,6 +775,105 @@ class JumpSlugAI : ArtificialIntelligence {
             _inputDirSprite.sprite.isVisible = false;
             _currentNodeSprite.sprite.isVisible = false;
             ResetPredictionSprites();
+        }
+    }
+}
+
+static class ThreatTrackerExtension {
+
+    public static float ThreatAlongPath(this ThreatTracker self, WorldCoordinate startCoord, PathConnection startConnection, int maxLookahead) {
+        var coord = startCoord;
+        PathConnection? cursor = startConnection;
+        float totalThreat = 0;
+        for (int i = 0; i < maxLookahead; i++) {
+            if (cursor is null) {
+                break;
+            }
+            totalThreat += self.ThreatOfTile(coord, true);
+            coord.Tile = cursor.Value.Next.GridPos;
+            cursor = cursor.Value.Next.Connection;
+        }
+        Plugin.Logger!.LogDebug($"path threat: {totalThreat}");
+        return totalThreat;
+    }
+
+    public static void UpdateThreatMap(
+        this ThreatTracker self,
+        float[,] threatMap,
+        IVec2 creaturePos,
+        float pathingCutoff,
+        float maxThreatDistance,
+        float threatRadius
+    ) {
+        int width = self.aiMap.width;
+        int height = self.aiMap.height;
+        if (threatMap.GetLength(0) != width || threatMap.GetLength(1) != height) {
+            // this should probably throw
+            return;
+        }
+        var openNodes = new BitGrid(width, height);
+        var closedNodes = new BitGrid(width, height);
+        var heap = new QuickPathFinder.MinHeap(null);
+
+        foreach (var threat in self.threatPoints) {
+            if (threat.pos.room != self.AI.creature.Room.index) {
+                continue;
+            }
+
+            float cutoff = pathingCutoff * threat.severity * (threat.crit.canFly ? 2 : 1);
+
+            heap.Add(
+                new QuickPathFinder.PathNode(
+                    threat.pos.x,
+                    threat.pos.y,
+                    null,
+                    new PathCost(0f, PathCost.Legality.Allowed),
+                    new PathCost(0f, PathCost.Legality.Allowed)
+                )
+            );
+            while (heap.head is not null) {
+                var currentNode = heap.ExtractFirst();
+                openNodes[currentNode.Pos] = false;
+                closedNodes[currentNode.Pos] = true;
+                var currentAITile = self.aiMap.map[currentNode.Pos.x, currentNode.Pos.y];
+                foreach (var connection in currentAITile.outgoingPaths) {
+                    if (self.aiMap.IsConnectionAllowedForCreature(connection, threat.crit)) {
+                        var neighbourPos = connection.DestTile;
+                        if (closedNodes[neighbourPos]) {
+                            continue;
+                        }
+                        var cost = currentNode.stepsToGoal
+                            + threat.crit.ConnectionResistance(connection.type)
+                            + self.aiMap.TileCostForCreature(neighbourPos, threat.crit);
+
+                        
+
+                        if (cost.resistance > cutoff) {
+                            continue;
+                        }
+
+                        threatMap[neighbourPos.x, neighbourPos.y] = (1 - cost.resistance / cutoff) * threat.severity;
+
+                        var newNode = new QuickPathFinder.PathNode(
+                            neighbourPos.x,
+                            neighbourPos.y,
+                            currentNode,
+                            cost,
+                            new PathCost(0, PathCost.Legality.Allowed)
+                        );
+
+                        if (openNodes[neighbourPos]) {
+                            heap.FindAndReplace(newNode);
+                        } else {
+                            heap.Add(newNode);
+                        }
+                    }
+                }
+            }
+
+            heap.Empty();
+            closedNodes.Reset();
+            openNodes.Reset();
         }
     }
 }

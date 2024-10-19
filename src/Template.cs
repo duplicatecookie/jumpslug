@@ -18,12 +18,14 @@ static class TemplateHooks {
         On.AbstractCreature.ctor += AbstractCreature_ctor;
         On.AbstractCreature.InitiateAI += AbstractCreature_InitiateAI;
         On.StaticWorld.InitCustomTemplates += StaticWorld_InitCustomTemplates;
+        On.StaticWorld.InitStaticWorld += StaticWorld_InitStaticWorld;
     }
 
     public static void UnregisterHooks() {
         On.AbstractCreature.ctor -= AbstractCreature_ctor;
         On.AbstractCreature.InitiateAI -= AbstractCreature_InitiateAI;
         On.StaticWorld.InitCustomTemplates -= StaticWorld_InitCustomTemplates;
+        On.StaticWorld.InitStaticWorld -= StaticWorld_InitStaticWorld;
     }
 
     private static void StaticWorld_InitCustomTemplates(On.StaticWorld.orig_InitCustomTemplates orig) {
@@ -32,16 +34,30 @@ static class TemplateHooks {
             StaticWorld.GetCreatureTemplate(CreatureTemplate.Type.Slugcat),
             new(),
             new(),
-            new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 1f)
+            new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 0f)
         );
+        Plugin.Logger!.LogInfo($"inserting JumpSlug creature template at index {TemplateType.JumpSlug!.Index}, length: {StaticWorld.creatureTemplates.Length}");
+        StaticWorld.creatureTemplates[jumpslugTemplate.type.Index] = jumpslugTemplate;
+        orig();
+    }
+
+    private static void StaticWorld_InitStaticWorld(On.StaticWorld.orig_InitStaticWorld orig) {
+        orig();
+        var playerTemplate = StaticWorld.GetCreatureTemplate(CreatureTemplate.Type.Slugcat);
         for (int i = 0; i < StaticWorld.creatureTemplates.Length; i++) {
-            if (StaticWorld.creatureTemplates[i] is null) {
-                StaticWorld.creatureTemplates[i] = jumpslugTemplate;
-                Plugin.Logger!.LogInfo($"inserted JumpSlug creature template at index {i}");
-                break;
+            var template = StaticWorld.creatureTemplates[i];
+            if (i == TemplateType.JumpSlug!.Index) {
+                template.relationships = playerTemplate.relationships;
+            } else if (template.TopAncestor().type == CreatureTemplate.Type.LizardTemplate) {
+                StaticWorld.EstablishRelationship(
+                    CreatureTemplate.Type.LizardTemplate,
+                    TemplateType.JumpSlug,
+                    new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Eats, 0.8f)
+                );
+            } else {
+                template.relationships[TemplateType.JumpSlug!.Index] = template.relationships[playerTemplate.type.Index];
             }
         }
-        orig();
     }
 
     private static void AbstractCreature_ctor(
