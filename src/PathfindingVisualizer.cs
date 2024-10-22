@@ -600,7 +600,7 @@ public class DebugPathfinder {
             _openNodes.Reset();
             _closedNodes.Reset();
             var destNode = _pathNodePool[destination]!;
-            destNode.Reset(start, null, 0);
+            destNode.Reset(start, null, 0, 0);
             _nodeQueue.Reset();
             _nodeQueue.Add(destNode);
             _openNodes[destination] = true;
@@ -685,7 +685,8 @@ public class DebugPathfinder {
                     currentNeighbour.Reset(
                         Start,
                         new PathConnection(connection.Type, currentNode),
-                        currentNode.PathCost + connection.Weight
+                        currentNode.PathCost + connection.Weight,
+                        0
                     );
                     _nodeQueue.Add(currentNeighbour);
                     var neighbourNodeSprite = _nodeSprites[neighbourPos.x, neighbourPos.y]!.sprite;

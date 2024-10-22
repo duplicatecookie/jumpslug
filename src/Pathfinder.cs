@@ -20,6 +20,7 @@ public class PathNode {
 
     public float Heuristic { get; private set; }
     public float FCost => PathCost + Heuristic;
+    public float Threat;
 
     /// <summary>
     /// Create new node at specified grid position.
@@ -42,10 +43,11 @@ public class PathNode {
     /// <param name="cost">
     /// the new path cost to assign to the node.
     /// </param>
-    public void Reset(IVec2 start, PathConnection? connection, float cost) {
+    public void Reset(IVec2 start, PathConnection? connection, float cost, float threat) {
         PathCost = cost;
         Connection = connection;
         ResetHeuristic(start);
+        Threat = threat;
     }
 
     public void ResetHeuristic(IVec2 start) {
@@ -341,7 +343,7 @@ public class PathNodeQueue {
             validationString.Append(_nodes[j].FCost);
             validationString.Append(" ");
             if ((j - k) % (int)Mathf.Pow(2, i) == 0) {
-                validationString.Append("\n");
+                validationString.AppendLine();
                 k += (int)Mathf.Pow(2, i);
                 i += 1;
             }
@@ -385,7 +387,6 @@ public class Pathfinder {
     public BitGrid ClosedNodes;
     public PathNodeQueue NodeQueue;
     private readonly ThreatTracker _threatTracker;
-    private float[,] _threatMap;
 
     /// <summary>
     /// Create new pathfinder in the specified room.
@@ -409,7 +410,6 @@ public class Pathfinder {
         ClosedNodes = new BitGrid(width, height);
         NodeQueue = new PathNodeQueue(PathNodePool.NonNullCount, width, height);
         _threatTracker = threatTracker;
-        _threatMap = new float[_room.Width, _room.Height];
     }
 
     /// <summary>
@@ -426,7 +426,6 @@ public class Pathfinder {
             OpenNodes = new BitGrid(width, height);
             ClosedNodes = new BitGrid(width, height);
             NodeQueue = new PathNodeQueue(PathNodePool.NonNullCount, width, height);
-            _threatMap = new float[_room.Width, _room.Height];
         }
     }
 
@@ -466,7 +465,7 @@ public class Pathfinder {
             OpenNodes.Reset();
             ClosedNodes.Reset();
             var destNode = PathNodePool[destination]!;
-            destNode.Reset(start, null, 0);
+            destNode.Reset(start, null, 0, 0);
             NodeQueue.Reset();
             NodeQueue.Add(destNode);
             OpenNodes[destination] = true;
@@ -475,7 +474,10 @@ public class Pathfinder {
             int height = _room.Height;
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    _threatMap[x, y] = -1;
+                    var node = PathNodePool[x, y];
+                    if (node is not null) {
+                        node.Threat = 0;
+                    }
                 }
             }
         } else {
@@ -515,24 +517,19 @@ public class Pathfinder {
                 }
 
                 if (!OpenNodes[neighbourPos]) {
-                    if (_threatMap[neighbourPos.x, neighbourPos.y] < 0) {
-                        _threatMap[neighbourPos.x, neighbourPos.y] = _threatTracker.ThreatOfTile(_room.ToWorldCoordinate(neighbourPos), true);
-                    }
-                    float threat = _threatMap[neighbourPos.x, neighbourPos.y];
-                    if (threat >= 1 && threat < _threatMap[currentPos.x, currentPos.y]) {
-                        return;
-                    }
-                    
                     OpenNodes[neighbourPos] = true;
                     currentNeighbour.Reset(
                         start,
                         new PathConnection(connection.Type, currentNode),
-                        currentNode.PathCost + connection.Weight
+                        currentNode.PathCost + connection.Weight,
+                        _threatTracker.ThreatAtTile(neighbourPos)
                     );
                     NodeQueue.Add(currentNeighbour);
                 }
 
-                if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
+                if (currentNode.PathCost + currentNode.Threat + connection.Weight
+                    < currentNeighbour.PathCost + currentNeighbour.Threat
+                ) {
                     currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
                     currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
                     NodeQueue.DecreasePriority(currentNeighbour.GridPos);
@@ -556,7 +553,7 @@ public class Pathfinder {
     public class ThreatMapVisualizer {
         private Room _room;
         private readonly Pathfinder _pathfinder;
-        private FLabel[,] _labels;
+        private FLabel?[,] _labels;
         public bool Active { get; private set; }
 
         public ThreatMapVisualizer(Pathfinder pathfinder) {
@@ -573,12 +570,15 @@ public class Pathfinder {
             var camPos = _room.game.cameras[0].pos;
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    var label = new FLabel(Custom.GetFont(), ((int)_pathfinder._threatMap[x, y]).ToString()) {
-                        isVisible = false
-                    };
-                    label.SetPosition(RoomHelper.MiddleOfTile(x, y) - camPos);
-                    _labels[x, y] = label;
-                    container.AddChild(label);
+                    var node = _pathfinder.PathNodePool[x, y];
+                    if (node is not null) {
+                        var label = new FLabel(Custom.GetFont(), ((int)node.Threat).ToString()) {
+                            isVisible = false
+                        };
+                        label.SetPosition(RoomHelper.MiddleOfTile(x, y) - camPos);
+                        _labels[x, y] = label;
+                        container.AddChild(label);
+                    }
                 }
             }
         }
@@ -598,28 +598,34 @@ public class Pathfinder {
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     var label = _labels[x, y];
-                    var threat = _pathfinder._threatMap[x, y];
-                    if (threat >= 0) {
+                    var node = _pathfinder.PathNodePool[x, y];
+                    if (label is null || node is null) {
+                        continue;
+                    }
+                    if (node.Threat > 0) {
                         label.isVisible = true;
-                        float normalizedThreat = Mathf.InverseLerp(0, 10, threat);
+                        float normalizedThreat = Mathf.InverseLerp(0, 10, node.Threat);
                         label.color = new Color(
                             normalizedThreat,
                             1 - normalizedThreat,
                             0,
                             1
                         );
-                        label.text = ((int)_pathfinder._threatMap[x, y]).ToString();
+                        label.text = ((int)node.Threat).ToString();
                     } else {
                         label.isVisible = false;
                     }
                 }
+
             }
         }
 
         public void Hide() {
             Active = false;
             foreach (var label in _labels) {
-                label.isVisible = false;
+                if (label is not null) {
+                    label.isVisible = false;
+                }
             }
         }
     }

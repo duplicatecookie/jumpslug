@@ -28,6 +28,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private bool _performingAirMovement;
     private int _offPathCounter;
     private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 5;
+    private int threatTestCoolDown;
     private Visualizer? _visualizer;
     private bool _visualizeNode;
     private readonly NodeVisualizer _nodeVisualizer;
@@ -88,17 +89,24 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             FindPath();
         }
 
-        if (!_performingAirMovement
-            && _currentNode is not null
-            && _currentConnection is not null
-            && threatTracker.ThreatAlongPath(
-                _room.ToWorldCoordinate(_currentNode.GridPos),
-                _currentConnection.Value,
-                20
-            ) > 1f
-        ) {
-            FindPath(updateThreat: true);
+        if (threatTestCoolDown > 0) {
+            threatTestCoolDown -= 1;
+        } else {
+            threatTestCoolDown = 10;
+            if (!_performingAirMovement
+                && _currentNode is not null
+                && _currentConnection is not null
+                && threatTracker.ThreatAlongPath(
+                    _currentNode.GridPos,
+                    _currentConnection.Value,
+                    20
+                ) > 1f
+            ) {
+                FindPath(updateThreat: true);
+            }
         }
+
+
 
         Move();
         UpdateVisualization();
@@ -781,100 +789,36 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
 static class ThreatTrackerExtension {
 
-    public static float ThreatAlongPath(this ThreatTracker self, WorldCoordinate startCoord, PathConnection startConnection, int maxLookahead) {
-        var coord = startCoord;
+    public static float ThreatAlongPath(this ThreatTracker self, IVec2 startPos, PathConnection startConnection, int maxLookahead) {
+        var pos = startPos;
         PathConnection? cursor = startConnection;
         float totalThreat = 0;
         for (int i = 0; i < maxLookahead; i++) {
             if (cursor is null) {
                 break;
             }
-            totalThreat += self.ThreatOfTile(coord, true);
-            coord.Tile = cursor.Value.Next.GridPos;
+            totalThreat += self.ThreatAtTile(pos);
+            pos = cursor.Value.Next.GridPos;
             cursor = cursor.Value.Next.Connection;
         }
         Plugin.Logger!.LogDebug($"path threat: {totalThreat}");
         return totalThreat;
     }
 
-    public static void UpdateThreatMap(
-        this ThreatTracker self,
-        float[,] threatMap,
-        IVec2 creaturePos,
-        float pathingCutoff,
-        float maxThreatDistance,
-        float threatRadius
-    ) {
-        int width = self.aiMap.width;
-        int height = self.aiMap.height;
-        if (threatMap.GetLength(0) != width || threatMap.GetLength(1) != height) {
-            // this should probably throw
-            return;
-        }
-        var openNodes = new BitGrid(width, height);
-        var closedNodes = new BitGrid(width, height);
-        var heap = new QuickPathFinder.MinHeap(null);
-
+    public static float ThreatAtTile(this ThreatTracker self, IVec2 pos) {
+        float totalThreat = 0;
         foreach (var threat in self.threatPoints) {
-            if (threat.pos.room != self.AI.creature.Room.index) {
-                continue;
+            if (self.aiMap.TileAccessibleToCreature(pos, threat.crit)) {
+                var threatPos = threat.pos.Tile;
+                float distance = pos.FloatDist(threatPos);
+                bool visualContact = self.AI.creature.Room.realizedRoom.VisualContact(pos, threatPos);
+                float visibilityFactor = visualContact && distance <= threat.crit.visualRadius ? 4 : 1;
+                float flightFactor = threat.crit.canFly ? 2 : 1;
+                float danger = 5 * threat.severity * visibilityFactor * flightFactor;
+                totalThreat += danger / (1 + distance * distance / danger);
             }
-
-            float cutoff = pathingCutoff * threat.severity * (threat.crit.canFly ? 2 : 1);
-
-            heap.Add(
-                new QuickPathFinder.PathNode(
-                    threat.pos.x,
-                    threat.pos.y,
-                    null,
-                    new PathCost(0f, PathCost.Legality.Allowed),
-                    new PathCost(0f, PathCost.Legality.Allowed)
-                )
-            );
-            while (heap.head is not null) {
-                var currentNode = heap.ExtractFirst();
-                openNodes[currentNode.Pos] = false;
-                closedNodes[currentNode.Pos] = true;
-                var currentAITile = self.aiMap.map[currentNode.Pos.x, currentNode.Pos.y];
-                foreach (var connection in currentAITile.outgoingPaths) {
-                    if (self.aiMap.IsConnectionAllowedForCreature(connection, threat.crit)) {
-                        var neighbourPos = connection.DestTile;
-                        if (closedNodes[neighbourPos]) {
-                            continue;
-                        }
-                        var cost = currentNode.stepsToGoal
-                            + threat.crit.ConnectionResistance(connection.type)
-                            + self.aiMap.TileCostForCreature(neighbourPos, threat.crit);
-
-                        
-
-                        if (cost.resistance > cutoff) {
-                            continue;
-                        }
-
-                        threatMap[neighbourPos.x, neighbourPos.y] = (1 - cost.resistance / cutoff) * threat.severity;
-
-                        var newNode = new QuickPathFinder.PathNode(
-                            neighbourPos.x,
-                            neighbourPos.y,
-                            currentNode,
-                            cost,
-                            new PathCost(0, PathCost.Legality.Allowed)
-                        );
-
-                        if (openNodes[neighbourPos]) {
-                            heap.FindAndReplace(newNode);
-                        } else {
-                            heap.Add(newNode);
-                        }
-                    }
-                }
-            }
-
-            heap.Empty();
-            closedNodes.Reset();
-            openNodes.Reset();
         }
+        return totalThreat;
     }
 }
 
