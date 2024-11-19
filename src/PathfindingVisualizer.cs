@@ -4,6 +4,7 @@ using System;
 using UnityEngine;
 
 using IVec2 = RWCustom.IntVector2;
+using System.Linq;
 namespace JumpSlug.Pathfinding;
 
 class SharedGraphVisualizer {
@@ -67,7 +68,7 @@ class SharedGraphVisualizer {
                 continue;
             }
             var end = RoomHelper.MiddleOfTile(node.GridPos);
-            foreach (var connection in node.Connections) {
+            foreach (var connection in node.IncomingConnections) {
                 var start = RoomHelper.MiddleOfTile(connection.Next.GridPos);
                 var mesh = LineHelper.MakeLine(start, end, Color.white);
                 var line = new DebugSprite(start, mesh, _room);
@@ -133,11 +134,11 @@ class NodeVisualizer {
         _nodeSprite.pos = pixelPos;
         _nodeSprite.sprite.color = node.Type.VisualizationColor;
         _connectionIndex = 0;
-        foreach (var connection in node.Connections) {
+        foreach (var connection in node.IncomingConnections) {
             AddConnection(node.GridPos, connection);
         }
-        var dynamicConnections = _dynamicGraph.AdjacencyLists[node.GridPos.x, node.GridPos.y]!;
-        foreach (var connection in dynamicConnections) {
+        var extension = _dynamicGraph.Extensions[node.GridPos.x, node.GridPos.y]!.Value;
+        foreach (var connection in extension.IncomingConnections) {
             AddConnection(node.GridPos, connection);
         }
         for (int i = _connectionIndex; i < _connectionSprites.Count; i++) {
@@ -322,11 +323,11 @@ class PathVisualizer {
 
     private void AddLabel(ConnectionType connectionType, IVec2 startTile, IVec2 endTile, Vector2 v0) {
         NodeConnection? nodeConnection = null;
-        var list = _pathfinder.DynamicGraph.AdjacencyLists[startTile.x, startTile.y];
-        if (list is null) {
+        var maybeExt = _pathfinder.DynamicGraph.Extensions[startTile.x, startTile.y];
+        if (maybeExt is null) {
             return;
         }
-        foreach (var connection in list) {
+        foreach (var connection in maybeExt.Value.IncomingConnections) {
             if (connection.Type == connectionType && connection.Next.GridPos == endTile) {
                 nodeConnection = connection;
                 break;
@@ -493,11 +494,13 @@ public class DebugPathfinder {
     private BitGrid _closedNodes;
     private PathNodeQueue _nodeQueue;
     private readonly DynamicGraph _dynamicGraph;
+    private Func<PathNode, IVec2?>? _destination;
+    private ReversalCursor _reversalCursor;
     public IVec2 Start { get; private set; }
     public IVec2 Destination { get; private set; }
-    public bool IsInit { get; private set; }
     public bool IsFinished { get; private set; }
     public bool DisplayingSprites { get; private set; }
+    public Mode PathingMode { get; private set; }
 
 
     /// <summary>
@@ -573,11 +576,11 @@ public class DebugPathfinder {
             _nodeSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
             _connectionSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
             ResetSprites();
-            IsInit = false;
+            PathingMode = Mode.UnInit;
         }
     }
 
-    public void InitPathfinding(IVec2 start, IVec2 destination, SlugcatDescriptor descriptor) {
+    public void InitBackwardPathfinding(IVec2 start, IVec2 destination, SlugcatDescriptor descriptor) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
         if (sharedGraph.GetNode(start) is null) {
             return;
@@ -586,21 +589,11 @@ public class DebugPathfinder {
             return;
         }
 
-        var oldStartSprite = _nodeSprites[Start.x, Start.y];
-        if (oldStartSprite is not null) {
-            oldStartSprite.sprite.color = Color.white;
-            if (_closedNodes[Start]) {
-                oldStartSprite.sprite.scale = 5f;
-            } else if (!_openNodes[Start]) {
-                oldStartSprite.sprite.isVisible = false;
-            }
-        }
-
         if (Destination != destination) {
             _openNodes.Reset();
             _closedNodes.Reset();
             var destNode = _pathNodePool[destination]!;
-            destNode.Reset(start, null, 0, 0);
+            destNode.Reset(null, 0, 0, 0);
             _nodeQueue.Reset();
             _nodeQueue.Add(destNode);
             _openNodes[destination] = true;
@@ -628,6 +621,16 @@ public class DebugPathfinder {
             }
         }
 
+        var oldStartSprite = _nodeSprites[start.x, start.y];
+        if (oldStartSprite is not null) {
+            oldStartSprite.sprite.color = Color.white;
+            if (_closedNodes[start]) {
+                oldStartSprite.sprite.scale = 5f;
+            } else if (!_openNodes[start]) {
+                oldStartSprite.sprite.isVisible = false;
+            }
+        }
+
         if (_descriptor != descriptor) {
             _dynamicGraph.Reset(descriptor);
             _descriptor = descriptor;
@@ -644,13 +647,71 @@ public class DebugPathfinder {
         destSprite.scale = 10f;
 
         DisplayingSprites = true;
-
-        IsInit = true;
+        PathingMode = Mode.Backward;
         return;
     }
 
+    public void InitForewardPathfinding(IVec2 start, Func<PathNode, IVec2?> destination, SlugcatDescriptor descriptor) {
+        _destination = destination;
+        _openNodes.Reset();
+        _closedNodes.Reset();
+        var startNode = _pathNodePool[start]!;
+        startNode.Reset(null, 0, 0, 0);
+        _nodeQueue.Reset();
+        _nodeQueue.Add(startNode);
+        _openNodes[start] = true;
+
+        var oldDestSprite = _nodeSprites[Destination.x, Destination.y];
+        if (oldDestSprite is not null) {
+            oldDestSprite.sprite.color = Color.white;
+        }
+
+        RemovePathHighlight();
+        HideSprites();
+
+        Start = start;
+
+        var oldStartSprite = _nodeSprites[start.x, start.y];
+        if (oldStartSprite is not null) {
+            oldStartSprite.sprite.color = Color.white;
+            if (_closedNodes[start]) {
+                oldStartSprite.sprite.scale = 5f;
+            } else if (!_openNodes[start]) {
+                oldStartSprite.sprite.isVisible = false;
+            }
+        }
+
+        if (_descriptor != descriptor) {
+            _dynamicGraph.Reset(descriptor);
+            _descriptor = descriptor;
+        }
+
+        var startSprite = _nodeSprites[Start.x, Start.y]!.sprite;
+        startSprite.isVisible = true;
+        startSprite.color = Color.red;
+        startSprite.scale = 10f;
+
+        DisplayingSprites = true;
+        IsFinished = false;
+        PathingMode = Mode.Foreward;
+    }
+
     public void Poll() {
-        if (!IsInit || IsFinished || !DisplayingSprites) {
+        if (IsFinished || !DisplayingSprites) {
+            return;
+        }
+
+        if (PathingMode == Mode.Backward) {
+            PollBackwards();
+        } else if (PathingMode == Mode.Foreward) {
+            PollForewards();
+        } else if (PathingMode == Mode.ReversingPath) {
+            PollPathReversal();
+        }
+    }
+
+    private void PollBackwards() {
+        if (PathingMode != Mode.Backward) {
             return;
         }
         if (_nodeQueue.Count > 0) {
@@ -672,82 +733,135 @@ public class DebugPathfinder {
             _nodeSprites[currentPos.x, currentPos.y]!.sprite.scale = 5f;
 
             var graphNode = _room.GetCWT().SharedGraph!.Nodes[currentPos.x, currentPos.y]!;
-            var adjacencyList = _dynamicGraph.AdjacencyLists[currentPos.x, currentPos.y]!;
+            var extension = _dynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
 
-            void CheckConnection(NodeConnection connection) {
-                IVec2 neighbourPos = connection.Next.GridPos;
-                PathNode currentNeighbour = _pathNodePool[neighbourPos]!;
-                if (_closedNodes[neighbourPos]) {
-                    return;
-                }
-                if (!_openNodes[neighbourPos]) {
-                    _openNodes[neighbourPos] = true;
-                    currentNeighbour.Reset(
-                        Start,
-                        new PathConnection(connection.Type, currentNode),
-                        currentNode.PathCost + connection.Weight,
-                        0
-                    );
-                    _nodeQueue.Add(currentNeighbour);
-                    var neighbourNodeSprite = _nodeSprites[neighbourPos.x, neighbourPos.y]!.sprite;
-                    neighbourNodeSprite.isVisible = true;
-                    neighbourNodeSprite.scale = 10f;
-                    var neighbourConnectionSprite = _connectionSprites[neighbourPos.x, neighbourPos.y]!.sprite;
-                    neighbourConnectionSprite.isVisible = true;
-                    if (connection.Type
-                        is ConnectionType.Jump
-                        or ConnectionType.Drop
-                        or ConnectionType.WalkOffEdge
-                        or ConnectionType.Pounce
-                    ) {
-                        neighbourConnectionSprite.color = Color.grey;
-                    } else {
-                        neighbourConnectionSprite.color = Color.white;
-                    }
-                    var currentScreenPos = RoomHelper.MiddleOfTile(currentPos);
-                    var neighbourScreenPos = RoomHelper.MiddleOfTile(neighbourPos);
-                    LineHelper.ReshapeLine(
-                        (TriangleMesh)neighbourConnectionSprite,
-                        neighbourScreenPos,
-                        currentScreenPos
-                    );
-                }
-                if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
-                    currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
-                    currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
-                    _nodeQueue.DecreasePriority(currentNeighbour.GridPos);
-                    var neighbourConnectionSprite = _connectionSprites[neighbourPos.x, neighbourPos.y]!.sprite;
-                    neighbourConnectionSprite.isVisible = true;
-                    if (connection.Type
-                        is ConnectionType.Jump
-                        or ConnectionType.Drop
-                        or ConnectionType.WalkOffEdge
-                        or ConnectionType.Pounce
-                    ) {
-                        neighbourConnectionSprite.color = Color.grey;
-                    } else {
-                        neighbourConnectionSprite.color = Color.white;
-                    }
-                    var currentScreenPos = RoomHelper.MiddleOfTile(currentPos);
-                    var neighbourScreenPos = RoomHelper.MiddleOfTile(neighbourPos);
-                    LineHelper.ReshapeLine(
-                        (TriangleMesh)neighbourConnectionSprite,
-                        neighbourScreenPos,
-                        currentScreenPos
-                    );
-                }
-            }
-
-            foreach (var connection in graphNode.Connections) {
-                CheckConnection(connection);
-            }
-            foreach (var connection in adjacencyList) {
-                CheckConnection(connection);
+            foreach (var connection in graphNode.IncomingConnections.Concat(extension.IncomingConnections)) {
+                CheckConnection(connection, currentNode);
             }
             IsFinished = false;
         } else {
             IsFinished = true;
         }
+    }
+
+    private void PollForewards() {
+        if (PathingMode != Mode.Foreward || _destination is null) {
+            return;
+        }
+        if (_nodeQueue.Count > 0) {
+            if (!_nodeQueue.Validate()) {
+                Plugin.Logger!.LogError($"min heap does not satisfy heap property\n{_nodeQueue.DebugList()}");
+                IsFinished = true;
+                return;
+            }
+            PathNode currentNode = _nodeQueue.Root!;
+            var currentPos = currentNode.GridPos;
+            if (_destination(currentNode) is IVec2 dest) {
+                Destination = dest;
+                InitPathReversal();
+                return;
+            }
+            _nodeQueue.RemoveRoot();
+            _openNodes[currentPos] = false;
+            _closedNodes[currentPos] = true;
+            _nodeSprites[currentPos.x, currentPos.y]!.sprite.scale = 5f;
+
+            var graphNode = _room.GetCWT().SharedGraph!.Nodes[currentPos.x, currentPos.y]!;
+            var extension = _dynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
+
+            Plugin.Logger!.LogDebug($"outgoing connections: {graphNode.OutgoingConnections.Count + extension.OutgoingConnections.Count}");
+            foreach (var connection in graphNode.OutgoingConnections.Concat(extension.OutgoingConnections)) {
+                CheckConnection(connection, currentNode);
+            }
+            IsFinished = false;
+        } else {
+            IsFinished = true;
+        }
+    }
+
+    private void CheckConnection(NodeConnection connection, PathNode currentNode) {
+        IVec2 neighbourPos = connection.Next.GridPos;
+        PathNode currentNeighbour = _pathNodePool[neighbourPos]!;
+        if (_closedNodes[neighbourPos]) {
+            return;
+        }
+        if (!_openNodes[neighbourPos]) {
+            _openNodes[neighbourPos] = true;
+            currentNeighbour.Reset(
+                new PathConnection(connection.Type, currentNode),
+                currentNode.PathCost + connection.Weight,
+                0,
+                Start.FloatDist(neighbourPos)
+            );
+            _nodeQueue.Add(currentNeighbour);
+            var neighbourNodeSprite = _nodeSprites[neighbourPos.x, neighbourPos.y]!.sprite;
+            neighbourNodeSprite.isVisible = true;
+            neighbourNodeSprite.scale = 10f;
+            UpdateConnectionSprite(currentNode.GridPos, neighbourPos, connection.Type);
+        }
+        if (currentNode.PathCost + connection.Weight < currentNeighbour.PathCost) {
+            currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
+            currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
+            _nodeQueue.DecreasePriority(currentNeighbour.GridPos);
+            UpdateConnectionSprite(currentNode.GridPos, neighbourPos, connection.Type);
+        }
+    }
+
+    private void InitPathReversal() {
+        _openNodes.Reset();
+        _closedNodes.Reset();
+        _closedNodes[Destination] = true;
+        _nodeQueue.Reset();
+        var destNode = _pathNodePool[Destination]!;
+        destNode.PathCost = 0;
+        _reversalCursor = default(ReversalCursor) with {
+            CurrentNode = destNode
+        };
+        HideSprites();
+        _nodeSprites[Start.x, Start.y]!.sprite.isVisible = true;
+        _nodeSprites[Destination.x, Destination.y]!.sprite.isVisible = true;
+        DisplayingSprites = true;
+        PathingMode = Mode.ReversingPath;
+    }
+
+    private void PollPathReversal() {
+        if (PathingMode != Mode.ReversingPath) {
+            return;
+        }
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        ref var cursor = ref _reversalCursor;
+        if (cursor.CurrentNode is null) {
+            HighlightPath();
+            IsFinished = true;
+            PathingMode = Mode.UnInit;
+            return;
+        }
+        cursor.NextNode = cursor.CurrentNode.Connection?.Next;
+        if (cursor.NextNode is not null) {
+            _closedNodes[cursor.NextNode.GridPos] = true;
+            var sprite = _nodeSprites[cursor.NextNode.GridPos.x, cursor.NextNode.GridPos.y]!.sprite;
+            sprite.isVisible = true;
+            sprite.scale = 5f;
+        }
+
+        if (cursor.PreviousNode is not null && cursor.PreviousType is not null) {
+            UpdateConnectionSprite(
+                cursor.CurrentNode.GridPos,
+                cursor.PreviousNode.GridPos,
+                cursor.PreviousType
+            );
+        }
+
+        cursor.CurrentType = cursor.CurrentNode.Connection?.Type;
+        cursor.CurrentNode.Connection = cursor.PreviousType is null
+            ? null
+            : new PathConnection(cursor.PreviousType, cursor.PreviousNode!);
+        cursor.PreviousType = cursor.CurrentType;
+        var pos = cursor.CurrentNode.GridPos;
+        var graphNode = sharedGraph.Nodes[pos.x, pos.y]!;
+        var extension = _dynamicGraph.Extensions[pos.x, pos.y]!.Value;
+        cursor.PreviousNode = cursor.CurrentNode;
+        cursor.CurrentNode = cursor.NextNode;
     }
 
     private void HighlightPath() {
@@ -767,7 +881,6 @@ public class DebugPathfinder {
             return;
         }
         while (cursor.Connection is not null) {
-
             _connectionSprites[cursor.GridPos.x, cursor.GridPos.y]!.sprite.color = cursor.Connection.Value.Type switch {
                 ConnectionType.Drop
                 or ConnectionType.Jump
@@ -781,7 +894,7 @@ public class DebugPathfinder {
     }
 
     public void DisplaySprites() {
-        if (DisplayingSprites || !IsInit) {
+        if (DisplayingSprites || PathingMode == Mode.UnInit) {
             return;
         }
         for (int y = 0; y < _closedNodes.Height; y++) {
@@ -812,6 +925,43 @@ public class DebugPathfinder {
             }
         }
         DisplayingSprites = false;
+    }
+
+    private void UpdateConnectionSprite(IVec2 current, IVec2 neighbour, ConnectionType type) {
+        var neighbourConnectionSprite = _connectionSprites[neighbour.x, neighbour.y]!.sprite;
+        neighbourConnectionSprite.isVisible = true;
+        if (type
+            is ConnectionType.Jump
+            or ConnectionType.Drop
+            or ConnectionType.WalkOffEdge
+            or ConnectionType.Pounce
+        ) {
+            neighbourConnectionSprite.color = Color.grey;
+        } else {
+            neighbourConnectionSprite.color = Color.white;
+        }
+        var currentScreenPos = RoomHelper.MiddleOfTile(current);
+        var neighbourScreenPos = RoomHelper.MiddleOfTile(neighbour);
+        LineHelper.ReshapeLine(
+            (TriangleMesh)neighbourConnectionSprite,
+            neighbourScreenPos,
+            currentScreenPos
+        );
+    }
+
+    public enum Mode {
+        UnInit,
+        Backward,
+        Foreward,
+        ReversingPath,
+    }
+
+    private struct ReversalCursor {
+        public PathNode? PreviousNode;
+        public PathNode? CurrentNode;
+        public PathNode? NextNode;
+        public ConnectionType? PreviousType;
+        public ConnectionType? CurrentType;
     }
 }
 
@@ -847,14 +997,27 @@ static class VisualizerHooks {
             }
             if (InputHelper.JustPressedMouseButton(0)) {
                 var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
-                debugPathfinder.InitPathfinding(
+                debugPathfinder.InitBackwardPathfinding(
                     RoomHelper.TilePosition(self.bodyChunks[1].pos),
                     RoomHelper.TilePosition(mousePos),
                     new SlugcatDescriptor(self)
                 );
+            } else if (InputHelper.JustPressed(KeyCode.F)) {
+                List<IVec2> itemList = new();
+                foreach (var list in self.room.physicalObjects) {
+                    foreach (var obj in list) {
+                        if (obj is ScavengerBomb) {
+                            itemList.Add(RoomHelper.TilePosition(obj.bodyChunks[0].pos));
+                        }
+                    }
+                }
+                debugPathfinder.InitForewardPathfinding(
+                    RoomHelper.TilePosition(self.bodyChunks[1].pos),
+                    (PathNode node) => itemList.Contains(node.GridPos) ? node.GridPos : null,
+                    new SlugcatDescriptor(self)
+                );
             }
-            if (debugPathfinder.IsInit
-                && !debugPathfinder.IsFinished
+            if (!debugPathfinder.IsFinished
                 && debugPathfinder.DisplayingSprites
             ) {
                 debugPathfinder.Poll();

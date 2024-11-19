@@ -7,6 +7,7 @@ using UnityEngine;
 using IVec2 = RWCustom.IntVector2;
 using System.IO;
 using RWCustom;
+using System.Linq;
 
 namespace JumpSlug.Pathfinding;
 
@@ -18,7 +19,7 @@ public class PathNode {
     public PathConnection? Connection;
     public float PathCost;
 
-    public float Heuristic { get; private set; }
+    public float Heuristic;
     public float FCost => PathCost + Heuristic;
     public float Threat;
 
@@ -43,19 +44,11 @@ public class PathNode {
     /// <param name="cost">
     /// the new path cost to assign to the node.
     /// </param>
-    public void Reset(IVec2 start, PathConnection? connection, float cost, float threat) {
+    public void Reset(PathConnection? connection, float cost, float threat, float heuristic) {
         PathCost = cost;
         Connection = connection;
-        ResetHeuristic(start);
+        Heuristic = heuristic;
         Threat = threat;
-    }
-
-    public void ResetHeuristic(IVec2 start) {
-        IVec2 distance = GridPos - start;
-        Heuristic = Mathf.Sqrt(
-            distance.x * distance.x
-            + distance.y * distance.y
-        );
     }
 }
 
@@ -316,9 +309,17 @@ public class PathNodeQueue {
 
     public void ResetHeuristics(IVec2 start) {
         foreach (var node in _nodes) {
-            node.ResetHeuristic(start);
+            node.Heuristic = start.FloatDist(node.GridPos);
         }
-        // broken piece of shit
+        for (int i = _nodes.Count / 2; i >= 0; i--) {
+            MoveDown(i);
+        }
+    }
+
+    public void RemoveHeuristics() {
+        foreach (var node in _nodes) {
+            node.Heuristic = 0;
+        }
         for (int i = _nodes.Count / 2; i >= 0; i--) {
             MoveDown(i);
         }
@@ -445,7 +446,12 @@ public class Pathfinder {
     /// Null if no path could be found or the coordinates are invalid,
     /// otherwise returns a <see cref="Path">path</see> ready for use by the AI.
     /// </returns>
-    public PathConnection? FindPath(IVec2 start, IVec2 destination, SlugcatDescriptor descriptor, bool updateThreat = false) {
+    public PathConnection? FindPathTo(
+        IVec2 start,
+        IVec2 destination,
+        SlugcatDescriptor descriptor,
+        bool updateThreat = false
+    ) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
         if (sharedGraph.GetNode(start) is null) {
             Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
@@ -457,6 +463,9 @@ public class Pathfinder {
             _lastDescriptor = descriptor;
             return null;
         }
+        if (start == destination) {
+            return null;
+        }
         if (Timers.Active) {
             Timers.FindPath.Start();
         }
@@ -465,7 +474,7 @@ public class Pathfinder {
             OpenNodes.Reset();
             ClosedNodes.Reset();
             var destNode = PathNodePool[destination]!;
-            destNode.Reset(start, null, 0, 0);
+            destNode.Reset(null, 0, 0, 0);
             NodeQueue.Reset();
             NodeQueue.Add(destNode);
             OpenNodes[destination] = true;
@@ -507,40 +516,10 @@ public class Pathfinder {
             ClosedNodes[currentPos] = true;
 
             var graphNode = sharedGraph.Nodes[currentPos.x, currentPos.y]!;
-            var adjacencyList = DynamicGraph.AdjacencyLists[currentPos.x, currentPos.y]!;
+            var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
 
-            void CheckConnection(NodeConnection connection) {
-                IVec2 neighbourPos = connection.Next.GridPos;
-                PathNode currentNeighbour = PathNodePool[neighbourPos]!;
-                if (ClosedNodes[neighbourPos]) {
-                    return;
-                }
-
-                if (!OpenNodes[neighbourPos]) {
-                    OpenNodes[neighbourPos] = true;
-                    currentNeighbour.Reset(
-                        start,
-                        new PathConnection(connection.Type, currentNode),
-                        currentNode.PathCost + connection.Weight,
-                        _threatTracker.ThreatAtTile(neighbourPos)
-                    );
-                    NodeQueue.Add(currentNeighbour);
-                }
-
-                if (currentNode.PathCost + currentNode.Threat + connection.Weight
-                    < currentNeighbour.PathCost + currentNeighbour.Threat
-                ) {
-                    currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
-                    currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
-                    NodeQueue.DecreasePriority(currentNeighbour.GridPos);
-                }
-            }
-
-            foreach (var connection in graphNode.Connections) {
-                CheckConnection(connection);
-            }
-            foreach (var connection in adjacencyList) {
-                CheckConnection(connection);
+            foreach (var connection in graphNode.IncomingConnections.Concat(extension.IncomingConnections)) {
+                CheckConnection(currentNode, connection, useHeuristic: true);
             }
         }
         if (Timers.Active) {
@@ -548,6 +527,126 @@ public class Pathfinder {
         }
         _lastDescriptor = descriptor;
         return null;
+    }
+
+    public (IVec2 destination, PathConnection connection)? FindPathFrom(
+        IVec2 start,
+        Func<PathNode, IVec2?> destination,
+        SlugcatDescriptor descriptor
+    ) {
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        if (sharedGraph.GetNode(start) is null) {
+            Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
+            _lastDescriptor = descriptor;
+            return null;
+        }
+        if (Timers.Active) {
+            Timers.FindPath.Start();
+        }
+        OpenNodes.Reset();
+        ClosedNodes.Reset();
+        var startNode = PathNodePool[start]!;
+        startNode.Reset(null, 0, 0, 0);
+        NodeQueue.Reset();
+        NodeQueue.Add(startNode);
+        OpenNodes[start] = true;
+        _lastDestination = new IVec2(-1, -1);
+        int width = _room.Width;
+        int height = _room.Height;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                var node = PathNodePool[x, y];
+                if (node is not null) {
+                    node.Threat = 0;
+                }
+            }
+        }
+
+        if (_lastDescriptor != descriptor) {
+            DynamicGraph.Reset(descriptor);
+        }
+
+        while (NodeQueue.Count > 0) {
+            var currentNode = NodeQueue.Root!;
+            var currentPos = currentNode.GridPos;
+            if (destination(currentNode) is IVec2 dest) {
+                if (Timers.Active) {
+                    Timers.FindPath.Stop();
+                }
+                _lastDestination = currentPos;
+                _lastDescriptor = descriptor;
+                ReversePath(currentNode);
+                if (start == currentPos) {
+                    return null;
+                }
+                return (dest, PathNodePool[start]!.Connection!.Value); 
+            }
+            NodeQueue.RemoveRoot();
+            OpenNodes[currentPos] = false;
+            ClosedNodes[currentPos] = true;
+
+            var graphNode = sharedGraph.Nodes[currentPos.x, currentPos.y]!;
+            var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
+
+            foreach (var connection in graphNode.OutgoingConnections.Concat(extension.OutgoingConnections)) {
+                CheckConnection(currentNode, connection, useHeuristic: false);
+            }
+        }
+        if (Timers.Active) {
+            Timers.FindPath.Stop();
+        }
+        _lastDescriptor = descriptor;
+        return null;
+    }
+
+    private void CheckConnection(PathNode currentNode, NodeConnection connection, bool useHeuristic) {
+        IVec2 neighbourPos = connection.Next.GridPos;
+        PathNode currentNeighbour = PathNodePool[neighbourPos]!;
+        if (ClosedNodes[neighbourPos]) {
+            return;
+        }
+
+        if (!OpenNodes[neighbourPos]) {
+            OpenNodes[neighbourPos] = true;
+            currentNeighbour.Reset(
+                new PathConnection(connection.Type, currentNode),
+                currentNode.PathCost + connection.Weight,
+                _threatTracker.ThreatAtTile(neighbourPos),
+                useHeuristic ? currentNode.GridPos.FloatDist(neighbourPos) : 0
+            );
+            NodeQueue.Add(currentNeighbour);
+        }
+
+        if (currentNode.PathCost + currentNode.Threat + connection.Weight
+            < currentNeighbour.PathCost + currentNeighbour.Threat
+        ) {
+            currentNeighbour.PathCost = currentNode.PathCost + connection.Weight;
+            currentNeighbour.Connection = new PathConnection(connection.Type, currentNode);
+            NodeQueue.DecreasePriority(currentNeighbour.GridPos);
+        }
+    }
+
+    private void ReversePath(PathNode destNode) {
+        OpenNodes.Reset();
+        ClosedNodes.Reset();
+        ClosedNodes[destNode.GridPos] = true;
+        NodeQueue.Reset();
+        PathNode? previousNode = null;
+        PathNode? currentNode = destNode;
+        PathNode? nextNode = null;
+        ConnectionType? previousType = null;
+        ConnectionType? currentType;
+        while (currentNode is not null) {
+            nextNode = currentNode.Connection?.Next;
+            if (nextNode is not null) {
+                ClosedNodes[nextNode.GridPos] = true;
+            }
+            currentType = currentNode.Connection?.Type;
+            currentNode.Connection = previousType is null ? null : new PathConnection(previousType, previousNode!);
+            previousType = currentType;
+            previousNode = currentNode;
+            currentNode = nextNode;
+        }
     }
 
     public class ThreatMapVisualizer {

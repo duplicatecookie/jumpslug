@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Mono.Cecil.Cil;
 
@@ -28,7 +29,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private bool _performingAirMovement;
     private int _offPathCounter;
     private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 5;
-    private int threatTestCoolDown;
+    private float _pathThreat;
+    private PathNode? _destinationCandidate;
     private Visualizer? _visualizer;
     private bool _visualizeNode;
     private readonly NodeVisualizer _nodeVisualizer;
@@ -89,24 +91,27 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             FindPath();
         }
 
-        if (threatTestCoolDown > 0) {
-            threatTestCoolDown -= 1;
-        } else {
-            threatTestCoolDown = 10;
-            if (!_performingAirMovement
-                && _currentNode is not null
-                && _currentConnection is not null
-                && threatTracker.ThreatAlongPath(
-                    _currentNode.GridPos,
-                    _currentConnection.Value,
-                    20
-                ) > 1f
-            ) {
-                FindPath(updateThreat: true);
-            }
+        float lastThreat = _pathThreat;
+        if (_currentNode is not null && _currentConnection is PathConnection connection) {
+            _pathThreat = threatTracker.ThreatAlongPath(_currentNode.GridPos, connection, 15);
         }
 
-
+        if (threatTracker.mostThreateningCreature is not null) {
+            if (_currentNode is not null
+                && (_currentConnection is null
+                && threatTracker
+                    .mostThreateningCreature
+                    .representedCreature
+                    .abstractAI
+                    .RealAI
+                    .pathFinder
+                    .CoordinateReachable(_room.ToWorldCoordinate(_currentNode.GridPos))
+                || _pathThreat > lastThreat + 10
+                )
+            ) {
+                FindEscapePathAndDestination();
+            }
+        }
 
         Move();
         UpdateVisualization();
@@ -150,12 +155,44 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
+    private IVec2? DetermineEscapeDestination(PathNode node) {
+        if (node.PathCost > 15) {
+            if (_destinationCandidate is null) {
+                return null;
+            } else {
+                var pos = _destinationCandidate.GridPos;
+                _destinationCandidate = null;
+                return pos;
+            }
+        }
+        if (node.Threat < _destinationCandidate?.Threat) {
+            _destinationCandidate = node;
+        }
+        return null;
+    }
+
+    private void FindEscapePathAndDestination() {
+        if (!_performingAirMovement && _currentNode is not null) {
+            var sharedGraph = _room.GetCWT().SharedGraph!;
+            var result = _pathfinder.FindPathFrom(
+                _currentNode.GridPos,
+                DetermineEscapeDestination,
+                new SlugcatDescriptor(_slugcat)
+            );
+            if (result is (IVec2, PathConnection) tuple) {
+                _destination = tuple.destination;
+                _currentConnection = tuple.connection;
+                _visualizer?.UpdatePath();
+            }
+        }
+    }
+
     private void FindPath(bool updateThreat = false) {
         if (_currentNode is null || _destination is null) {
             _currentConnection = null;
             return;
         } else {
-            _currentConnection = _pathfinder.FindPath(
+            _currentConnection = _pathfinder.FindPathTo(
                 _currentNode.GridPos,
                 _destination.Value,
                 new SlugcatDescriptor(_slugcat),
@@ -323,13 +360,13 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 }
                 return;
             } else {
-                var connection = _currentConnection!.Value.FindInPath(node.GridPos);
+                var connection = _currentConnection?.FindInPath(node.GridPos);
                 if (connection is not null) {
                     _currentNode = node;
                     _currentConnection = connection;
                     _performingAirMovement = false;
                 } else if (FallingTowardsPath()) {
-                    var currentConnection = _currentConnection.Value;
+                    var currentConnection = _currentConnection!.Value;
                     if (currentConnection.Type is ConnectionType.Jump jump) {
                         input.x = jump.Direction;
                         if (_slugcat.jumpBoost > 0) {
@@ -353,13 +390,23 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             }
         } else {
             _currentNode = CurrentNode();
-            if (_currentNode is null || _currentNode.GridPos == _destination) {
+            if (_currentNode is null) {
                 if (_currentConnection?.Type is ConnectionType.Drop) {
                     _performingAirMovement = true;
                 } else {
                     _currentConnection = null;
+                    _visualizer?.UpdatePath();
                 }
                 _slugcat.input[0] = input;
+                if (Timers.Active) {
+                    Timers.FollowPath.Stop();
+                }
+                return;
+            } else if (_currentNode.GridPos == _destination) {
+                _currentConnection = null;
+                _destination = null;
+                _visualizer?.UpdatePath();
+                 _slugcat.input[0] = input;
                 if (Timers.Active) {
                     Timers.FollowPath.Stop();
                 }
@@ -801,7 +848,6 @@ static class ThreatTrackerExtension {
             pos = cursor.Value.Next.GridPos;
             cursor = cursor.Value.Next.Connection;
         }
-        Plugin.Logger!.LogDebug($"path threat: {totalThreat}");
         return totalThreat;
     }
 
