@@ -79,7 +79,7 @@ public class NodeConnection {
 
     public NodeConnection(ConnectionType type, GraphNode next, float weight = 1f) {
         if (next is null) {
-            throw new NoNullAllowedException();
+            throw new ArgumentNullException();
         }
         Next = next;
         Weight = weight;

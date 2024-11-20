@@ -41,7 +41,6 @@ class FunctionTimer {
 static class Timers {
     public static bool Active = false;
     public static FunctionTimer FindPath = new FunctionTimer("Pathfinder.FindPath");
-    public static FunctionTimer FollowPath = new FunctionTimer("JumpSlugAI.FollowPath");
     public static FunctionTimer TraceFromNode = new FunctionTimer("DynamicGraph.TraceFromNode");
 }
 
@@ -57,7 +56,6 @@ static class TimerHooks {
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
         if (InputHelper.JustPressed(KeyCode.R) && Timers.Active) {
             Timers.FindPath.Report();
-            Timers.FollowPath.Report();
             Timers.TraceFromNode.Report();
         }
         orig(self, eu);

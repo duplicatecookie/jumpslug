@@ -88,7 +88,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         if (InputHelper.JustPressedMouseButton(0)) {
             var mousePos = (Vector2)Input.mousePosition + _room!.game.cameras[0].pos;
             _destination = _room.GetTilePosition(mousePos);
-            FindPath();
+            _currentConnection = FindPath();
+            _visualizer?.UpdatePath();
         }
 
         float lastThreat = _pathThreat;
@@ -113,7 +114,13 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             }
         }
 
-        Move();
+        if (_waitOneTick || _destination is null) {
+            _slugcat.input[0] = default;
+            _waitOneTick = false;
+        } else {
+            _slugcat.input[0] = _performingAirMovement ? MoveInAir() : Move();
+        }
+        
         UpdateVisualization();
     }
 
@@ -187,25 +194,24 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private void FindPath(bool updateThreat = false) {
+    private PathConnection? FindPath(bool updateThreat = false) {
         if (_currentNode is null || _destination is null) {
-            _currentConnection = null;
-            return;
+            return null;
         } else {
-            _currentConnection = _pathfinder.FindPathTo(
+            return _pathfinder.FindPathTo(
                 _currentNode.GridPos,
                 _destination.Value,
                 new SlugcatDescriptor(_slugcat),
                 updateThreat
             );
         }
-        _visualizer?.UpdatePath();
     }
 
     private void FindPathIfNotFallingTowardsPathForTooLong() {
         if (!FallingTowardsPath()) {
             if (++_offPathCounter > MAX_TICKS_NOT_FALLING_TOWARDS_PATH) {
-                FindPath();
+                _currentConnection = FindPath();
+                _visualizer?.UpdatePath();
                 _offPathCounter = 0;
             }
         } else if (_offPathCounter > 0) {
@@ -314,116 +320,97 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         return sharedGraph.GetNode(headPos);
     }
 
-    private void Move() {
+    private Player.InputPackage Move() {
+        _currentNode = CurrentNode();
+        if (_currentNode is null) {
+            if (_currentConnection?.Type is ConnectionType.Drop) {
+                _performingAirMovement = true;
+            } else {
+                _currentConnection = null;
+                _visualizer?.UpdatePath();
+            }
+            return default;
+        } else if (_currentNode.GridPos == _destination) {
+            _currentConnection = null;
+            _destination = null;
+            _visualizer?.UpdatePath();
+            return default;
+        } else if (_currentNode.HasPlatform && _slugcat.bodyMode == Player.BodyModeIndex.Default) {
+            _performingAirMovement = true;
+            return default;
+        } else {
+            _currentConnection = FindPath();
+            _visualizer?.UpdatePath();
+            return GenerateInputs();
+        }
+    }
+
+    private Player.InputPackage MoveInAir() {
         Player.InputPackage input = default;
-        if (_waitOneTick || _destination is null) {
-            _slugcat.input[0] = input;
-            _waitOneTick = false;
-            return;
+        var node = CurrentNode();
+        if (node is null || node == _currentNode) {
+            if (_currentConnection is null) {
+                _performingAirMovement = false;
+            } else {
+                var currentConnection = _currentConnection!.Value;
+                if (currentConnection.Type is ConnectionType.Jump jump) {
+                    input.x = jump.Direction;
+                    if (_slugcat.jumpBoost > 0
+                        || _slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
+                    ) {
+                        input.jmp = true;
+                    }
+                } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
+                    input.x = edgeWalk.Direction;
+                } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
+                    input.x = pounce.Direction;
+                } else if (currentConnection.Type is ConnectionType.Drop
+                    && node?.Type is NodeType.Floor
+                ) {
+                    input.y = -1;
+                }
+            }
+            return input;
+        } else {
+            var connection = _currentConnection?.FindInPath(node.GridPos);
+            if (connection is not null) {
+                _currentNode = node;
+                _currentConnection = connection;
+                _performingAirMovement = false;
+            } else if (FallingTowardsPath()) {
+                var currentConnection = _currentConnection!.Value;
+                if (currentConnection.Type is ConnectionType.Jump jump) {
+                    input.x = jump.Direction;
+                    if (_slugcat.jumpBoost > 0) {
+                        input.jmp = true;
+                    }
+                } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
+                    input.x = edgeWalk.Direction;
+                } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
+                    input.x = pounce.Direction;
+                }
+                return input;
+            } else {
+                _performingAirMovement = false;
+                _currentNode = node;
+                _currentConnection = FindPath();
+                _visualizer?.UpdatePath();
+                return GenerateInputs();
+            }
         }
+        return input;
+    }
 
-        if (Timers.Active) {
-            Timers.FollowPath.Start();
-        }
-
+    private Player.InputPackage GenerateInputs() {
+        Player.InputPackage input = default;
         var sharedGraph = _room!.GetCWT().SharedGraph!;
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
-
-        if (_performingAirMovement) {
-            var node = CurrentNode();
-            if (node is null || node == _currentNode) {
-                if (_currentConnection is null) {
-                    _performingAirMovement = false;
-                } else {
-                    var currentConnection = _currentConnection!.Value;
-                    if (currentConnection.Type is ConnectionType.Jump jump) {
-                        input.x = jump.Direction;
-                        if (_slugcat.jumpBoost > 0
-                            || _slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
-                        ) {
-                            input.jmp = true;
-                        }
-                    } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
-                        input.x = edgeWalk.Direction;
-                    } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
-                        input.x = pounce.Direction;
-                    } else if (currentConnection.Type is ConnectionType.Drop
-                        && node?.Type is NodeType.Floor
-                    ) {
-                        input.y = -1;
-                    }
-                }
-                _slugcat.input[0] = input;
-                if (Timers.Active) {
-                    Timers.FollowPath.Stop();
-                }
-                return;
-            } else {
-                var connection = _currentConnection?.FindInPath(node.GridPos);
-                if (connection is not null) {
-                    _currentNode = node;
-                    _currentConnection = connection;
-                    _performingAirMovement = false;
-                } else if (FallingTowardsPath()) {
-                    var currentConnection = _currentConnection!.Value;
-                    if (currentConnection.Type is ConnectionType.Jump jump) {
-                        input.x = jump.Direction;
-                        if (_slugcat.jumpBoost > 0) {
-                            input.jmp = true;
-                        }
-                    } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
-                        input.x = edgeWalk.Direction;
-                    } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
-                        input.x = pounce.Direction;
-                    }
-
-                    if (Timers.Active) {
-                        Timers.FollowPath.Stop();
-                    }
-                    return;
-                } else {
-                    _performingAirMovement = false;
-                    _currentNode = node;
-                    FindPath();
-                }
-            }
-        } else {
-            _currentNode = CurrentNode();
-            if (_currentNode is null) {
-                if (_currentConnection?.Type is ConnectionType.Drop) {
-                    _performingAirMovement = true;
-                } else {
-                    _currentConnection = null;
-                    _visualizer?.UpdatePath();
-                }
-                _slugcat.input[0] = input;
-                if (Timers.Active) {
-                    Timers.FollowPath.Stop();
-                }
-                return;
-            } else if (_currentNode.GridPos == _destination) {
-                _currentConnection = null;
-                _destination = null;
-                _visualizer?.UpdatePath();
-                 _slugcat.input[0] = input;
-                if (Timers.Active) {
-                    Timers.FollowPath.Stop();
-                }
-                return;
-            } else if (_currentNode.HasPlatform && _slugcat.bodyMode == Player.BodyModeIndex.Default) {
-                _performingAirMovement = true;
-                _slugcat.input[0] = input;
-                if (Timers.Active) {
-                    Timers.FollowPath.Stop();
-                }
-                return;
-            }
-            FindPath();
+        if (_currentNode is null) {
+            return input;
         }
-
         if (_currentConnection is null) {
-            if (_currentNode.HasBeam && _slugcat.bodyMode != Player.BodyModeIndex.ClimbingOnBeam) {
+            if (_currentNode?.HasBeam == true && _slugcat.bodyMode != Player.BodyModeIndex.ClimbingOnBeam) {
                 input.y = 1;
             }
         } else {
@@ -636,11 +623,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             } else if (currentConnection.Type is ConnectionType.SlideOnWall(int wallDir)) {
                 input.x = wallDir;
             }
-            _slugcat.input[0] = input;
-            if (Timers.Active) {
-                Timers.FollowPath.Stop();
-            }
         }
+        return input;
     }
 
     private class Visualizer {
