@@ -590,9 +590,14 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                             input.y = 1;
                         }
                     }
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
-                    if (_currentNode.HasBeam) {
-                        input.y = 1;
+                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default
+                    && _currentNode.HasBeam
+                ) {
+                    input.y = 1;
+                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
+                    input.y = 1;
+                    if (footPos.x == _currentNode.GridPos.x - jumpDir) {
+                        input.x = jumpDir;
                     }
                 }
             } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
