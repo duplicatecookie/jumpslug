@@ -300,6 +300,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         if (_slugcat.bodyMode == Player.BodyModeIndex.Stand
             || _slugcat.animation == Player.AnimationIndex.StandOnBeam
             || _slugcat.animation == Player.AnimationIndex.BeamTip
+            || _slugcat.animation == Player.AnimationIndex.StandUp
         ) {
             return sharedGraph.GetNode(footPos) is GraphNode node
                 ? node
