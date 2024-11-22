@@ -780,7 +780,9 @@ public class DynamicGraph {
                 TraceDrop(pos);
             }
         } else if (graphNode.Type is NodeType.Wall jumpWall
+            && !graphNode.HasBeam
             && sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is NodeType.Wall footJumpWall
+            && sharedGraph.GetNode(pos.x, pos.y + 1)?.Type is NodeType.Wall // pressing jump under a ledge doesn't always wall jump
             && jumpWall.Direction == footJumpWall.Direction
         ) {
             var v0 = descriptor.WallJumpVector(jumpWall.Direction);
