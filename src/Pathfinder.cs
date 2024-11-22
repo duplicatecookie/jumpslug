@@ -171,7 +171,7 @@ public readonly struct SlugcatDescriptor {
 
     public readonly Vector2 HorizontalPoleJumpVector(int direction) {
         return new Vector2(
-            4.2f * direction * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
+            direction == 0 ? 0 : 4.2f * direction * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
             (IsRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, Adrenaline) + JumpBoost(IsPup ? 7 : 8)
         );
     }

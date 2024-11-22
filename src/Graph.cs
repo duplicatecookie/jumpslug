@@ -95,6 +95,7 @@ public record ConnectionType {
     public record Climb(IVec2 Direction) : ConnectionType();
     public record Crawl(IVec2 Direction) : ConnectionType();
     public record Jump(int Direction) : ConnectionType();
+    public record JumpUp() : ConnectionType();
     public record WalkOffEdge(int Direction) : ConnectionType();
     public record Pounce(int Direction) : ConnectionType();
     public record Shortcut() : ConnectionType();
@@ -105,6 +106,7 @@ public record ConnectionType {
 
     public Color VisualizationColor => this switch {
         Jump
+        or JumpUp
         or WalkOffEdge
         or Pounce => Color.blue,
         Drop => Color.red,
@@ -729,10 +731,12 @@ public class DynamicGraph {
                 TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(-1));
                 TraceJump(graphNode, headPos, fallV0, new ConnectionType.WalkOffEdge(-1));
             }
+            TraceJumpUp(pos, v0.y);
             TraceDrop(pos);
         }
 
         if (graphNode.Beam == GraphNode.BeamType.Above) {
+            TraceJumpUp(pos, descriptor.HorizontalPoleJumpVector(0).y);
             TraceDrop(pos);
         } else if (graphNode.Beam == GraphNode.BeamType.Below) {
             TraceDrop(pos);
@@ -756,10 +760,10 @@ public class DynamicGraph {
                     TraceJump(graphNode, headPos, v0, new ConnectionType.WalkOffEdge(-1));
                 }
             }
+            TraceJumpUp(pos, v0.y);
             if (sharedGraph.GetNode(pos.x, pos.y - 1)?.HasPlatform == true) {
                 TraceDrop(pos);
             }
-
         } else if (graphNode.Type is NodeType.Corridor) {
             var v0 = descriptor.HorizontalCorridorFallVector(1);
             // v0.x might be too large
@@ -899,6 +903,66 @@ public class DynamicGraph {
             } else if (shiftedNode.Beam == GraphNode.BeamType.Cross) {
                 shiftedExt.IncomingConnections.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
                 startExt.OutgoingConnections.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
+            }
+        }
+    }
+
+    private void TraceJumpUp(IVec2 pos, float v0) {
+        TraceJumpUp(pos.x, pos.y, v0);
+    }
+
+    private void TraceJumpUp(int x, int y, float v0) {
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        var startNode = sharedGraph.GetNode(x, y);
+        if (startNode is null) {
+            return;
+        }
+        var startExt = Extensions[x, y]!.Value;
+        // the raw max height in tile space, truncated to prevent overpredition and moved up to start at the head tile 
+        int maxHeight = y + (int)(0.5f * v0 * v0 / _room.gravity / 20) + 1; 
+        for (int i = y + 1; i <= maxHeight; i++) {
+            var currentTile = _room.GetTile(x, i);
+            var currentNode = sharedGraph.GetNode(x, i);
+            if (currentTile.Terrain == Room.Tile.TerrainType.Solid
+                || currentTile.Terrain == Room.Tile.TerrainType.Slope
+            ) {
+                break;
+            }
+            if (currentNode is null) {
+                continue;
+            }
+            var currentExt = Extensions[x, i]!.Value;
+            if (currentNode.Type is NodeType.Corridor || currentNode.Beam == GraphNode.BeamType.Below) {
+                startExt.OutgoingConnections.Add(
+                    new NodeConnection(
+                        new ConnectionType.JumpUp(),
+                        currentNode,
+                        i - y
+                    )
+                );
+                currentExt.IncomingConnections.Add(
+                    new NodeConnection(
+                        new ConnectionType.JumpUp(),
+                        startNode,
+                        i - y
+                    )
+                );
+                break;
+            } else if (currentNode.Beam == GraphNode.BeamType.Horizontal) {
+                startExt.OutgoingConnections.Add(
+                    new NodeConnection(
+                        new ConnectionType.JumpUp(),
+                        currentNode,
+                        i - y
+                    )
+                );
+                currentExt.IncomingConnections.Add(
+                    new NodeConnection(
+                        new ConnectionType.JumpUp(),
+                        startNode,
+                        i - y
+                    )
+                );
             }
         }
     }

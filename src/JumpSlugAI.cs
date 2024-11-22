@@ -11,6 +11,7 @@ using UnityEngine;
 
 using JumpSlug.Pathfinding;
 using RWCustom;
+using System.Runtime.InteropServices;
 
 namespace JumpSlug;
 
@@ -361,6 +362,13 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     ) {
                         input.jmp = true;
                     }
+                } else if (currentConnection.Type is ConnectionType.JumpUp) {
+                    if (_slugcat.jumpBoost > 0
+                        || _slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
+                    ) {
+                        input.y = 1;
+                        input.jmp = true;
+                    }
                 } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
                     input.x = edgeWalk.Direction;
                 } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
@@ -601,6 +609,32 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                         input.x = jumpDir;
                     }
                 }
+            } else if (currentConnection.Type is ConnectionType.JumpUp) {
+                if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
+                    _performingAirMovement = true;
+                    input.jmp = true;
+                } else if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                    if (_slugcat.animation == Player.AnimationIndex.StandOnBeam
+                        || _slugcat.animation == Player.AnimationIndex.BeamTip
+                    ) {
+                        if (headPos.x == footPos.x
+                            && headPos.y == footPos.y + 1
+                            && _slugcat.bodyChunks[0].vel.x < 5f
+                        ) {
+                            input.jmp = true;
+                            _performingAirMovement = true;
+                        } else {
+                            input.y = 1;
+                        }
+                    } else if (_slugcat.animation == Player.AnimationIndex.HangFromBeam) {
+                        input.y = 1;
+                        _waitOneTick = true;
+                    }
+                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
+                    input.y = 1;
+                } else if (_slugcat.bodyMode == Player.BodyModeIndex.WallClimb) {
+                    input.x = -_slugcat.flipDirection;
+                }
             } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
                 input.x = walkDir;
                 if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
@@ -714,6 +748,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
                     ConnectionType.Drop => "Drop",
                     ConnectionType.Jump(int dir) => $"Jump({dir})",
+                    ConnectionType.JumpUp => "JumpUp",
                     ConnectionType.Pounce(int dir) => $"Pounce({dir})",
                     ConnectionType.Shortcut => "Shortcut",
                     ConnectionType.Walk(int dir) => $"Walk({dir})",
