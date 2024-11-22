@@ -325,6 +325,22 @@ public class SharedGraph {
                             )
                         );
                     }
+                    if (aboveNode?.Type is NodeType.Wall(int wallDir)) {
+                        aboveNode.OutgoingConnections.Add(
+                            new NodeConnection(
+                                new ConnectionType.SlideOnWall(wallDir),
+                                currentNode,
+                                2
+                            )
+                        );
+                        currentNode.IncomingConnections.Add(
+                            new NodeConnection(
+                                new ConnectionType.SlideOnWall(wallDir),
+                                aboveNode,
+                                2
+                            )
+                        );
+                    }
                 }
 
                 if (currentNode.Type is NodeType.Slope) {
@@ -368,6 +384,22 @@ public class SharedGraph {
                             Nodes[x + 1, y + 1]!,
                             new ConnectionType.Walk(1),
                             new ConnectionType.Crawl(new IVec2(-1, 0))
+                        );
+                    }
+                    if (aboveNode?.Type is NodeType.Wall(int wallDir)) {
+                        aboveNode.OutgoingConnections.Add(
+                            new NodeConnection(
+                                new ConnectionType.SlideOnWall(wallDir),
+                                currentNode,
+                                2
+                            )
+                        );
+                        currentNode.IncomingConnections.Add(
+                            new NodeConnection(
+                                new ConnectionType.SlideOnWall(wallDir),
+                                aboveNode,
+                                2
+                            )
                         );
                     }
                 }
