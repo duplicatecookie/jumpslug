@@ -18,12 +18,12 @@ static class RoomCWT {
 static class RoomHooks {
     public static void RegisterHooks() {
         On.RoomPreparer.Update += RoomPreparer_Update;
-        On.Room.Update += Room_Update;
+        On.RoomCamera.Update += RoomCamera_Update;
     }
 
     public static void UnregisterHooks() {
         On.RoomPreparer.Update += RoomPreparer_Update;
-        On.Room.Update -= Room_Update;
+        On.RoomCamera.Update -= RoomCamera_Update;
     }
 
     private static void RoomPreparer_Update(On.RoomPreparer.orig_Update orig, RoomPreparer self) {
@@ -35,13 +35,13 @@ static class RoomHooks {
         }
     }
 
-    private static void Room_Update(On.Room.orig_Update orig, Room self) {
+    private static void RoomCamera_Update(On.RoomCamera.orig_Update orig, RoomCamera self) {
         orig(self);
         if (InputHelper.JustPressed(KeyCode.N)) {
-            self.GetCWT().Visualizer!.ToggleNodes();
+            self.room.GetCWT().Visualizer!.ToggleNodes();
         }
         if (InputHelper.JustPressed(KeyCode.C)) {
-            self.GetCWT().Visualizer!.ToggleConnections();
+            self.room.GetCWT().Visualizer!.ToggleConnections();
         }
     }
 }
