@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 using Mono.Cecil.Cil;
 
@@ -11,7 +10,6 @@ using UnityEngine;
 
 using JumpSlug.Pathfinding;
 using RWCustom;
-using System.Runtime.InteropServices;
 
 namespace JumpSlug;
 
@@ -87,7 +85,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             }
         }
         if (InputHelper.JustPressedMouseButton(0)) {
-            var mousePos = (Vector2)Input.mousePosition + _room!.game.cameras[0].pos;
+            var mousePos = (Vector2)UnityEngine.Input.mousePosition + _room!.game.cameras[0].pos;
             _destination = _room.GetTilePosition(mousePos);
             _currentConnection = FindPath();
             _visualizer?.UpdatePath();
@@ -119,9 +117,14 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             _slugcat.input[0] = default;
             _waitOneTick = false;
         } else {
-            _slugcat.input[0] = _performingAirMovement ? MoveInAir() : Move();
+            var input = _performingAirMovement ? MoveInAir() : Move();
+            _slugcat.input[0] = default(Player.InputPackage) with {
+                x = input.Direction.x,
+                y = input.Direction.y,
+                jmp = input.Jump,
+            };
         }
-        
+
         UpdateVisualization();
     }
 
@@ -322,7 +325,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         return sharedGraph.GetNode(headPos);
     }
 
-    private Player.InputPackage Move() {
+    private Input Move() {
         _currentNode = CurrentNode();
         if (_currentNode is null) {
             if (_currentConnection?.Type is ConnectionType.Drop) {
@@ -347,58 +350,92 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private Player.InputPackage MoveInAir() {
-        Player.InputPackage input = default;
+    private Input MoveInAir() {
         var node = CurrentNode();
         if (node is null || node == _currentNode) {
             if (_currentConnection is null) {
                 _performingAirMovement = false;
+                return Input.DoNothing;
             } else {
                 var currentConnection = _currentConnection!.Value;
-                if (currentConnection.Type is ConnectionType.Jump jump) {
-                    input.x = jump.Direction;
+                if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
+                    bool jump;
                     if (_slugcat.jumpBoost > 0
                         || _slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
                     ) {
-                        input.jmp = true;
+                        jump = true;
+                    } else {
+                        jump = false;
                     }
+                    return new Input {
+                        Direction = new IVec2(jumpDir, 0),
+                        Jump = jump,
+                    };
                 } else if (currentConnection.Type is ConnectionType.JumpUp) {
                     if (_slugcat.jumpBoost > 0
                         || _slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
                     ) {
-                        input.y = 1;
-                        input.jmp = true;
+                        return new Input {
+                            Direction = Consts.IVec2.Up,
+                            Jump = true,
+                        };
+                    } else {
+                        return Input.DoNothing;
                     }
-                } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
-                    input.x = edgeWalk.Direction;
-                } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
-                    input.x = pounce.Direction;
+                } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int ledgeDir)) {
+                    return new Input {
+                        Direction = new IVec2(ledgeDir, 0),
+                        Jump = false,
+                    };
+                } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
+                    return new Input {
+                        Direction = new IVec2(pounceDir, 0),
+                        Jump = false,
+                    };
                 } else if (currentConnection.Type is ConnectionType.Drop
                     && node?.Type is NodeType.Floor
                 ) {
-                    input.y = -1;
+                    return new Input {
+                        Direction = Consts.IVec2.Down,
+                        Jump = false,
+                    };
+                } else {
+                    return Input.DoNothing;
                 }
             }
-            return input;
         } else {
             var connection = _currentConnection?.FindInPath(node.GridPos);
             if (connection is not null) {
                 _currentNode = node;
                 _currentConnection = connection;
                 _performingAirMovement = false;
+                return GenerateInputs();
             } else if (FallingTowardsPath()) {
                 var currentConnection = _currentConnection!.Value;
-                if (currentConnection.Type is ConnectionType.Jump jump) {
-                    input.x = jump.Direction;
+                if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
+                    bool jump;
                     if (_slugcat.jumpBoost > 0) {
-                        input.jmp = true;
+                        jump = true;
+                    } else {
+                        jump = false;
                     }
-                } else if (currentConnection.Type is ConnectionType.WalkOffEdge edgeWalk) {
-                    input.x = edgeWalk.Direction;
-                } else if (currentConnection.Type is ConnectionType.Pounce pounce) {
-                    input.x = pounce.Direction;
+                    return new Input {
+                        Direction = new IVec2(jumpDir, 0),
+                        Jump = jump,
+                    };
+                } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
+                    return new Input {
+                        Direction = new IVec2(walkDir, 0),
+                        Jump = false,
+                    };
+                } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
+                    return new Input {
+                        Direction = new IVec2(pounceDir, 0),
+                        Jump = false,
+                    };
+                } else {
+                    return Input.DoNothing;
                 }
-                return input;
             } else {
                 _performingAirMovement = false;
                 _currentNode = node;
@@ -407,266 +444,477 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 return GenerateInputs();
             }
         }
-        return input;
     }
 
-    private Player.InputPackage GenerateInputs() {
-        Player.InputPackage input = default;
+    private Input GenerateInputs() {
         var sharedGraph = _room!.GetCWT().SharedGraph!;
-        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
-        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
         if (_currentNode is null) {
-            return input;
+            return Input.DoNothing;
         }
         if (_currentConnection is null) {
             if (_currentNode?.HasBeam == true && _slugcat.bodyMode != Player.BodyModeIndex.ClimbingOnBeam) {
-                input.y = 1;
-            }
-        } else {
-            var currentConnection = _currentConnection.Value;
-            if (currentConnection.Type is ConnectionType.Walk(int direction)) {
-                if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                    if (sharedGraph.GetNode(footPos)?.Type is NodeType.Corridor) {
-                        input.x = direction;
-                    } else if (_currentNode.GridPos.y == headPos.y) {
-                        input.y = 1;
-                    } else if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
-                        input.y = -1;
-                        input.jmp = true;
-                    } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
-                        input.x = direction;
-                    }
-                } else {
-                    if (currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 crawlDir)) {
-                        if (crawlDir.y < 0) {
-                            input.y = -1;
-                            if (_slugcat.animation != Player.AnimationIndex.DownOnFours
-                                && _slugcat.bodyMode != Player.BodyModeIndex.Default
-                            ) {
-                                input.x = direction;
-                            }
-                        } else {
-                            input.x = direction;
-                            if (crawlDir.x != 0 && currentConnection.PeekPos(2)?.y == _currentNode.GridPos.y) {
-                                input.y = -1;
-                            }
-                        }
-                    } else {
-                        input.x = direction;
-                        if (currentConnection.PeekType(1) is ConnectionType.Drop
-                            || currentConnection.PeekType(2) is ConnectionType.Drop
-                        ) {
-                            if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
-                                input.y = -1;
-                            }
-                        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-                            input.y = 1;
-                        }
-                    }
-                }
-            } else if (currentConnection.Type is ConnectionType.Crawl(IVec2 dir)) {
-                input.x = dir.x;
-                input.y = dir.y;
-                bool backwards = (_slugcat.bodyChunks[0].pos - _slugcat.bodyChunks[1].pos).Dot(dir.ToVector2()) < 0;
-                if (_slugcat.bodyMode != Player.BodyModeIndex.WallClimb
-                    && currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 nextDir)
-                    && _currentNode.Type is not NodeType.Floor
-                ) {
-                    if (backwards) {
-                        // turn around if going backwards
-                        // should not trigger when in a corner because that can lock it into switching forever when trying to go up an inverse T junction
-                        if (dir == nextDir) {
-                            input.jmp = true;
-                        } else if (dir.Dot(nextDir) == 0) {
-                            input.x = nextDir.x;
-                            input.y = nextDir.y;
-                        }
-                    }
-                }
-            } else if (currentConnection.Type is ConnectionType.Climb(IVec2 climbDir)) {
-                if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                    if (currentConnection.PeekType(1) is ConnectionType.Walk) {
-                        if (climbDir.y < 0) {
-                            input.y = -1;
-                            input.jmp = true;
-                        } else if (climbDir.y > 0) {
-                            input.y = 1;
-                        } else {
-                            input.x = climbDir.x;
-                        }
-                    } else {
-                        input.x = climbDir.x;
-                        if (climbDir.x != 0 && (_slugcat.flipDirection != climbDir.x || _slugcat.animation == Player.AnimationIndex.ClimbOnBeam)) {
-                            _waitOneTick = true;
-                        } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
-                            if (climbDir.y != 0) {
-                                input.y = 1;
-                            }
-                            if (climbDir.x != 0) {
-                                var nextPos = currentConnection.PeekPos(2);
-                                if (nextPos is not null) {
-                                    var terrain = _room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
-                                    if (terrain == Room.Tile.TerrainType.Solid
-                                        || terrain == Room.Tile.TerrainType.Slope
-                                    ) {
-                                        input.y = -1;
-                                    }
-                                }
-                            }
-                        } else if (_slugcat.animation != Player.AnimationIndex.GetUpOnBeam
-                            && _currentNode.Beam == GraphNode.BeamType.Horizontal
-                            && _room!.GetTile(_currentNode.GridPos.x, _currentNode.GridPos.y + 1).Terrain == Room.Tile.TerrainType.Air
-                            && _slugcat.input[1].y != 1
-                        ) {
-                            var nextPos = currentConnection.PeekPos(2);
-                            if (nextPos is not null) {
-                                var terrain = _room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
-                                if (terrain != Room.Tile.TerrainType.Solid
-                                    && terrain != Room.Tile.TerrainType.Slope
-                                ) {
-                                    input.y = 1;
-                                }
-                            }
-                        } else {
-                            input.y = climbDir.y;
-                        }
-                    }
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.CorridorClimb) {
-                    input.x = climbDir.x;
-                    input.y = climbDir.y;
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
-                    if (currentConnection.PeekType(1) is ConnectionType.Walk(int walkDir) && climbDir.y < 0) {
-                        input.x = walkDir;
-                    } else {
-                        input.x = climbDir.x;
-                        input.y = 1;
-                    }
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Stand
-                    && (_currentNode.GridPos == footPos
-                        || _currentNode.GridPos == new IVec2(footPos.x, footPos.y - 1))
-                    && climbDir.x != 0
-                ) {
-                    input.x = climbDir.x;
-                } else {
-                    input.x = climbDir.x;
-                    if (_currentNode.HasBeam) {
-                        input.y = 1;
-                        _waitOneTick = true;
-                    } else {
-                        Plugin.Logger!.LogWarning("trying to climb on node without pole");
-                    }
-                }
-            } else if (currentConnection.Type is ConnectionType.Drop) {
-                if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) < 0.5f) {
-                    input.y = -1;
-                    if (_slugcat.animation == Player.AnimationIndex.HangUnderVerticalBeam) {
-                        _waitOneTick = true;
-                    } else if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
-                        input.jmp = true;
-                        _performingAirMovement = true;
-                    }
-                }
-            } else if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
-                if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
-                    if (_slugcat.flipDirection == jumpDir) {
-                        _performingAirMovement = true;
-                        input.jmp = true;
-                    }
-                    input.x = jumpDir;
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.WallClimb) {
-                    input.jmp = true;
-                    input.x = jumpDir;
-                    _performingAirMovement = true;
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                    if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
-                        if (_slugcat.flipDirection == jumpDir) {
-                            input.jmp = true;
-                            _performingAirMovement = true;
-                        }
-                        input.x = jumpDir;
-                    } else if (_slugcat.animation == Player.AnimationIndex.HangFromBeam) {
-                        input.y = 1;
-                        _waitOneTick = true;
-                    } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
-                        if (headPos.x == footPos.x
-                            && headPos.y == footPos.y + 1
-                            && _slugcat.bodyChunks[0].vel.x < 5f
-                        ) {
-                            input.jmp = true;
-                            input.x = jumpDir;
-                            _performingAirMovement = true;
-                        } else {
-                            input.y = 1;
-                        }
-                    }
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
-                    if (_currentNode.Type is NodeType.Wall(int wallDir)) {
-                        input.x = wallDir;
-                    } else if (_currentNode.HasBeam) {
-                        input.y = 1;
-                    }
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-                    input.y = 1;
-                    if (footPos.x == _currentNode.GridPos.x - jumpDir) {
-                        input.x = jumpDir;
-                    }
-                }
-            } else if (currentConnection.Type is ConnectionType.JumpUp) {
-                if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
-                    _performingAirMovement = true;
-                    input.jmp = true;
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                    if (_slugcat.animation == Player.AnimationIndex.StandOnBeam
-                        || _slugcat.animation == Player.AnimationIndex.BeamTip
-                    ) {
-                        if (headPos.x == footPos.x
-                            && headPos.y == footPos.y + 1
-                            && _slugcat.bodyChunks[0].vel.x < 5f
-                        ) {
-                            input.jmp = true;
-                            _performingAirMovement = true;
-                        } else {
-                            input.y = 1;
-                        }
-                    } else if (_slugcat.animation == Player.AnimationIndex.HangFromBeam) {
-                        input.y = 1;
-                        _waitOneTick = true;
-                    }
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-                    input.y = 1;
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.WallClimb) {
-                    input.x = -_slugcat.flipDirection;
-                }
-            } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
-                input.x = walkDir;
-                if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                    if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
-                        input.y = -1;
-                        input.jmp = true;
-                        _performingAirMovement = true;
-                    } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
-                        if (headPos.x == footPos.x
-                            && headPos.y == footPos.y + 1
-                            && _slugcat.bodyChunks[0].vel.x < 5f
-                        ) {
-                            input.x = walkDir;
-                            input.y = -1;
-                            _performingAirMovement = true;
-                        }
-                    } else {
-                        input.y = -1;
-                        _performingAirMovement = true;
-                    }
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
-                    _performingAirMovement = true;
-                } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-                    input.y = 1;
-                }
-            } else if (currentConnection.Type is ConnectionType.SlideOnWall(int wallDir)) {
-                input.x = wallDir;
+                return new Input {
+                    Direction = Consts.IVec2.Up,
+                    Jump = false,
+                };
+            } else {
+                return new Input {
+                    Direction = Consts.IVec2.Zero,
+                    Jump = false,
+                };
             }
         }
-        return input;
+        var currentConnection = _currentConnection.Value;
+        if (currentConnection.Type is ConnectionType.Walk) {
+            return GenerateWalkInputs(currentConnection, _currentNode);
+        } else if (currentConnection.Type is ConnectionType.Crawl) {
+            return GenerateCrawlInputs(currentConnection, _currentNode);
+        } else if (currentConnection.Type is ConnectionType.Climb) {
+            return GenerateClimbInputs(currentConnection, _currentNode);
+        } else if (currentConnection.Type is ConnectionType.Drop) {
+            return GenerateDropInputs();
+        } else if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
+            return GenerateJumpInputs(jumpDir);
+        } else if (currentConnection.Type is ConnectionType.JumpUp) {
+            return GenerateJumpUpInputs();
+        } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir1)) {
+            return GenerateLedgeWalkInputs(walkDir1);
+        } else if (currentConnection.Type is ConnectionType.SlideOnWall(int wallDir)) {
+            return new Input {
+                Direction = new IVec2(wallDir, 0),
+                Jump = false,
+            };
+        } else {
+            throw new NotImplementedException();
+        }
+    }
+
+    private Input GenerateWalkInputs(PathConnection currentConnection, GraphNode currentNode) {
+        int walkDir = ((ConnectionType.Walk)currentConnection.Type).Direction;
+        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
+        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+            if (sharedGraph.GetNode(footPos)?.Type is NodeType.Corridor) {
+                return new Input {
+                    Direction = new IVec2(walkDir, 0),
+                    Jump = false,
+                };
+            } else if (currentNode.GridPos.y == headPos.y) {
+                return new Input {
+                    Direction = Consts.IVec2.Up,
+                    Jump = false,
+                };
+            } else if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
+                return new Input {
+                    Direction = Consts.IVec2.Down,
+                    Jump = true,
+                };
+            } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
+                return new Input {
+                    Direction = new IVec2(walkDir, 0),
+                    Jump = false,
+                };
+            }
+            throw new NotImplementedException();
+        } else if (currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 crawlDir)) {
+            if (crawlDir.y < 0) {
+                if (_slugcat.animation != Player.AnimationIndex.DownOnFours
+                    && _slugcat.bodyMode != Player.BodyModeIndex.Default
+                ) {
+                    return new Input {
+                        Direction = new IVec2(walkDir, -1),
+                        Jump = false,
+                    };
+                }
+                return new Input {
+                    Direction = Consts.IVec2.Down,
+                    Jump = false,
+                };
+            } else {
+                int yDir;
+                if (crawlDir.x != 0 && currentConnection.PeekPos(2)?.y == currentNode.GridPos.y) {
+                    yDir = -1;
+                } else {
+                    yDir = 0;
+                }
+                return new Input {
+                    Direction = new IVec2(walkDir, yDir),
+                    Jump = false,
+                };
+            }
+        } else {
+            int yDir = 0;
+            if (currentConnection.PeekType(1) is ConnectionType.Drop
+                || currentConnection.PeekType(2) is ConnectionType.Drop
+            ) {
+                if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
+                    yDir = -1;
+                }
+            } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
+                yDir = 1;
+            }
+            return new Input {
+                Direction = new IVec2(walkDir, yDir),
+                Jump = false,
+            };
+        }
+    }
+
+    private Input GenerateCrawlInputs(PathConnection currentConnection, GraphNode currentNode) {
+        IVec2 crawlDir = ((ConnectionType.Crawl)currentConnection.Type).Direction;
+        // the sign of the dot product indicates whether the angle between two vectors is greater or lesser than 90°
+        bool backwards = (_slugcat.bodyChunks[0].pos - _slugcat.bodyChunks[1].pos).Dot(crawlDir.ToVector2()) < 0;
+        // turn around if going backwards
+        // should not trigger when in a corner because that can lock the ai into switching forever when trying to go up an inverse T junction
+        if (_slugcat.bodyMode != Player.BodyModeIndex.WallClimb
+            && currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 nextDir)
+            && currentNode.Type is not NodeType.Floor
+            && backwards
+        ) {
+            if (crawlDir == nextDir) {
+                return new Input {
+                    Direction = crawlDir,
+                    Jump = true,
+                };
+            } else if (crawlDir.Dot(nextDir) == 0) {
+                return new Input {
+                    Direction = nextDir,
+                    Jump = false,
+                };
+            }
+        }
+        return new Input {
+            Direction = crawlDir,
+            Jump = false,
+        };
+    }
+
+    private Input GenerateClimbInputs(PathConnection currentConnection, GraphNode currentNode) {
+        IVec2 climbDir = ((ConnectionType.Climb)currentConnection.Type).Direction;
+        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
+        if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+            if (currentConnection.PeekType(1) is ConnectionType.Walk) {
+                if (climbDir.y < 0) {
+                    return new Input {
+                        Direction = Consts.IVec2.Down,
+                        Jump = true,
+                    };
+                } else if (climbDir.y > 0) {
+                    return new Input {
+                        Direction = Consts.IVec2.Up,
+                        Jump = false,
+                    };
+                } else {
+                    return new Input {
+                        Direction = climbDir with { y = 0 },
+                        Jump = false,
+                    };
+                }
+            } else {
+                int yDir = 0;
+                if (climbDir.x != 0 && (_slugcat.flipDirection != climbDir.x || _slugcat.animation == Player.AnimationIndex.ClimbOnBeam)) {
+                    _waitOneTick = true;
+                } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
+                    if (climbDir.y != 0) {
+                        yDir = 1;
+                    }
+                    if (climbDir.x != 0) {
+                        var nextPos = currentConnection.PeekPos(2);
+                        if (nextPos is not null) {
+                            var terrain = _room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
+                            if (terrain == Room.Tile.TerrainType.Solid
+                                || terrain == Room.Tile.TerrainType.Slope
+                            ) {
+                                yDir = -1;
+                            }
+                        }
+                    }
+                } else if (_slugcat.animation != Player.AnimationIndex.GetUpOnBeam
+                    && currentNode.Beam == GraphNode.BeamType.Horizontal
+                    && _room!.GetTile(currentNode.GridPos.x, currentNode.GridPos.y + 1).Terrain == Room.Tile.TerrainType.Air
+                    && _slugcat.input[1].y != 1
+                ) {
+                    var nextPos = currentConnection.PeekPos(2);
+                    if (nextPos is not null) {
+                        var terrain = _room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
+                        if (terrain != Room.Tile.TerrainType.Solid
+                            && terrain != Room.Tile.TerrainType.Slope
+                        ) {
+                            yDir = 1;
+                        }
+                    }
+                } else {
+                    yDir = climbDir.y;
+                }
+                return new Input {
+                    Direction = climbDir with { y = yDir },
+                    Jump = false,
+                };
+            }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.CorridorClimb) {
+            return new Input {
+                Direction = climbDir,
+                Jump = false,
+            };
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
+            if (currentConnection.PeekType(1) is ConnectionType.Walk(int walkDir1) && climbDir.y < 0) {
+                return new Input {
+                    Direction = new IVec2(walkDir1, 0),
+                    Jump = false,
+                };
+            } else {
+                return new Input {
+                    Direction = climbDir with { y = 1 },
+                    Jump = false,
+                };
+            }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Stand
+            && (currentNode.GridPos == footPos
+                || currentNode.GridPos == new IVec2(footPos.x, footPos.y - 1))
+            && climbDir.x != 0
+        ) {
+            return new Input {
+                Direction = climbDir with { y = 0 },
+                Jump = false,
+            };
+        } else {
+            if (currentNode.Beam != GraphNode.BeamType.None) {
+                _waitOneTick = true;
+                return new Input {
+                    Direction = climbDir with { y = 1 },
+                    Jump = false,
+                };
+            } else {
+                Plugin.Logger!.LogWarning("trying to climb on node without pole");
+                return new Input {
+                    Direction = climbDir,
+                    Jump = false,
+                };
+            }
+        }
+    }
+
+    private Input GenerateDropInputs() {
+        if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) < 0.5f) {
+            if (_slugcat.animation == Player.AnimationIndex.HangUnderVerticalBeam) {
+                _waitOneTick = true;
+                return new Input {
+                    Direction = Consts.IVec2.Down,
+                    Jump = false,
+                };
+            } else if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
+                _performingAirMovement = true;
+                return new Input {
+                    Direction = Consts.IVec2.Down,
+                    Jump = true,
+                };
+            }
+        }
+        return Input.DoNothing;
+    }
+
+    private Input GenerateJumpInputs(int jumpDir) {
+        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
+        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
+        if (_currentNode is null) {
+            return Input.DoNothing;
+        }
+        if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
+            bool jump;
+            if (_slugcat.flipDirection == jumpDir) {
+                _performingAirMovement = true;
+                jump = true;
+            } else {
+                jump = false;
+            }
+            return new Input {
+                Direction = new IVec2(jumpDir, 0),
+                Jump = jump,
+            };
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.WallClimb) {
+            _performingAirMovement = true;
+            return new Input {
+                Direction = new IVec2(jumpDir, 0),
+                Jump = true,
+            };
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+            if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
+                bool jump;
+                if (_slugcat.flipDirection == jumpDir) {
+                    jump = true;
+                    _performingAirMovement = true;
+                } else {
+                    jump = false;
+                }
+                return new Input {
+                    Direction = new IVec2(jumpDir, 0),
+                    Jump = jump,
+                };
+            } else if (_slugcat.animation == Player.AnimationIndex.HangFromBeam) {
+                _waitOneTick = true;
+                return new Input {
+                    Direction = Consts.IVec2.Up,
+                    Jump = false,
+                };
+            } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
+                if (headPos.x == footPos.x
+                    && headPos.y == footPos.y + 1
+                    && _slugcat.bodyChunks[0].vel.x < 5f
+                ) {
+                    _performingAirMovement = true;
+                    return new Input {
+                        Direction = new IVec2(jumpDir, 0),
+                        Jump = true,
+                    };
+                } else {
+                    return new Input {
+                        Direction = Consts.IVec2.Up,
+                        Jump = false,
+                    };
+                }
+            } else {
+                throw new NotImplementedException();
+            }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
+            if (_currentNode.Type is NodeType.Wall(int wallDir)) {
+                return new Input {
+                    Direction = new IVec2(wallDir, 0),
+                    Jump = true,
+                };
+            } else if (_currentNode.HasBeam) {
+                return new Input {
+                    Direction = Consts.IVec2.Up,
+                    Jump = true,
+                };
+            } else {
+                return Input.DoNothing;
+            }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
+            if (footPos.x == _currentNode.GridPos.x - jumpDir) {
+                return new Input {
+                    Direction = new IVec2(jumpDir, 1),
+                    Jump = false,
+                };
+            }
+            return new Input {
+                Direction = Consts.IVec2.Up,
+                Jump = false,
+            };
+        } else {
+            throw new NotImplementedException();
+        }
+    }
+
+    private Input GenerateJumpUpInputs() {
+        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
+        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
+        if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
+            _performingAirMovement = true;
+            return new Input {
+                Direction = Consts.IVec2.Zero,
+                Jump = true,
+            };
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+            if (_slugcat.animation == Player.AnimationIndex.StandOnBeam
+                || _slugcat.animation == Player.AnimationIndex.BeamTip
+            ) {
+                if (headPos.x == footPos.x
+                    && headPos.y == footPos.y + 1
+                    && _slugcat.bodyChunks[0].vel.x < 5f
+                ) {
+                    _performingAirMovement = true;
+                    return new Input {
+                        Direction = Consts.IVec2.Zero,
+                        Jump = true,
+                    };
+                } else {
+                    return new Input {
+                        Direction = Consts.IVec2.Up,
+                        Jump = false,
+                    };
+                }
+            } else if (_slugcat.animation == Player.AnimationIndex.HangFromBeam) {
+                _waitOneTick = true;
+                return new Input {
+                    Direction = Consts.IVec2.Up,
+                    Jump = false,
+                };
+            } else {
+                throw new NotImplementedException();
+            }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
+            return new Input {
+                Direction = Consts.IVec2.Up,
+                Jump = false,
+            };
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.WallClimb) {
+            return new Input {
+                Direction = new IVec2(-_slugcat.flipDirection, 0),
+                Jump = false,
+            };
+        } else {
+            throw new NotImplementedException();
+        }
+    }
+
+    private Input GenerateLedgeWalkInputs(int walkDir) {
+        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
+        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
+        if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+            if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
+                _performingAirMovement = true;
+                return new Input {
+                    Direction = new IVec2(walkDir, -1),
+                    Jump = true,
+                };
+            } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
+                if (headPos.x == footPos.x
+                    && headPos.y == footPos.y + 1
+                    && _slugcat.bodyChunks[0].vel.x < 5f
+                ) {
+                    _performingAirMovement = true;
+                    return new Input {
+                        Direction = new IVec2(walkDir, -1),
+                        Jump = false,
+                    };
+                } else {
+                    return Input.DoNothing;
+                }
+            } else {
+                _performingAirMovement = true;
+                return new Input {
+                    Direction = Consts.IVec2.Down,
+                    Jump = false,
+                };
+            }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
+            _performingAirMovement = true;
+            return new Input {
+                Direction = new IVec2(walkDir, 0),
+                Jump = false,
+            };
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
+            return new Input {
+                Direction = Consts.IVec2.Up,
+                Jump = false,
+            };
+        } else {
+            throw new NotImplementedException();
+        }
+    }
+
+    private struct Input {
+        public static readonly Input DoNothing = new Input {
+            Direction = Consts.IVec2.Zero,
+            Jump = false,
+        };
+        public IVec2 Direction;
+        public bool Jump;
+        public Input(IVec2 direction, bool jump) {
+            Direction = direction;
+            Jump = jump;
+        }
     }
 
     private class Visualizer {

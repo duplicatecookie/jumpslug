@@ -20,6 +20,16 @@ static class Vector2Extension {
     }
 }
 
+static class Consts {
+    public static class IVec2 {
+        public static readonly RWCustom.IntVector2 Left = new(-1, 0);
+        public static readonly RWCustom.IntVector2 Right = new(1, 0);
+        public static readonly RWCustom.IntVector2 Up = new(0, 1);
+        public static readonly RWCustom.IntVector2 Down = new(0, -1);
+        public static readonly RWCustom.IntVector2 Zero = new(0, 0);
+    }
+}
+
 static class RoomHelper {
     public static Vector2 MiddleOfTile(int x, int y) => new Vector2(20 * x + 10, 20 * y + 10);
     public static Vector2 MiddleOfTile(IVec2 pos) => MiddleOfTile(pos.x ,pos.y);
