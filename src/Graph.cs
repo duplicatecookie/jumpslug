@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Threading;
+
+using BepInEx.Configuration;
 
 using UnityEngine;
 
@@ -292,235 +295,115 @@ public class SharedGraph {
 
                 if (currentNode.Type is NodeType.Floor) {
                     if (rightNode?.Type is NodeType.Floor or NodeType.Slope) {
-                        ConnectNodes(
-                            currentNode,
-                            rightNode,
-                            new ConnectionType.Walk(1),
-                            new ConnectionType.Walk(-1)
-                        );
+                        ConnectNodes(currentNode, rightNode, new ConnectionType.Walk(1));
+                        ConnectNodes(rightNode, currentNode, new ConnectionType.Walk(-1));
                     } else if (rightNode?.Type is NodeType.Corridor) {
-                        ConnectNodes(
-                            currentNode,
-                            rightNode,
-                            new ConnectionType.Crawl(new IVec2(1, 0)),
-                            new ConnectionType.Crawl(new IVec2(-1, 0))
-                        );
+                        ConnectNodes(rightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Right));
+                        ConnectNodes(rightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Left));
                     }
                     if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
-                        ConnectNodes(
-                            currentNode,
-                            Nodes[x + 1, y - 1]!,
-                            new ConnectionType.Walk(1),
-                            new ConnectionType.Walk(-1)
-                        );
+                        var rightDownNode = Nodes[x + 1, y - 1]!;
+                        ConnectNodes(currentNode, rightDownNode, new ConnectionType.Walk(1));
+                        ConnectNodes(rightDownNode, currentNode, new ConnectionType.Walk(-1));
                     } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Floor) {
-                        currentNode.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Walk(-1),
-                                Nodes[x + 1, y - 1]!
-                            )
-                        );
-                        Nodes[x + 1, y - 1]!.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Walk(-1),
-                                currentNode
-                            )
-                        );
+                        ConnectNodes(Nodes[x + 1, y - 1]!, currentNode, new ConnectionType.Walk(-1));
                     }
                     if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor or NodeType.Slope or NodeType.Floor) {
-                        Nodes[x + 1, y + 1]!.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Walk(1),
-                                currentNode
-                            )
-                        );
-                        currentNode.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Walk(1),
-                                Nodes[x + 1, y + 1]!
-                            )
-                        );
+                        ConnectNodes(currentNode, Nodes[x + 1, y + 1]!, new ConnectionType.Walk(1));
                     }
                     if (aboveNode?.Type is NodeType.Wall(int wallDir)) {
-                        aboveNode.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wallDir),
-                                currentNode,
-                                2
-                            )
-                        );
-                        currentNode.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wallDir),
-                                aboveNode,
-                                2
-                            )
-                        );
+                        ConnectNodes(aboveNode, currentNode, new ConnectionType.SlideOnWall(wallDir));
                     }
                 }
 
                 if (currentNode.Type is NodeType.Slope) {
                     if (rightNode?.Type is NodeType.Floor or NodeType.Slope) {
-                        ConnectNodes(
-                            currentNode,
-                            rightNode,
-                            new ConnectionType.Walk(1),
-                            new ConnectionType.Walk(-1)
-                        );
+                        ConnectNodes(currentNode, rightNode, new ConnectionType.Walk(1));
+                        ConnectNodes(rightNode, currentNode, new ConnectionType.Walk(-1));
                     } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
-                        ConnectNodes(
-                            currentNode,
-                            Nodes[x + 1, y - 1]!,
-                            new ConnectionType.Walk(1),
-                            new ConnectionType.Walk(-1)
-                        );
+                        var downRightNode = Nodes[x + 1, y - 1]!;
+                        ConnectNodes(currentNode, downRightNode, new ConnectionType.Walk(1));
+                        ConnectNodes(downRightNode, currentNode, new ConnectionType.Walk(-1));
                     } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Floor) {
-                        currentNode.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Walk(-1),
-                                Nodes[x + 1, y - 1]!
-                            )
-                        );
-                        Nodes[x + 1, y - 1]!.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Walk(-1),
-                                currentNode
-                            )
-                        );
+                        ConnectNodes(Nodes[x + 1, y - 1]!, currentNode, new ConnectionType.Walk(-1));
                     } else if (GetNode(x + 1, y + 1)?.Type is NodeType.Slope or NodeType.Floor) {
-                        ConnectNodes(
-                            currentNode,
-                            Nodes[x + 1, y + 1]!,
-                            new ConnectionType.Walk(1),
-                            new ConnectionType.Walk(-1)
-                        );
+                        var upRightNode = Nodes[x + 1, y + 1]!;
+                        ConnectNodes(currentNode, upRightNode, new ConnectionType.Walk(1));
+                        ConnectNodes(currentNode, upRightNode, new ConnectionType.Walk(-1));
                     } else if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor) {
-                        ConnectNodes(
-                            currentNode,
-                            Nodes[x + 1, y + 1]!,
-                            new ConnectionType.Walk(1),
-                            new ConnectionType.Crawl(new IVec2(-1, 0))
-                        );
+                        var upRightNode = Nodes[x + 1, y + 1]!;
+                        ConnectNodes(currentNode, upRightNode, new ConnectionType.Walk(1));
+                        ConnectNodes(upRightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Left));
                     }
                     if (aboveNode?.Type is NodeType.Wall(int wallDir)) {
-                        aboveNode.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wallDir),
-                                currentNode,
-                                2
-                            )
-                        );
-                        currentNode.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wallDir),
-                                aboveNode,
-                                2
-                            )
-                        );
+                        ConnectNodes(aboveNode, currentNode, new ConnectionType.SlideOnWall(wallDir));
                     }
                 }
 
                 if (currentNode.Type is NodeType.Corridor) {
                     if (rightNode?.Type is NodeType.Corridor or NodeType.Floor or NodeType.ShortcutEntrance or NodeType.RoomExit) {
-                        ConnectNodes(
-                            currentNode,
-                            rightNode,
-                            new ConnectionType.Crawl(new IVec2(1, 0)),
-                            new ConnectionType.Crawl(new IVec2(-1, 0))
-                        );
+                        ConnectNodes(currentNode, rightNode, new ConnectionType.Crawl(Consts.IVec2.Right));
+                        ConnectNodes(rightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Left));
                     } else if (rightNode?.HasHorizontalBeam == true) {
+                        ConnectNodes(currentNode, rightNode, new ConnectionType.Crawl(Consts.IVec2.Right));
                         ConnectNodes(
-                            currentNode,
                             rightNode,
-                            new ConnectionType.Crawl(new IVec2(1, 0)),
+                            currentNode,
                             rightNode.HasHorizontalBeam
-                                ? new ConnectionType.Climb(new IVec2(-1, 0))
-                                : new ConnectionType.Crawl(new IVec2(-1, 0))
+                                ? new ConnectionType.Climb(Consts.IVec2.Left)
+                                : new ConnectionType.Crawl(Consts.IVec2.Right)
                         );
                     }
                     if (GetNode(x + 1, y - 1)?.Type is NodeType.Floor) {
-                        currentNode.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Walk(-1),
-                                Nodes[x + 1, y - 1]!
-                            )
-                        );
-                        Nodes[x + 1, y - 1]!.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Walk(-1),
-                                currentNode
-                            )
-                        );
+                        ConnectNodes(Nodes[x + 1, y - 1]!, currentNode, new ConnectionType.Walk(-1));
                     } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
-                        ConnectNodes(
-                            currentNode,
-                            Nodes[x + 1, y - 1]!,
-                            new ConnectionType.Crawl(new IVec2(1, 0)),
-                            new ConnectionType.Walk(-1)
-                        );
+                        var downRightNode = Nodes[x + 1, y - 1]!;
+                        ConnectNodes(currentNode, downRightNode, new ConnectionType.Climb(Consts.IVec2.Right));
+                        ConnectNodes(downRightNode, currentNode, new ConnectionType.Walk(-1));
                     }
                     if (aboveNode?.Type is NodeType.Corridor or NodeType.ShortcutEntrance or NodeType.Floor or NodeType.RoomExit) {
                         ConnectNodes(
                             currentNode,
                             aboveNode,
                             currentNode.HasVerticalBeam
-                                ? new ConnectionType.Climb(new IVec2(0, 1))
-                                : new ConnectionType.Crawl(new IVec2(0, 1)),
-                            new ConnectionType.Crawl(new IVec2(0, -1))
+                                ? new ConnectionType.Climb(Consts.IVec2.Up)
+                                : new ConnectionType.Crawl(Consts.IVec2.Up)
                         );
+                        ConnectNodes(aboveNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Down));
                     }
-                    if (GetNode(x + 1, y + 1)?.Type is NodeType.Wall wallTR) {
-                        currentNode.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wallTR.Direction),
-                                Nodes[x + 1, y + 1]!,
-                                2
-                            )
-                        );
-                        Nodes[x + 1, y + 1]!.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wallTR.Direction),
-                                currentNode,
-                                2
-                            )
+                    if (GetNode(x + 1, y + 1)?.Type is NodeType.Wall(int wallDir)) {
+                        ConnectNodes(
+                            Nodes[x + 1, y + 1]!,
+                            currentNode,
+                            new ConnectionType.SlideOnWall(wallDir),
+                            2
                         );
                     }
                 } else {
                     if (currentNode.HasHorizontalBeam
                         && rightNode?.HasHorizontalBeam == true
                     ) {
+                        ConnectNodes(currentNode, rightNode, new ConnectionType.Climb(Consts.IVec2.Right));
                         ConnectNodes(
-                            currentNode,
                             rightNode,
-                            new ConnectionType.Climb(new IVec2(1, 0)),
+                            currentNode,
                             rightNode.Type is NodeType.Corridor
-                                ? new ConnectionType.Crawl(new IVec2(-1, 0))
-                                : new ConnectionType.Climb(new IVec2(-1, 0))
+                                ? new ConnectionType.Crawl(Consts.IVec2.Left)
+                                : new ConnectionType.Climb(Consts.IVec2.Left)
                         );
                     }
                     if (currentNode.HasVerticalBeam) {
                         if (aboveNode?.HasVerticalBeam == true) {
+                            ConnectNodes(currentNode, aboveNode, new ConnectionType.Climb(Consts.IVec2.Up));
                             ConnectNodes(
-                                currentNode,
                                 aboveNode,
-                                new ConnectionType.Climb(new IVec2(0, 1)),
+                                currentNode,
                                 aboveNode.Type is NodeType.Corridor
-                                    ? new ConnectionType.Crawl(new IVec2(0, -1))
-                                    : new ConnectionType.Climb(new IVec2(0, -1))
+                                    ? new ConnectionType.Crawl(Consts.IVec2.Down)
+                                    : new ConnectionType.Climb(Consts.IVec2.Down)
                             );
                         } else if (aboveNode?.Beam == GraphNode.BeamType.Above) {
-                            aboveNode.IncomingConnections.Add(
-                                new NodeConnection(
-                                    new ConnectionType.Climb(new IVec2(0, 1)),
-                                    currentNode
-                                )
-                            );
-                            currentNode.OutgoingConnections.Add(
-                                new NodeConnection(
-                                    new ConnectionType.Climb(new IVec2(0, 1)),
-                                    aboveNode
-                                )
-                            );
+                            ConnectNodes(currentNode, aboveNode, new ConnectionType.Climb(Consts.IVec2.Right));
                         }
                     }
                 }
@@ -531,97 +414,38 @@ public class SharedGraph {
                         Plugin.Logger!.LogError($"Shortcut entrance has no valid exit, pos: ({x}, {y}), index: {entrance.Index}");
                         return;
                     }
-                    destNode.IncomingConnections.Add(
-                        new NodeConnection(
-                            new ConnectionType.Shortcut(),
-                            currentNode,
-                            shortcutData.length
-                        )
-                    );
-                    currentNode.OutgoingConnections.Add(
-                        new NodeConnection(
-                            new ConnectionType.Shortcut(),
-                            destNode,
-                            shortcutData.length
-                        )
-                    );
+                    ConnectNodes(currentNode, destNode, new ConnectionType.Shortcut(), shortcutData.length);
                     if (rightNode?.Type is NodeType.Corridor) {
-                        ConnectNodes(
-                            currentNode,
-                            rightNode,
-                            new ConnectionType.Crawl(new IVec2(1, 0)),
-                            new ConnectionType.Crawl(new IVec2(-1, 0))
-                        );
+                        ConnectNodes(currentNode, rightNode, new ConnectionType.Crawl(Consts.IVec2.Right));
+                        ConnectNodes(rightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Left));
                     }
                     if (aboveNode?.Type is NodeType.Corridor) {
-                        ConnectNodes(
-                            currentNode,
-                            aboveNode,
-                            new ConnectionType.Crawl(new IVec2(0, 1)),
-                            new ConnectionType.Crawl(new IVec2(0, -1))
-                        );
+                        ConnectNodes(currentNode, aboveNode, new ConnectionType.Crawl(Consts.IVec2.Up));
+                        ConnectNodes(aboveNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Down));
                     }
                 } else if (currentNode.Type is NodeType.RoomExit) {
                     if (rightNode?.Type is NodeType.Corridor) {
-                        ConnectNodes(
-                            currentNode,
-                            rightNode,
-                            new ConnectionType.Crawl(new IVec2(1, 0)),
-                            new ConnectionType.Crawl(new IVec2(-1, 0))
-                        );
+                        ConnectNodes(currentNode, rightNode, new ConnectionType.Crawl(Consts.IVec2.Right));
+                        ConnectNodes(rightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Left));
                     }
                     if (aboveNode?.Type is NodeType.Corridor) {
-                        ConnectNodes(
-                            currentNode,
-                            aboveNode,
-                            new ConnectionType.Crawl(new IVec2(0, 1)),
-                            new ConnectionType.Crawl(new IVec2(0, -1))
-                        );
+                        ConnectNodes(currentNode, aboveNode, new ConnectionType.Crawl(Consts.IVec2.Up));
+                        ConnectNodes(aboveNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Down));
                     }
                 }
 
-                if (currentNode.Type is NodeType.Wall wall) {
+                if (currentNode.Type is NodeType.Wall(int wallDir1)) {
                     if (aboveNode?.Type is NodeType.Wall) {
-                        currentNode.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wall.Direction),
-                                aboveNode,
-                                2
-                            )
-                        );
-                        aboveNode.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wall.Direction),
-                                currentNode,
-                                2
-                            )
-                        );
+                        ConnectNodes(aboveNode, currentNode, new ConnectionType.SlideOnWall(wallDir1), 2);
                     }
                     if (GetNode(x + 1, y - 1)?.Type is NodeType.Corridor) {
-                        Nodes[x + 1, y - 1]!.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wall.Direction),
-                                currentNode,
-                                2
-                            )
-                        );
-                        currentNode.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.SlideOnWall(wall.Direction),
-                                Nodes[x + 1, y - 1]!,
-                                2
-                            )
-                        );
+                        ConnectNodes(currentNode, Nodes[x + 1, y - 1]!, new ConnectionType.SlideOnWall(wallDir1), 2);
                     }
                 }
 
                 if (currentNode.Beam == GraphNode.BeamType.Below) {
-                    ConnectNodes(
-                        currentNode,
-                        aboveNode!,
-                        new ConnectionType.Climb(new IVec2(0, 1)),
-                        new ConnectionType.Climb(new IVec2(0, -1))
-                    );
+                    ConnectNodes(currentNode, aboveNode!, new ConnectionType.Climb(Consts.IVec2.Up));
+                    ConnectNodes(aboveNode!, currentNode, new ConnectionType.Climb(Consts.IVec2.Down));
                 }
             }
         }
@@ -630,11 +454,9 @@ public class SharedGraph {
     /// <summary>
     /// Make a bidirectional connection between two nodes in the graph.
     /// </summary>
-    private void ConnectNodes(GraphNode a, GraphNode b, ConnectionType toBType, ConnectionType toAType, float weight = 1f) {
-        a.IncomingConnections.Add(new NodeConnection(toAType, b, weight));
-        b.OutgoingConnections.Add(new NodeConnection(toAType, a, weight));
-        b.IncomingConnections.Add(new NodeConnection(toBType, a, weight));
-        a.OutgoingConnections.Add(new NodeConnection(toBType, b, weight));
+    private void ConnectNodes(GraphNode start, GraphNode end, ConnectionType type, float weight = 1f) {
+        start.OutgoingConnections.Add(new NodeConnection(type, end, weight));
+        end.IncomingConnections.Add(new NodeConnection(type, start, weight));
     }
 }
 
@@ -894,7 +716,6 @@ public class DynamicGraph {
         int xOffset = (direction + 1) / 2;
         var pathOffset = RoomHelper.MiddleOfTile(headPos);
 
-        var startExt = Extensions[startNode.GridPos.x, startNode.GridPos.y]!.Value;
         while (true) {
             float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
             float result = Parabola(pathOffset.y, v0, _room.gravity, t) / 20;
@@ -906,9 +727,8 @@ public class DynamicGraph {
                 }
                 var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
                 var extension = Extensions[x, upright ? y - 1 : y];
-                if (extension is NodeExtension extNode && currentNode?.Type is NodeType.Floor or NodeType.Slope) {
-                    extNode.IncomingConnections.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
-                    startExt.OutgoingConnections.Add(new NodeConnection(type, currentNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
+                if (extension is not null && currentNode?.Type is NodeType.Floor or NodeType.Slope) {
+                    ConnectNodes(startNode, currentNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1);
                 }
                 if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
                     break;
@@ -928,31 +748,26 @@ public class DynamicGraph {
             if (shiftedNode is null || Extensions[x, y] is null) {
                 continue;
             }
-            var shiftedExt = Extensions[x, y]!.Value;
             if (shiftedNode.Type is NodeType.Corridor) {
                 break;
             }
             if (shiftedNode.Type is NodeType.Wall wall && wall.Direction == direction) {
-                shiftedExt.IncomingConnections.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
-                startExt.OutgoingConnections.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
+                ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1);
                 break;
             } else if (shiftedNode.Beam == GraphNode.BeamType.Vertical) {
                 float poleResult = Parabola(pathOffset.y, v0, _room.gravity, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
                 if (poleResult > y && poleResult < y + 1) {
-                    shiftedExt.IncomingConnections.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
-                    startExt.OutgoingConnections.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
+                    ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1);
                 }
             } else if (shiftedNode.Beam == GraphNode.BeamType.Horizontal) {
                 float leftHeight = Parabola(pathOffset.y, v0, _room.gravity, (20 * x - pathOffset.x) / v0.x);
                 float rightHeight = Parabola(pathOffset.y, v0, _room.gravity, (20 * (x + 1) - pathOffset.x) / v0.x);
                 float poleHeight = 20 * y + 10;
                 if (direction * leftHeight < direction * poleHeight && direction * poleHeight < direction * rightHeight) {
-                    shiftedExt.IncomingConnections.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 2));
-                    startExt.OutgoingConnections.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 2));
+                    ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 2);
                 }
             } else if (shiftedNode.Beam == GraphNode.BeamType.Cross) {
-                shiftedExt.IncomingConnections.Add(new NodeConnection(type, startNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
-                startExt.OutgoingConnections.Add(new NodeConnection(type, shiftedNode, new IVec2(x, y).FloatDist(startNode.GridPos) + 1));
+                ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1);
             }
         }
     }
@@ -967,8 +782,7 @@ public class DynamicGraph {
         if (startNode is null) {
             return;
         }
-        var startExt = Extensions[x, y]!.Value;
-        // the raw max height in tile space, truncated to prevent overpredition and moved up to start at the head tile 
+        // the max height of the jump in tile space, truncated to prevent overpredition and moved up so it starts at the head tile 
         int maxHeight = y + (int)(0.5f * v0 * v0 / _room.gravity / 20) + 1;
         for (int i = y + 1; i <= maxHeight; i++) {
             var currentTile = _room.GetTile(x, i);
@@ -981,38 +795,11 @@ public class DynamicGraph {
             if (currentNode is null) {
                 continue;
             }
-            var currentExt = Extensions[x, i]!.Value;
             if (currentNode.Type is NodeType.Corridor || currentNode.Beam == GraphNode.BeamType.Below) {
-                startExt.OutgoingConnections.Add(
-                    new NodeConnection(
-                        new ConnectionType.JumpUp(),
-                        currentNode,
-                        i - y
-                    )
-                );
-                currentExt.IncomingConnections.Add(
-                    new NodeConnection(
-                        new ConnectionType.JumpUp(),
-                        startNode,
-                        i - y
-                    )
-                );
+                ConnectNodes(startNode, currentNode, new ConnectionType.JumpUp(), i - y);
                 break;
             } else if (currentNode.Beam == GraphNode.BeamType.Horizontal) {
-                startExt.OutgoingConnections.Add(
-                    new NodeConnection(
-                        new ConnectionType.JumpUp(),
-                        currentNode,
-                        i - y
-                    )
-                );
-                currentExt.IncomingConnections.Add(
-                    new NodeConnection(
-                        new ConnectionType.JumpUp(),
-                        startNode,
-                        i - y
-                    )
-                );
+                ConnectNodes(startNode, currentNode, new ConnectionType.JumpUp(), i - y);
             }
         }
     }
@@ -1030,66 +817,33 @@ public class DynamicGraph {
         if (startNode is null) {
             return;
         }
-        var startExt = Extensions[x, y]!.Value;
         for (int i = y - 1; i >= 0; i--) {
-            var currentNode = sharedGraph.Nodes[x, i];
-            if (currentNode is null || Extensions[x, i] is null) {
+            var currentNode = sharedGraph.GetNode(x, i);
+            if (currentNode is null) {
                 continue;
             }
-            var currentExt = Extensions[x, i]!.Value;
             if (currentNode.Type is NodeType.Air) {
                 if (sharedGraph.Nodes[x, i + 1]?.HasVerticalBeam == true) {
                     if (currentNode.Beam == GraphNode.BeamType.Horizontal) {
-                        currentExt.IncomingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Drop(),
-                                startNode,
-                                y - i
-                            )
-                        );
-                        startExt.OutgoingConnections.Add(
-                            new NodeConnection(
-                                new ConnectionType.Drop(),
-                                currentNode,
-                                y - i
-                            )
-                        );
+                        ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
                     }
                 } else if (currentNode.HasBeam) {
-                    currentExt.IncomingConnections.Add(
-                        new NodeConnection(
-                            new ConnectionType.Drop(),
-                            startNode,
-                            y - i
-                        )
-                    );
-                    startExt.OutgoingConnections.Add(
-                        new NodeConnection(
-                            new ConnectionType.Drop(),
-                            currentNode,
-                            y - i
-                        )
-                    );
+                    ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
                 }
             } else {
-                // t = sqrt(2 * d / g)
-                // weight might have inaccurate units
-                currentExt.IncomingConnections.Add(
-                    new NodeConnection(
-                        new ConnectionType.Drop(),
-                        startNode,
-                        y - 1
-                    )
-                );
-                startExt.OutgoingConnections.Add(
-                    new NodeConnection(
-                        new ConnectionType.Drop(),
-                        currentNode,
-                        y - 1
-                    )
-                );
+                ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
                 break;
             }
         }
+    }
+
+    private void ConnectNodes(GraphNode startNode, GraphNode endNode, ConnectionType type, float weight = 1) {        
+        if (startNode is null || endNode is null) {
+            return;
+        }
+        var startExt = Extensions[startNode.GridPos.x, startNode.GridPos.y]!.Value;
+        var endExt = Extensions[endNode.GridPos.x, endNode.GridPos.y]!.Value;
+        startExt.OutgoingConnections.Add(new NodeConnection(type, endNode, weight));
+        endExt.IncomingConnections.Add(new NodeConnection(type, startNode, weight));
     }
 }
