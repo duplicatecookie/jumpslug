@@ -992,20 +992,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
         public void Update() {
             if (Active) {
-                _currentConnectionLabel.text = _ai._currentConnection?.Type switch {
-                    null => "None",
-                    ConnectionType.Climb(IVec2 dir) => $"Climb({dir})",
-                    ConnectionType.Crawl(IVec2 dir) => $"Crawl({dir})",
-                    ConnectionType.Drop => "Drop",
-                    ConnectionType.Jump(int dir) => $"Jump({dir})",
-                    ConnectionType.JumpUp => "JumpUp",
-                    ConnectionType.Pounce(int dir) => $"Pounce({dir})",
-                    ConnectionType.Shortcut => "Shortcut",
-                    ConnectionType.Walk(int dir) => $"Walk({dir})",
-                    ConnectionType.WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
-                    ConnectionType.SlideOnWall(int dir) => $"SlideOnWall({dir})",
-                    _ => throw new InvalidUnionVariantException(),
-                };
+                if (_ai._currentConnection is PathConnection connection) {
+                    _currentConnectionLabel.text = connection.Type.ToString();
+                } else {
+                    _currentConnectionLabel.text = "None";
+                }
                 if (_ai._performingAirMovement) {
                     _currentConnectionLabel.color = Color.green;
                 } else {

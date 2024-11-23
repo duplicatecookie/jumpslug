@@ -117,6 +117,22 @@ public record ConnectionType {
         SlideOnWall => Color.yellow,
         _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
     };
+
+    public override string ToString() {
+        return this switch {
+            Climb(IVec2 dir) => $"Climb({dir})",
+            Crawl(IVec2 dir) => $"Crawl({dir})",
+            Drop => "Drop",
+            Jump(int dir) => $"Jump({dir})",
+            JumpUp => "JumpUp",
+            Pounce(int dir) => $"Pounce({dir})",
+            Shortcut => "Shortcut",
+            Walk(int dir) => $"Walk({dir})",
+            WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
+            SlideOnWall(int dir) => $"SlideOnWall({dir})",
+            _ => throw new InvalidUnionVariantException(),
+        };
+    }
 }
 
 /// <summary>
@@ -953,7 +969,7 @@ public class DynamicGraph {
         }
         var startExt = Extensions[x, y]!.Value;
         // the raw max height in tile space, truncated to prevent overpredition and moved up to start at the head tile 
-        int maxHeight = y + (int)(0.5f * v0 * v0 / _room.gravity / 20) + 1; 
+        int maxHeight = y + (int)(0.5f * v0 * v0 / _room.gravity / 20) + 1;
         for (int i = y + 1; i <= maxHeight; i++) {
             var currentTile = _room.GetTile(x, i);
             var currentNode = sharedGraph.GetNode(x, i);
