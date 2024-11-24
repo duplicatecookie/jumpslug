@@ -828,7 +828,7 @@ public class DynamicGraph {
                         ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
                     }
                 } else if (currentNode.HasBeam) {
-                    ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
+                    ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i + 2);
                 }
             } else {
                 ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
