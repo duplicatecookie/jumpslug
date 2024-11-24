@@ -121,10 +121,10 @@ public record ConnectionType {
         _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
     };
 
-    public override string ToString() {
+    public sealed override string ToString() {
         return this switch {
-            Climb(IVec2 dir) => $"Climb({dir})",
-            Crawl(IVec2 dir) => $"Crawl({dir})",
+            Climb(IVec2 dir) => $"Climb({dir.x}, {dir.y})",
+            Crawl(IVec2 dir) => $"Crawl({dir.x}, {dir.y})",
             Drop => "Drop",
             Jump(int dir) => $"Jump({dir})",
             JumpUp => "JumpUp",
