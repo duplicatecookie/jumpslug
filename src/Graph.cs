@@ -602,6 +602,23 @@ public class DynamicGraph {
         }
 
         if (graphNode.Beam == GraphNode.BeamType.Above) {
+            var headPos = new IVec2(pos.x, pos.y + 1);
+            if (goRight) {
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    descriptor.FloorJumpVector(1),
+                    new ConnectionType.Jump(1)
+                );
+            }
+            if (goLeft) {
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    descriptor.FloorJumpVector(-1),
+                    new ConnectionType.Jump(-1)
+                );
+            }
             TraceJumpUp(pos, descriptor.HorizontalPoleJumpVector(0).y);
             TraceDrop(pos);
         } else if (graphNode.Beam == GraphNode.BeamType.Below) {
