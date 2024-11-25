@@ -1,9 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Threading;
-
-using BepInEx.Configuration;
 
 using UnityEngine;
 
@@ -620,6 +616,13 @@ public class DynamicGraph {
                 if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
                     v0.y = 0f;
                     TraceJump(graphNode, headPos, v0, new ConnectionType.WalkOffEdge(1));
+                    TraceJump(
+                        graphNode,
+                        pos,
+                        descriptor.PounceVector(1),
+                        new ConnectionType.Pounce(1),
+                        false
+                    );
                 }
             }
             if (goLeft) {
@@ -628,6 +631,13 @@ public class DynamicGraph {
                 if (sharedGraph.GetNode(pos.x - 1, pos.y - 1)?.Type is NodeType.Wall) {
                     v0.y = 0f;
                     TraceJump(graphNode, headPos, v0, new ConnectionType.WalkOffEdge(-1));
+                    TraceJump(
+                        graphNode,
+                        pos,
+                        descriptor.PounceVector(-1),
+                        new ConnectionType.Pounce(-1),
+                        false
+                    );
                 }
             }
             TraceJumpUp(pos, v0.y);

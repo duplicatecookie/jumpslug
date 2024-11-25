@@ -221,7 +221,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         if (startPathNode is null) {
             return true;
         }
-        
+
         var sharedGraph = _slugcat.room.GetCWT().SharedGraph!;
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         int x = headPos.x;
@@ -492,6 +492,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 Direction = new IVec2(wallDir, 0),
                 Jump = false,
             };
+        } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
+            return GeneratePounceInputs(pounceDir);
         } else {
             throw new NotImplementedException();
         }
@@ -907,6 +909,43 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 Direction = Consts.IVec2.Up,
                 Jump = false,
             };
+        } else {
+            throw new NotImplementedException();
+        }
+    }
+
+    private Input GeneratePounceInputs(int pounceDir) {
+        if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
+            if (_slugcat.flipDirection != pounceDir) {
+                return new Input {
+                    Direction = new IVec2(pounceDir, -1),
+                    Jump = false,
+                };
+            } else {
+                return new Input {
+                    Direction = Consts.IVec2.Down,
+                    Jump = false,
+                };
+            }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
+            if (_slugcat.flipDirection != pounceDir) {
+                return new Input {
+                    Direction = new IVec2(pounceDir, 0),
+                    Jump = false,
+                };
+            } else if (_slugcat.superLaunchJump < 20) {
+                // hold down jump button to set up pounce
+                return new Input {
+                     Direction = Consts.IVec2.Zero,
+                     Jump = true,
+                };
+            } else {
+                // release jump button to perform pounce
+                _performingAirMovement = true;
+                return Input.DoNothing;
+            }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
+            return Input.DoNothing;
         } else {
             throw new NotImplementedException();
         }
