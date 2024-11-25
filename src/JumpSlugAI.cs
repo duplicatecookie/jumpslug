@@ -26,8 +26,6 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private GraphNode? _currentNode;
     private PathConnection? _currentConnection;
     private bool _performingAirMovement;
-    private int _offPathCounter;
-    private const int MAX_TICKS_NOT_FALLING_TOWARDS_PATH = 5;
     private float _pathThreat;
     private PathNode? _destinationCandidate;
     private Visualizer? _visualizer;
@@ -211,24 +209,19 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private void FindPathIfNotFallingTowardsPathForTooLong() {
-        if (!FallingTowardsPath()) {
-            if (++_offPathCounter > MAX_TICKS_NOT_FALLING_TOWARDS_PATH) {
-                _currentConnection = FindPath();
-                _visualizer?.UpdatePath();
-                _offPathCounter = 0;
-            }
-        } else if (_offPathCounter > 0) {
-            _offPathCounter -= 1;
-        }
-    }
-
-    private bool FallingTowardsPath() {
+    private bool KeepFalling(GraphNode startNode) {
         _visualizer?.ResetPredictionSprites();
-        if (_currentConnection is null) {
+        if (startNode is null) {
+            return true;
+        }
+        if (_currentConnection is null || _destination is null) {
             return false;
         }
-        var currentConnection = _currentConnection.Value;
+        var startPathNode = _pathfinder.PathNodePool[startNode.GridPos];
+        if (startPathNode is null) {
+            return true;
+        }
+        
         var sharedGraph = _slugcat.room.GetCWT().SharedGraph!;
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         int x = headPos.x;
@@ -241,13 +234,21 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             while (y > 0) {
                 y--;
                 var currentNode = sharedGraph.Nodes[x, y];
-                if (currentNode is null) {
+                var currentPathNode = _pathfinder.PathNodePool[x, y];
+                if (currentNode is null || currentPathNode is null) {
                     continue;
                 }
 
                 _visualizer?.AddPredictionSprite(x, y);
 
-                if (currentConnection.FindInPath(new IVec2(x, y)) is not null) {
+                if (!_pathfinder.ClosedNodes[x, y]) {
+                    _pathfinder.FindPathTo(
+                        new IVec2(x, y),
+                        _destination.Value,
+                        new SlugcatDescriptor(_slugcat)
+                    );
+                }
+                if (currentPathNode.PathCost < startPathNode.PathCost) {
                     return true;
                 }
                 if (currentNode.Type is NodeType.Floor or NodeType.Slope) {
@@ -276,14 +277,21 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     break;
                 }
 
-                var shiftedNode = sharedGraph.Nodes[x, y];
-                if (shiftedNode is null) {
+                var currentPathNode = _pathfinder.PathNodePool[x, y];
+                if (currentPathNode is null) {
                     continue;
                 }
 
                 _visualizer?.AddPredictionSprite(x, y);
 
-                if (currentConnection.FindInPath(new IVec2(x, y)) is not null) {
+                if (!_pathfinder.ClosedNodes[x, y]) {
+                    _pathfinder.FindPathTo(
+                        new IVec2(x, y),
+                        _destination.Value,
+                        new SlugcatDescriptor(_slugcat)
+                    );
+                }
+                if (currentPathNode.PathCost < startPathNode.PathCost) {
                     return true;
                 }
             }
@@ -410,7 +418,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 _currentConnection = connection;
                 _performingAirMovement = false;
                 return GenerateInputs();
-            } else if (FallingTowardsPath()) {
+            } else if (KeepFalling(node)) {
                 var currentConnection = _currentConnection!.Value;
                 if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
                     bool jump;
