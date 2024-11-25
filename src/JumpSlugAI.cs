@@ -476,17 +476,17 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         if (currentConnection.Type is ConnectionType.Walk) {
             return GenerateWalkInputs(currentConnection, _currentNode);
         } else if (currentConnection.Type is ConnectionType.Crawl) {
-            return GenerateCrawlInputs(currentConnection, _currentNode);
+            return Crawl(currentConnection, _currentNode);
         } else if (currentConnection.Type is ConnectionType.Climb) {
-            return GenerateClimbInputs(currentConnection, _currentNode);
+            return Climb(currentConnection, _currentNode);
         } else if (currentConnection.Type is ConnectionType.Drop) {
-            return GenerateDropInputs();
+            return Drop();
         } else if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
-            return GenerateJumpInputs(jumpDir);
+            return Jump(jumpDir);
         } else if (currentConnection.Type is ConnectionType.JumpUp) {
-            return GenerateJumpUpInputs();
+            return JumpUp();
         } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir1)) {
-            return GenerateLedgeWalkInputs(walkDir1);
+            return Walk(walkDir1);
         } else if (currentConnection.Type is ConnectionType.SlideOnWall(int wallDir)) {
             return new Input {
                 Direction = new IVec2(wallDir, 0),
@@ -571,7 +571,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private Input GenerateCrawlInputs(PathConnection currentConnection, GraphNode currentNode) {
+    private Input Crawl(PathConnection currentConnection, GraphNode currentNode) {
         IVec2 crawlDir = ((ConnectionType.Crawl)currentConnection.Type).Direction;
         // the sign of the dot product indicates whether the angle between two vectors is greater or lesser than 90°
         bool backwards = (_slugcat.bodyChunks[0].pos - _slugcat.bodyChunks[1].pos).Dot(crawlDir.ToVector2()) < 0;
@@ -600,7 +600,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         };
     }
 
-    private Input GenerateClimbInputs(PathConnection currentConnection, GraphNode currentNode) {
+    private Input Climb(PathConnection currentConnection, GraphNode currentNode) {
         IVec2 climbDir = ((ConnectionType.Climb)currentConnection.Type).Direction;
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
         if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
@@ -705,7 +705,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private Input GenerateDropInputs() {
+    private Input Drop() {
         if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) < 0.5f) {
             if (_slugcat.animation == Player.AnimationIndex.HangUnderVerticalBeam) {
                 _waitOneTick = true;
@@ -724,7 +724,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         return Input.DoNothing;
     }
 
-    private Input GenerateJumpInputs(int jumpDir) {
+    private Input Jump(int jumpDir) {
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
         if (_currentNode is null) {
@@ -816,7 +816,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private Input GenerateJumpUpInputs() {
+    private Input JumpUp() {
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
         if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
@@ -868,7 +868,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private Input GenerateLedgeWalkInputs(int walkDir) {
+    private Input Walk(int walkDir) {
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
         if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
