@@ -294,7 +294,7 @@ public class SharedGraph {
                         ConnectNodes(currentNode, rightNode, new ConnectionType.Walk(1));
                         ConnectNodes(rightNode, currentNode, new ConnectionType.Walk(-1));
                     } else if (rightNode?.Type is NodeType.Corridor) {
-                        ConnectNodes(rightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Right));
+                        ConnectNodes(currentNode, rightNode, new ConnectionType.Crawl(Consts.IVec2.Right));
                         ConnectNodes(rightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Left));
                     }
                     if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
@@ -325,7 +325,7 @@ public class SharedGraph {
                     } else if (GetNode(x + 1, y + 1)?.Type is NodeType.Slope or NodeType.Floor) {
                         var upRightNode = Nodes[x + 1, y + 1]!;
                         ConnectNodes(currentNode, upRightNode, new ConnectionType.Walk(1));
-                        ConnectNodes(currentNode, upRightNode, new ConnectionType.Walk(-1));
+                        ConnectNodes(upRightNode, currentNode, new ConnectionType.Walk(-1));
                     } else if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor) {
                         var upRightNode = Nodes[x + 1, y + 1]!;
                         ConnectNodes(currentNode, upRightNode, new ConnectionType.Walk(1));
@@ -399,7 +399,7 @@ public class SharedGraph {
                                     : new ConnectionType.Climb(Consts.IVec2.Down)
                             );
                         } else if (aboveNode?.Beam == GraphNode.BeamType.Above) {
-                            ConnectNodes(currentNode, aboveNode, new ConnectionType.Climb(Consts.IVec2.Right));
+                            ConnectNodes(currentNode, aboveNode, new ConnectionType.Climb(Consts.IVec2.Up));
                         }
                     }
                 }
