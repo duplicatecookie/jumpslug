@@ -487,6 +487,12 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir1)) {
             return WalkOffEdge(walkDir1);
         } else if (currentConnection.Type is ConnectionType.SlideOnWall(int wallDir)) {
+            if (currentConnection.PeekType(1) is ConnectionType.Walk(int walkDir2)) {
+                return new Input {
+                    Direction = new IVec2(walkDir2, 0),
+                    Jump = false,
+                };
+            }
             return new Input {
                 Direction = new IVec2(wallDir, 0),
                 Jump = false,
@@ -519,7 +525,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     Direction = Consts.IVec2.Down,
                     Jump = true,
                 };
-            } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
+            } else if (_slugcat.animation == Player.AnimationIndex.BeamTip) {
                 return new Input {
                     Direction = new IVec2(walkDir, 0),
                     Jump = false,
@@ -552,6 +558,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     Jump = false,
                 };
             }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default && currentNode.Beam == GraphNode.BeamType.Above) {
+            return new Input {
+                Direction = new IVec2(walkDir, 0),
+                Jump = false,
+            };
         } else {
             int yDir = 0;
             if (currentConnection.PeekType(1) is ConnectionType.Drop
@@ -576,21 +587,27 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         bool backwards = (_slugcat.bodyChunks[0].pos - _slugcat.bodyChunks[1].pos).Dot(crawlDir.ToVector2()) < 0;
         // turn around if going backwards
         // should not trigger when in a corner because that can lock the ai into switching forever when trying to go up an inverse T junction
-        if (_slugcat.bodyMode != Player.BodyModeIndex.WallClimb
-            && currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 nextDir)
-            && currentNode.Type is not NodeType.Floor
-            && backwards
-        ) {
-            if (crawlDir == nextDir) {
-                return new Input {
-                    Direction = crawlDir,
-                    Jump = true,
-                };
-            } else if (crawlDir.Dot(nextDir) == 0) {
-                return new Input {
-                    Direction = nextDir,
-                    Jump = false,
-                };
+        if (_slugcat.bodyMode != Player.BodyModeIndex.WallClimb) {
+            if (_slugcat.bodyMode == Player.BodyModeIndex.Default
+                && _slugcat.animation == Player.AnimationIndex.StandUp
+            ) {
+                _waitOneTick = true;
+                return Input.DoNothing;
+            } else if (currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 nextDir)
+                && currentNode.Type is not NodeType.Floor
+                && backwards
+            ) {
+                if (crawlDir == nextDir) {
+                    return new Input {
+                        Direction = crawlDir,
+                        Jump = true,
+                    };
+                } else if (crawlDir.Dot(nextDir) == 0) {
+                    return new Input {
+                        Direction = nextDir,
+                        Jump = false,
+                    };
+                }
             }
         }
         return new Input {
@@ -718,6 +735,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     Direction = Consts.IVec2.Down,
                     Jump = true,
                 };
+            } else {
+                return new Input {
+                    Direction = Consts.IVec2.Down,
+                    Jump = false,
+                };
             }
         }
         return Input.DoNothing;
@@ -782,6 +804,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                         Jump = false,
                     };
                 }
+            } else if (_slugcat.animation == Player.AnimationIndex.BeamTip) {
+                return new Input {
+                    Direction = new IVec2(jumpDir, 0),
+                    Jump = true,
+                };
             } else {
                 throw new NotImplementedException();
             }
@@ -908,6 +935,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 Direction = Consts.IVec2.Up,
                 Jump = false,
             };
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.CorridorClimb) {
+            return new Input {
+                Direction = new IVec2(walkDir, 0),
+                Jump = false,
+            };
         } else {
             throw new NotImplementedException();
         }
@@ -935,8 +967,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             } else if (_slugcat.superLaunchJump < 20) {
                 // hold down jump button to set up pounce
                 return new Input {
-                     Direction = Consts.IVec2.Zero,
-                     Jump = true,
+                    Direction = Consts.IVec2.Zero,
+                    Jump = true,
                 };
             } else {
                 // release jump button to perform pounce
