@@ -638,7 +638,8 @@ public class DynamicGraph {
                         pos,
                         descriptor.PounceVector(1),
                         new ConnectionType.Pounce(1),
-                        false
+                        false,
+                        5f
                     );
                 }
             }
@@ -653,7 +654,8 @@ public class DynamicGraph {
                         pos,
                         descriptor.PounceVector(-1),
                         new ConnectionType.Pounce(-1),
-                        false
+                        false,
+                        5f
                     );
                 }
             }
@@ -727,7 +729,8 @@ public class DynamicGraph {
         IVec2 headPos,
         Vector2 v0,
         ConnectionType type,
-        bool upright = true
+        bool upright = true,
+        float weightBoost = 0f
     ) {
         int x = headPos.x;
         int y = headPos.y;
@@ -755,7 +758,7 @@ public class DynamicGraph {
                 var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
                 var extension = Extensions[x, upright ? y - 1 : y];
                 if (extension is not null && currentNode?.Type is NodeType.Floor or NodeType.Slope) {
-                    ConnectNodes(startNode, currentNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1);
+                    ConnectNodes(startNode, currentNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost);
                 }
                 if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
                     break;
@@ -779,22 +782,22 @@ public class DynamicGraph {
                 break;
             }
             if (shiftedNode.Type is NodeType.Wall wall && wall.Direction == direction) {
-                ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1);
+                ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost);
                 break;
             } else if (shiftedNode.Beam == GraphNode.BeamType.Vertical) {
                 float poleResult = Parabola(pathOffset.y, v0, _room.gravity, (20 * x + 10 - pathOffset.x) / v0.x) / 20;
                 if (poleResult > y && poleResult < y + 1) {
-                    ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1);
+                    ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost);
                 }
             } else if (shiftedNode.Beam == GraphNode.BeamType.Horizontal) {
                 float leftHeight = Parabola(pathOffset.y, v0, _room.gravity, (20 * x - pathOffset.x) / v0.x);
                 float rightHeight = Parabola(pathOffset.y, v0, _room.gravity, (20 * (x + 1) - pathOffset.x) / v0.x);
                 float poleHeight = 20 * y + 10;
                 if (direction * leftHeight < direction * poleHeight && direction * poleHeight < direction * rightHeight) {
-                    ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 2);
+                    ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 2 + weightBoost);
                 }
             } else if (shiftedNode.Beam == GraphNode.BeamType.Cross) {
-                ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1);
+                ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost);
             }
         }
     }
