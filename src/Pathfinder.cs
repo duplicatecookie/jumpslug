@@ -197,11 +197,11 @@ public readonly struct SlugcatDescriptor {
     public readonly Vector2 PounceVector(int direction) {
         float adrenaline = Mathf.Lerp(1, 1.15f, Adrenaline);
         if (IsRivulet) {
-            return new Vector2(12 * direction, 4) * adrenaline;
+            return new Vector2(direction * (12 + 3f * adrenaline), 4 + JumpBoost(6)) * adrenaline;
         } else if (IsPup) {
-            return new Vector2(5.5f * direction, 4) * adrenaline;
+            return new Vector2(direction * (5.5f + 3f * adrenaline), 4 + JumpBoost(6)) * adrenaline;
         } else {
-            return new Vector2(9 * direction, 4) * adrenaline;
+            return new Vector2(direction * (9 + 3f * adrenaline), 4 + JumpBoost(6)) * adrenaline;
         }
     }
 }
