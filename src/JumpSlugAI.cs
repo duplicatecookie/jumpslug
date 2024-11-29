@@ -27,7 +27,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private PathConnection? _currentConnection;
     private bool _performingAirMovement;
     private float _pathThreat;
-    private PathNode? _destinationCandidate;
+    private readonly EscapeFinder _escapeFinder;
     private Visualizer? _visualizer;
     private bool _visualizeNode;
     private readonly NodeVisualizer _nodeVisualizer;
@@ -42,6 +42,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         AddModule(new RelationshipTracker(this, tracker));
         _pathfinder = new Pathfinder(_room!, new SlugcatDescriptor(_slugcat), threatTracker);
         _nodeVisualizer = new NodeVisualizer(_room!, _pathfinder.DynamicGraph);
+        _escapeFinder = new EscapeFinder();
     }
 
     AIModule? IUseARelationshipTracker.ModuleToTrackRelationship(CreatureTemplate.Relationship relationship) {
@@ -164,34 +165,19 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private IVec2? DetermineEscapeDestination(PathNode node) {
-        if (node.PathCost > 15) {
-            if (_destinationCandidate is null) {
-                return null;
-            } else {
-                var pos = _destinationCandidate.GridPos;
-                _destinationCandidate = null;
-                return pos;
-            }
-        }
-        if (node.Threat < _destinationCandidate?.Threat) {
-            _destinationCandidate = node;
-        }
-        return null;
-    }
-
     private void FindEscapePathAndDestination() {
         if (!_performingAirMovement && _currentNode is not null) {
-            var sharedGraph = _room.GetCWT().SharedGraph!;
             var result = _pathfinder.FindPathFrom(
                 _currentNode.GridPos,
-                DetermineEscapeDestination,
+                _escapeFinder,
                 new SlugcatDescriptor(_slugcat)
             );
             if (result is (IVec2, PathConnection) tuple) {
                 _destination = tuple.destination;
                 _currentConnection = tuple.connection;
                 _visualizer?.UpdatePath();
+            } else {
+                Plugin.Logger!.LogDebug("failed to find escape route");
             }
         }
     }
@@ -1175,6 +1161,29 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             _currentNodeSprite.sprite.isVisible = false;
             ResetPredictionSprites();
         }
+    }
+}
+
+class EscapeFinder : IDestinationFinder {
+    private PathNode? _destinationCandidate;
+    public void Reset() {
+        _destinationCandidate = null;
+    }
+    bool IDestinationFinder.StopSearching(PathNode node) {
+        if (node.PathCost > 15) {
+            _destinationCandidate = node;
+            return true;
+        }
+        if (_destinationCandidate is null || node.Threat < _destinationCandidate.Threat) {
+            _destinationCandidate = node;
+        }
+        return false;
+    }
+
+    IVec2? IDestinationFinder.Destination() {
+        var pos = _destinationCandidate?.GridPos;
+        _destinationCandidate = null;
+        return pos;
     }
 }
 

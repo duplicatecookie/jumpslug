@@ -389,10 +389,15 @@ public readonly struct PathNodePool {
     public readonly PathNode? this[IVec2 pos] => _array[pos.x, pos.y];
 }
 
+public interface IDestinationFinder {
+    bool StopSearching(PathNode node);
+    IVec2? Destination();
+}
+
 public class Pathfinder {
     private Room _room;
     private SlugcatDescriptor _lastDescriptor;
-    private IVec2 _lastDestination;
+    private IVec2? _lastDestination;
     public readonly DynamicGraph DynamicGraph;
     public PathNodePool PathNodePool;
     public BitGrid OpenNodes;
@@ -412,7 +417,7 @@ public class Pathfinder {
     public Pathfinder(Room room, SlugcatDescriptor descriptor, ThreatTracker threatTracker) {
         _room = room;
         _lastDescriptor = descriptor;
-        _lastDestination = new IVec2(-1, -1);
+        _lastDestination = null;
         DynamicGraph = new DynamicGraph(room, descriptor);
         var sharedGraph = _room.GetCWT().SharedGraph!;
         PathNodePool = new PathNodePool(sharedGraph);
@@ -542,7 +547,7 @@ public class Pathfinder {
 
     public (IVec2 destination, PathConnection connection)? FindPathFrom(
         IVec2 start,
-        Func<PathNode, IVec2?> destination,
+        IDestinationFinder finder,
         SlugcatDescriptor descriptor
     ) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
@@ -561,7 +566,7 @@ public class Pathfinder {
         NodeQueue.Reset();
         NodeQueue.Add(startNode);
         OpenNodes[start] = true;
-        _lastDestination = new IVec2(-1, -1);
+        _lastDestination = null;
         int width = _room.Width;
         int height = _room.Height;
         for (int y = 0; y < height; y++) {
@@ -580,17 +585,17 @@ public class Pathfinder {
         while (NodeQueue.Count > 0) {
             var currentNode = NodeQueue.Root!;
             var currentPos = currentNode.GridPos;
-            if (destination(currentNode) is IVec2 dest) {
+            if (finder.StopSearching(currentNode)) {
                 if (Timers.Active) {
                     Timers.FindPath.Stop();
                 }
-                _lastDestination = currentPos;
+                _lastDestination = finder.Destination();
                 _lastDescriptor = descriptor;
-                ReversePath(currentNode);
-                if (start == currentPos) {
+                if (_lastDestination is null || _lastDestination.Value == start) {
                     return null;
                 }
-                return (dest, PathNodePool[start]!.Connection!.Value); 
+                ReversePath(currentNode);
+                return (_lastDestination.Value, PathNodePool[start]!.Connection!.Value);
             }
             NodeQueue.RemoveRoot();
             OpenNodes[currentPos] = false;
@@ -607,7 +612,15 @@ public class Pathfinder {
             Timers.FindPath.Stop();
         }
         _lastDescriptor = descriptor;
-        return null;
+        _lastDestination = finder.Destination();
+        if (PathNodePool[start] is null) {
+            Plugin.Logger!.LogDebug("start node null");
+            return null;
+        } else if (PathNodePool[start]!.Connection is null) {
+            Plugin.Logger!.LogDebug("start connection null");
+            return null;
+        }
+        return _lastDestination is null ? null : (_lastDestination.Value, PathNodePool[start]!.Connection!.Value);
     }
 
     private void CheckConnection(PathNode currentNode, NodeConnection connection, bool useHeuristic) {
