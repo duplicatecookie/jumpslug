@@ -497,7 +497,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
             return Pounce(pounceDir);
         } else {
-            throw new NotImplementedException();
+            Plugin.Logger!.LogWarning($"trying to follow connection of type {currentConnection.Type} but no logic exists to handle it");
+            return Input.DoNothing;
         }
     }
 
@@ -528,7 +529,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     Jump = false,
                 };
             }
-            throw new NotImplementedException();
+            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Walk, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
+            return Input.DoNothing;
         } else if (currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 crawlDir)) {
             if (crawlDir.y < 0) {
                 if (_slugcat.animation != Player.AnimationIndex.DownOnFours
@@ -807,7 +809,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     Jump = true,
                 };
             } else {
-                throw new NotImplementedException();
+                Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Jump, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
+                return Input.DoNothing;
             }
         } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
             if (_currentNode.Type is NodeType.Wall(int wallDir)) {
@@ -835,7 +838,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 Jump = false,
             };
         } else {
-            throw new NotImplementedException();
+            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Jump, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
+            return Input.DoNothing;
         }
     }
 
@@ -874,7 +878,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     Jump = false,
                 };
             } else {
-                throw new NotImplementedException();
+                Plugin.Logger!.LogError($"missing movement logic: ConnectionType.JumpUp, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
+                return Input.DoNothing;
             }
         } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
             return new Input {
@@ -887,7 +892,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 Jump = false,
             };
         } else {
-            throw new NotImplementedException();
+            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.JumpUp, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
+            return Input.DoNothing;
         }
     }
 
@@ -938,7 +944,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 Jump = false,
             };
         } else {
-            throw new NotImplementedException();
+            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.WalkOffEdge, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
+            return Input.DoNothing;
         }
     }
 
@@ -975,7 +982,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
             return Input.DoNothing;
         } else {
-            throw new NotImplementedException();
+            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Pounce, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
+            return Input.DoNothing;
         }
     }
 
@@ -1272,7 +1280,6 @@ static class AIHooks {
             cursor.Emit(OpCodes.Brfalse, condition);
         } catch (Exception e) {
             Plugin.Logger!.LogError(e);
-            throw;
         }
     }
 }

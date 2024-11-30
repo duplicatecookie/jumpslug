@@ -64,7 +64,7 @@ public record NodeType {
         ShortcutEntrance
         or RoomExit => Color.cyan,
         Wall => Color.grey,
-        _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
+        _ => Color.black,
     };
 }
 
@@ -114,7 +114,7 @@ public record ConnectionType {
         Climb => Color.magenta,
         Walk => Color.white,
         SlideOnWall => Color.yellow,
-        _ => throw new InvalidUnionVariantException("unsupported NodeType variant"),
+        _ => Color.black,
     };
 
     public sealed override string ToString() {
@@ -129,7 +129,7 @@ public record ConnectionType {
             Walk(int dir) => $"Walk({dir})",
             WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
             SlideOnWall(int dir) => $"SlideOnWall({dir})",
-            _ => throw new InvalidUnionVariantException(),
+            _ => "Unknown",
         };
     }
 }
