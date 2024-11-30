@@ -40,6 +40,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         AddModule(new Tracker(this, 10, 10, -1, 0.5f, 5, 5, 10));
         AddModule(new ThreatTracker(this, 10));
         AddModule(new RelationshipTracker(this, tracker));
+        tracker.visualize = true;
         _pathfinder = new Pathfinder(_room!, new SlugcatDescriptor(_slugcat), threatTracker);
         _nodeVisualizer = new NodeVisualizer(_room!, _pathfinder.DynamicGraph);
         _escapeFinder = new EscapeFinder();
@@ -58,6 +59,16 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
     RelationshipTracker.TrackedCreatureState IUseARelationshipTracker.CreateTrackedCreatureState(RelationshipTracker.DynamicRelationship rel) {
         return new RelationshipTracker.TrackedCreatureState();
+    }
+
+    public override float VisualScore(Vector2 lookAtPoint, float bonus) {
+        float distance = Vector2.Distance(_slugcat.mainBodyChunk.pos, lookAtPoint) * (1 + bonus);
+        if (distance > _slugcat.abstractCreature.creatureTemplate.visualRadius) {
+            return 0;
+        } else {
+            // TODO: add restrictions for water and ambush predators (white lizards, dropswigs, pole plants)
+            return 1;
+        }
     }
 
     public override void NewRoom(Room room) {

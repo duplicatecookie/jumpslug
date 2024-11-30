@@ -36,6 +36,9 @@ static class TemplateHooks {
             new(),
             new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 0f)
         );
+        jumpslugTemplate.visualRadius = 700f;
+        jumpslugTemplate.throughSurfaceVision = 0.8f;
+        jumpslugTemplate.waterVision = 0.8f;
         Plugin.Logger!.LogInfo($"inserting JumpSlug creature template at index {TemplateType.JumpSlug!.Index}, length: {StaticWorld.creatureTemplates.Length}");
         StaticWorld.creatureTemplates[jumpslugTemplate.type.Index] = jumpslugTemplate;
         orig();
