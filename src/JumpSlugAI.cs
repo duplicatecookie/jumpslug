@@ -719,7 +719,6 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             }
         }
     }
-
     private Input Drop() {
         if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) < 0.5f) {
             if (_slugcat.animation == Player.AnimationIndex.HangUnderVerticalBeam) {
@@ -743,7 +742,6 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
         return Input.DoNothing;
     }
-
     private Input Jump(int jumpDir) {
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
