@@ -466,18 +466,18 @@ public struct NodeExtension {
 /// </summary>
 public class DynamicGraph {
     private Room _room;
-    private SlugcatDescriptor _descriptor;
+    public JumpVectors Vectors { get; private set; }
 
     public NodeExtension?[,] Extensions;
-    public int Width;
-    public int Height;
+    public int Width { get; private set; }
+    public int Height { get; private set; }
 
     /// <summary>
     /// Create empty adjacencly lists at positions with a corresponding <see cref="GraphNode">graph node</see>.
     /// </summary>
-    public DynamicGraph(Room room, SlugcatDescriptor descriptor) {
+    public DynamicGraph(Room room, JumpVectors vectors) {
         _room = room;
-        _descriptor = descriptor;
+        Vectors = vectors;
         var sharedGraph = room.GetCWT().SharedGraph!;
         Width = sharedGraph.Width;
         Height = sharedGraph.Height;
@@ -514,20 +514,20 @@ public class DynamicGraph {
         for (int y = 0; y < Height; y++) {
             for (int x = 0; x < Width; x++) {
                 if (Extensions[x, y] is not null) {
-                    TraceFromNode(new IVec2(x, y), _descriptor);
+                    TraceFromNode(new IVec2(x, y));
                 }
             }
         }
     }
 
-    public void Reset(SlugcatDescriptor descriptor) {
-        _descriptor = descriptor;
+    public void Reset(JumpVectors vectors) {
+        Vectors = vectors;
         for (int y = 0; y < Height; y++) {
             for (int x = 0; x < Width; x++) {
                 if (Extensions[x, y] is NodeExtension ext) {
                     ext.IncomingConnections.Clear();
                     ext.OutgoingConnections.Clear();
-                    TraceFromNode(new IVec2(x, y), _descriptor);
+                    TraceFromNode(new IVec2(x, y));
                 }
             }
         }
@@ -542,7 +542,7 @@ public class DynamicGraph {
     /// <param name="descriptor">
     /// slugcat-specifc values to use.
     /// </param>
-    private void TraceFromNode(IVec2 pos, SlugcatDescriptor descriptor) {
+    private void TraceFromNode(IVec2 pos) {
         if (Timers.Active) {
             Timers.TraceFromNode.Start();
         }
@@ -574,30 +574,54 @@ public class DynamicGraph {
             && graphNode.Type is NodeType.Air or NodeType.Wall
             && sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is NodeType.Air or NodeType.Wall
         ) {
-            Vector2 v0 = descriptor.VerticalPoleJumpVector(1);
             if (goRight) {
-                TraceJump(graphNode, pos, v0, new ConnectionType.Jump(1));
+                TraceJump(
+                    graphNode,
+                    pos,
+                    Vectors.VerticalPoleJump(1),
+                    new ConnectionType.Jump(1)
+                );
             }
             if (goLeft) {
-                v0.x = -v0.x;
-                TraceJump(graphNode, pos, v0, new ConnectionType.Jump(-1));
+                TraceJump(
+                    graphNode,
+                    pos,
+                    Vectors.VerticalPoleJump(-1),
+                    new ConnectionType.Jump(-1)
+                );
             }
         }
         if (graphNode.Beam == GraphNode.BeamType.Horizontal && graphNode.Type is NodeType.Air or NodeType.Wall) {
             var headPos = new IVec2(pos.x, pos.y + 1);
-            var v0 = descriptor.HorizontalPoleJumpVector(1);
-            var fallV0 = v0 with { y = 0 };
             if (goRight) {
-                TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(1));
-                TraceJump(graphNode, headPos, fallV0, new ConnectionType.WalkOffEdge(1));
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    Vectors.HorizontalPoleJump(1),
+                    new ConnectionType.Jump(1)
+                );
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    Vectors.HorizontalPoleJump(1) with { y = 0 },
+                    new ConnectionType.WalkOffEdge(1)
+                );
             }
             if (goLeft) {
-                v0.x = -v0.x;
-                fallV0.x = -fallV0.x;
-                TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(-1));
-                TraceJump(graphNode, headPos, fallV0, new ConnectionType.WalkOffEdge(-1));
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    Vectors.HorizontalPoleJump(-1),
+                    new ConnectionType.Jump(-1)
+                );
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    Vectors.HorizontalPoleJump(-1) with { y = 0 },
+                    new ConnectionType.WalkOffEdge(-1)
+                );
             }
-            TraceJumpUp(pos, v0.y);
+            TraceJumpUp(pos, Vectors.HorizontalPoleJumpVector.y);
             TraceDrop(pos);
         }
 
@@ -607,7 +631,7 @@ public class DynamicGraph {
                 TraceJump(
                     graphNode,
                     headPos,
-                    descriptor.FloorJumpVector(1),
+                    Vectors.FloorJump(1),
                     new ConnectionType.Jump(1)
                 );
             }
@@ -615,11 +639,11 @@ public class DynamicGraph {
                 TraceJump(
                     graphNode,
                     headPos,
-                    descriptor.FloorJumpVector(-1),
+                    Vectors.FloorJump(-1),
                     new ConnectionType.Jump(-1)
                 );
             }
-            TraceJumpUp(pos, descriptor.HorizontalPoleJumpVector(0).y);
+            TraceJumpUp(pos, Vectors.HorizontalPoleJumpVector.y);
             TraceDrop(pos);
         } else if (graphNode.Beam == GraphNode.BeamType.Below) {
             TraceDrop(pos);
@@ -627,16 +651,24 @@ public class DynamicGraph {
 
         if (graphNode.Type is NodeType.Floor) {
             var headPos = new IVec2(pos.x, pos.y + 1);
-            var v0 = descriptor.FloorJumpVector(1);
             if (goRight) {
-                TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(1));
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    Vectors.FloorJump(1),
+                    new ConnectionType.Jump(1)
+                );
                 if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
-                    v0.y = 0f;
-                    TraceJump(graphNode, headPos, v0, new ConnectionType.WalkOffEdge(1));
+                    TraceJump(
+                        graphNode,
+                        headPos,
+                        Vectors.FloorJump(1) with { y = 0 },
+                        new ConnectionType.WalkOffEdge(1)
+                    );
                     TraceJump(
                         graphNode,
                         pos,
-                        descriptor.PounceVector(1),
+                        Vectors.Pounce(1),
                         new ConnectionType.Pounce(1),
                         false,
                         5f
@@ -644,34 +676,51 @@ public class DynamicGraph {
                 }
             }
             if (goLeft) {
-                v0.x = -v0.x;
-                TraceJump(graphNode, headPos, v0, new ConnectionType.Jump(-1));
-                if (sharedGraph.GetNode(pos.x - 1, pos.y - 1)?.Type is NodeType.Wall) {
-                    v0.y = 0f;
-                    TraceJump(graphNode, headPos, v0, new ConnectionType.WalkOffEdge(-1));
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    Vectors.FloorJump(-1),
+                    new ConnectionType.Jump(-1)
+                );
+                if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
+                    TraceJump(
+                        graphNode,
+                        headPos,
+                        Vectors.FloorJump(-1) with { y = 0 },
+                        new ConnectionType.WalkOffEdge(1)
+                    );
                     TraceJump(
                         graphNode,
                         pos,
-                        descriptor.PounceVector(-1),
+                        Vectors.Pounce(-1),
                         new ConnectionType.Pounce(-1),
                         false,
                         5f
                     );
                 }
             }
-            TraceJumpUp(pos, v0.y);
+            TraceJumpUp(pos, Vectors.FloorJumpVector.y);
             if (sharedGraph.GetNode(pos.x, pos.y - 1)?.HasPlatform == true) {
                 TraceDrop(pos);
             }
         } else if (graphNode.Type is NodeType.Corridor) {
-            var v0 = descriptor.HorizontalCorridorFallVector(1);
-            // v0.x might be too large
             if (sharedGraph.GetNode(pos.x + 1, pos.y) is null) {
-                TraceJump(graphNode, pos, v0, new ConnectionType.WalkOffEdge(1), upright: false);
+                TraceJump(
+                    graphNode,
+                    pos,
+                    Vectors.HorizontalCorridorFall(1),
+                    new ConnectionType.WalkOffEdge(1),
+                    upright: false
+                );
             }
             if (sharedGraph.GetNode(pos.x - 1, pos.y) is null) {
-                v0.x = -v0.x;
-                TraceJump(graphNode, pos, v0, new ConnectionType.WalkOffEdge(-1), upright: false);
+                TraceJump(
+                    graphNode,
+                    pos,
+                    Vectors.HorizontalCorridorFall(-1),
+                    new ConnectionType.WalkOffEdge(-1),
+                    upright: false
+                );
             }
             if (sharedGraph.GetNode(pos.x, pos.y - 1) is null
                 && _room.Tiles[pos.x, pos.y - 1].Terrain == Room.Tile.TerrainType.Air
@@ -684,8 +733,12 @@ public class DynamicGraph {
             && sharedGraph.GetNode(pos.x, pos.y + 1)?.Type is NodeType.Wall // pressing jump under a ledge doesn't always wall jump
             && jumpWall.Direction == footJumpWall.Direction
         ) {
-            var v0 = descriptor.WallJumpVector(jumpWall.Direction);
-            TraceJump(graphNode, pos, v0, new ConnectionType.Jump(-jumpWall.Direction));
+            TraceJump(
+                graphNode,
+                pos,
+                Vectors.WallJump(-jumpWall.Direction),
+                new ConnectionType.Jump(-jumpWall.Direction)
+            );
         }
         if (Timers.Active) {
             Timers.TraceFromNode.Stop();

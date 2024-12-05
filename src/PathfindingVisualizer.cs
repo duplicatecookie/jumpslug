@@ -252,7 +252,7 @@ class PathVisualizer {
         }
     }
 
-    public void DisplayPath(IVec2 startPos, PathConnection startConnection, SlugcatDescriptor slugcat) {
+    public void DisplayPath(IVec2 startPos, PathConnection startConnection, DynamicGraph dynGraph) {
         ClearPath();
         PathConnection? cursor = startConnection;
         var currentPos = startPos;
@@ -264,24 +264,25 @@ class PathVisualizer {
             var connectionType = cursor.Value.Type;
             var color = connectionType.VisualizationColor;
             var sharedGraph = _room.GetCWT().SharedGraph!;
+            var vectors = dynGraph.Vectors;
             if (connectionType is ConnectionType.Jump jump) {
                 // this node can be null only if the path is constructed incorrectly so this should throw
                 GraphNode graphNode = sharedGraph.GetNode(startTile)!;
                 Vector2 v0 = Vector2.zero;
                 if (graphNode.Beam == GraphNode.BeamType.Vertical) {
-                    v0 = slugcat.VerticalPoleJumpVector(jump.Direction);
+                    v0 = vectors.VerticalPoleJump(jump.Direction);
                     VisualizeJump(v0, startTile, endTile);
                     VisualizeJumpTracing(v0, startTile);
                 } else if (graphNode.Beam == GraphNode.BeamType.Horizontal
                     || graphNode.Type is NodeType.Floor
                 ) {
                     var headPos = new IVec2(startTile.x, startTile.y + 1);
-                    v0 = slugcat.HorizontalPoleJumpVector(jump.Direction);
+                    v0 = vectors.HorizontalPoleJump(jump.Direction);
                     VisualizeJump(v0, headPos, endTile);
                     VisualizeJumpTracing(v0, headPos);
                     AddLine(start, RoomHelper.MiddleOfTile(headPos), Color.white);
                 } else if (graphNode.Type is NodeType.Wall wall) {
-                    v0 = slugcat.WallJumpVector(wall.Direction);
+                    v0 = vectors.WallJump(wall.Direction);
                     VisualizeJump(v0, startTile, endTile);
                     VisualizeJumpTracing(v0, startTile);
                 }
@@ -291,7 +292,7 @@ class PathVisualizer {
                     startTile.x,
                     sharedGraph.GetNode(startTile)?.Type is NodeType.Corridor ? startTile.y : startTile.y + 1
                 );
-                var v0 = slugcat.HorizontalCorridorFallVector(edgeWalk.Direction);
+                var v0 = vectors.HorizontalCorridorFall(edgeWalk.Direction);
                 VisualizeJump(v0, edgeWalkStart, endTile);
                 VisualizeJumpTracing(v0, edgeWalkStart);
                 AddLine(start, RoomHelper.MiddleOfTile(edgeWalkStart), Color.white);
@@ -516,7 +517,7 @@ public class DebugPathfinder {
         var sharedGraph = room.GetCWT().SharedGraph!;
         _room = room;
         _descriptor = descriptor;
-        _dynamicGraph = new DynamicGraph(room, descriptor);
+        _dynamicGraph = new DynamicGraph(room, descriptor.ToJumpVectors());
         _pathNodePool = new PathNodePool(sharedGraph);
         _nodeSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
         _connectionSprites = new DebugSprite[_pathNodePool.Width, _pathNodePool.Height];
@@ -632,7 +633,7 @@ public class DebugPathfinder {
         }
 
         if (_descriptor != descriptor) {
-            _dynamicGraph.Reset(descriptor);
+            _dynamicGraph.Reset(descriptor.ToJumpVectors());
             _descriptor = descriptor;
         }
 
@@ -682,7 +683,7 @@ public class DebugPathfinder {
         }
 
         if (_descriptor != descriptor) {
-            _dynamicGraph.Reset(descriptor);
+            _dynamicGraph.Reset(descriptor.ToJumpVectors());
             _descriptor = descriptor;
         }
 

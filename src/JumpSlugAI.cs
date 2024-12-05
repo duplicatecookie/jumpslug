@@ -41,7 +41,13 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         AddModule(new ThreatTracker(this, 10));
         AddModule(new RelationshipTracker(this, tracker));
         tracker.visualize = true;
-        _pathfinder = new Pathfinder(_room!, new SlugcatDescriptor(_slugcat), threatTracker);
+        var graphs = _room.GetCWT().DynamicGraphs;
+        var descriptor = new SlugcatDescriptor(_slugcat);
+        if (!graphs.TryGetValue(descriptor, out var dynGraph)) {
+            dynGraph = new DynamicGraph(_room, descriptor.ToJumpVectors());
+            graphs.Add(descriptor, dynGraph);
+        }
+        _pathfinder = new Pathfinder(_room!, dynGraph, threatTracker);
         _nodeVisualizer = new NodeVisualizer(_room!, _pathfinder.DynamicGraph);
         _escapeFinder = new EscapeFinder();
     }
@@ -180,8 +186,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         if (!_performingAirMovement && _currentNode is not null) {
             var result = _pathfinder.FindPathFrom(
                 _currentNode.GridPos,
-                _escapeFinder,
-                new SlugcatDescriptor(_slugcat)
+                _escapeFinder
             );
             if (result is (IVec2, PathConnection) tuple) {
                 _destination = tuple.destination;
@@ -193,15 +198,14 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private PathConnection? FindPath(bool updateThreat = false) {
+    private PathConnection? FindPath(bool forceReset = false) {
         if (_currentNode is null || _destination is null) {
             return null;
         } else {
             return _pathfinder.FindPathTo(
                 _currentNode.GridPos,
                 _destination.Value,
-                new SlugcatDescriptor(_slugcat),
-                updateThreat
+                forceReset
             );
         }
     }
@@ -241,8 +245,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 if (!_pathfinder.ClosedNodes[x, y]) {
                     _pathfinder.FindPathTo(
                         new IVec2(x, y),
-                        _destination.Value,
-                        new SlugcatDescriptor(_slugcat)
+                        _destination.Value
                     );
                 }
                 if (currentPathNode.PathCost < startPathNode.PathCost) {
@@ -284,8 +287,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 if (!_pathfinder.ClosedNodes[x, y]) {
                     _pathfinder.FindPathTo(
                         new IVec2(x, y),
-                        _destination.Value,
-                        new SlugcatDescriptor(_slugcat)
+                        _destination.Value
                     );
                 }
                 if (currentPathNode.PathCost < startPathNode.PathCost) {
@@ -1125,11 +1127,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         public void UpdatePath() {
             if (!Active || _ai._currentConnection is null || _ai._currentNode is null) {
                 _pathVisualizer.ClearPath();
-            } else {
+            } else if (_room.GetCWT().DynamicGraphs.TryGetValue(new SlugcatDescriptor(_ai._slugcat), out var graph)) {
                 _pathVisualizer.DisplayPath(
                     _ai._currentNode.GridPos,
                     _ai._currentConnection.Value,
-                    new SlugcatDescriptor(_ai._slugcat)
+                    graph
                 );
             }
         }
@@ -1156,11 +1158,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             Active = true;
             if (_ai._currentConnection is null || _ai._currentNode is null) {
                 _pathVisualizer.ClearPath();
-            } else {
+            } else if (_room.GetCWT().DynamicGraphs.TryGetValue(new SlugcatDescriptor(_ai._slugcat), out var graph)) {
                 _pathVisualizer.DisplayPath(
                     _ai._currentNode.GridPos,
                     _ai._currentConnection.Value,
-                    new SlugcatDescriptor(_ai._slugcat)
+                    graph
                 );
             }
             _jumpBoostLabel.isVisible = true;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 using UnityEngine;
@@ -7,6 +8,7 @@ namespace JumpSlug.Pathfinding;
 static class RoomCWT {
     public class RoomExtension {
         public SharedGraph? SharedGraph;
+        public Dictionary<SlugcatDescriptor, DynamicGraph> DynamicGraphs = new();
         public SharedGraphVisualizer? Visualizer;
         public RoomExtension() {
         }

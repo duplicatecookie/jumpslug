@@ -151,58 +151,102 @@ public readonly struct SlugcatDescriptor {
         return 0.3f * ((boost - 0.5f) * t - 0.75f * t * t);
     }
 
-    public readonly Vector2 FloorJumpVector(int direction) {
+    public readonly Vector2 FloorJumpVector() {
+        float adrenaline = Mathf.Lerp(1, 1.5f, Adrenaline);
         return new Vector2(
-            4.2f * direction * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
-            (IsRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, Adrenaline) + JumpBoost(IsPup ? 7 : 8));
+            4.2f * Runspeed * adrenaline,
+            (IsRivulet ? 6f : 4f) * adrenaline + JumpBoost(IsPup ? 7 : 8));
     }
 
-    public readonly Vector2 VerticalPoleJumpVector(int direction) {
-        Vector2 v0;
+    public readonly Vector2 VerticalPoleJumpVector() {
+        float adrenaline = Mathf.Lerp(1, 1.5f, Adrenaline);
         if (IsRivulet) {
-            v0 = new Vector2(direction * 9f, 9f) * Mathf.Lerp(1, 1.15f, Adrenaline);
+            return new Vector2(9f, 9f) * adrenaline;
         } else if (IsPup) {
-            v0 = new Vector2(direction * 5f, 7f) * Mathf.Lerp(1, 1.15f, Adrenaline);
+            return new Vector2(5f, 7f) * adrenaline;
         } else {
-            v0 = new Vector2(direction * 6f, 8f) * Mathf.Lerp(1, 1.15f, Adrenaline);
+            return new Vector2(6f, 8f) * adrenaline;
         }
-        return v0;
     }
 
-    public readonly Vector2 HorizontalPoleJumpVector(int direction) {
+    public readonly Vector2 HorizontalPoleJumpVector() {
+        float adrenaline = Mathf.Lerp(1, 1.5f, Adrenaline);
         return new Vector2(
-            direction == 0 ? 0 : 4.2f * direction * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
-            (IsRivulet ? 6f : 4f) * Mathf.Lerp(1, 1.15f, Adrenaline) + JumpBoost(IsPup ? 7 : 8)
+            4.2f * Runspeed * adrenaline,
+            (IsRivulet ? 6f : 4f) * adrenaline + JumpBoost(IsPup ? 7 : 8)
         );
     }
 
-    public readonly Vector2 HorizontalCorridorFallVector(int direction) {
+    public readonly Vector2 HorizontalCorridorFallVector() {
         return new Vector2(
-            4.2f * direction * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
-            0);
+            4.2f * Runspeed * Mathf.Lerp(1, 1.5f, Adrenaline),
+            0
+        );
     }
 
-    public readonly Vector2 WallJumpVector(int wallDirection) {
-        Vector2 v0;
-        if (IsRivulet) {
-            v0 = new Vector2(-wallDirection * 9, 10) * Mathf.Lerp(1, 1.15f, Adrenaline);
-        } else if (IsPup) {
-            v0 = new Vector2(-wallDirection * 5, 6) * Mathf.Lerp(1, 1.15f, Adrenaline);
-        } else {
-            v0 = new Vector2(-wallDirection * 6, 8) * Mathf.Lerp(1, 1.15f, Adrenaline);
-        }
-        return v0;
-    }
-
-    public readonly Vector2 PounceVector(int direction) {
+    public readonly Vector2 WallJumpVector() {
         float adrenaline = Mathf.Lerp(1, 1.15f, Adrenaline);
         if (IsRivulet) {
-            return new Vector2(direction * (12 + 3f * adrenaline), 4 + JumpBoost(6)) * adrenaline;
+            return new Vector2(9, 10) * adrenaline;
         } else if (IsPup) {
-            return new Vector2(direction * (5.5f + 3f * adrenaline), 4 + JumpBoost(6)) * adrenaline;
+            return new Vector2(5, 6) * adrenaline;
         } else {
-            return new Vector2(direction * (9 + 3f * adrenaline), 4 + JumpBoost(6)) * adrenaline;
+            return new Vector2(6, 8) * adrenaline;
         }
+    }
+
+    public readonly Vector2 PounceVector() {
+        float adrenaline = Mathf.Lerp(1, 1.15f, Adrenaline);
+        if (IsRivulet) {
+            return new Vector2(12 + 3f * adrenaline, 4 + JumpBoost(6)) * adrenaline;
+        } else if (IsPup) {
+            return new Vector2(5.5f + 3f * adrenaline, 4 + JumpBoost(6)) * adrenaline;
+        } else {
+            return new Vector2(9 + 3f * adrenaline, 4 + JumpBoost(6)) * adrenaline;
+        }
+    }
+
+    public readonly JumpVectors ToJumpVectors() {
+        return new JumpVectors {
+            FloorJumpVector = FloorJumpVector(),
+            VerticalPoleJumpVector = VerticalPoleJumpVector(),
+            HorizontalPoleJumpVector = HorizontalPoleJumpVector(),
+            HorizontalCorridorFallVector = HorizontalCorridorFallVector(),
+            WallJumpVector = WallJumpVector(),
+            PounceVector = PounceVector(),
+        };
+    }
+}
+
+public struct JumpVectors {
+    public Vector2 FloorJumpVector;
+    public Vector2 VerticalPoleJumpVector;
+    public Vector2 HorizontalPoleJumpVector;
+    public Vector2 HorizontalCorridorFallVector;
+    public Vector2 WallJumpVector;
+    public Vector2 PounceVector;
+    public readonly Vector2 FloorJump(int direction) {
+        return new Vector2(FloorJumpVector.x * direction, FloorJumpVector.y);
+    }
+
+    public readonly Vector2 VerticalPoleJump(int direction) {
+        return new Vector2(VerticalPoleJumpVector.x * direction, VerticalPoleJumpVector.y);
+    }
+
+    public readonly Vector2 HorizontalPoleJump(int direction) {
+        return new Vector2(HorizontalPoleJumpVector.x * direction, VerticalPoleJumpVector.y);
+    }
+
+    public readonly Vector2 HorizontalCorridorFall(int direction) {
+        return new Vector2(HorizontalCorridorFallVector.x * direction, VerticalPoleJumpVector.y);
+    }
+
+    public readonly Vector2 WallJump(int jumpDirection) {
+        return new Vector2(-WallJumpVector.x * jumpDirection, WallJumpVector.y);
+    }
+
+    public readonly Vector2 Pounce(int direction) {
+        return new Vector2(PounceVector.x * direction, PounceVector.y);
     }
 }
 
@@ -396,7 +440,6 @@ public interface IDestinationFinder {
 
 public class Pathfinder {
     private Room _room;
-    private SlugcatDescriptor _lastDescriptor;
     private IVec2? _lastDestination;
     public readonly DynamicGraph DynamicGraph;
     public PathNodePool PathNodePool;
@@ -414,11 +457,10 @@ public class Pathfinder {
     /// <param name="descriptor">
     /// relevant information about the slugcat using this pathfinder.
     /// </param>
-    public Pathfinder(Room room, SlugcatDescriptor descriptor, ThreatTracker threatTracker) {
+    public Pathfinder(Room room, DynamicGraph dynGraph, ThreatTracker threatTracker) {
         _room = room;
-        _lastDescriptor = descriptor;
         _lastDestination = null;
-        DynamicGraph = new DynamicGraph(room, descriptor);
+        DynamicGraph = dynGraph;
         var sharedGraph = _room.GetCWT().SharedGraph!;
         PathNodePool = new PathNodePool(sharedGraph);
         int width = sharedGraph.Width;
@@ -465,18 +507,15 @@ public class Pathfinder {
     public PathConnection? FindPathTo(
         IVec2 start,
         IVec2 destination,
-        SlugcatDescriptor descriptor,
-        bool updateThreat = false
+        bool forceUpdate = false
     ) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
         if (sharedGraph.GetNode(start) is null) {
             Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
-            _lastDescriptor = descriptor;
             return null;
         }
         if (sharedGraph.GetNode(destination) is null) {
             Plugin.Logger!.LogDebug($"no node at destination ({destination.x}, {destination.y})");
-            _lastDescriptor = descriptor;
             return null;
         }
         if (start == destination) {
@@ -486,7 +525,7 @@ public class Pathfinder {
             Timers.FindPath.Start();
         }
 
-        if (_lastDestination != destination || updateThreat) {
+        if (_lastDestination != destination || forceUpdate) {
             OpenNodes.Reset();
             ClosedNodes.Reset();
             var destNode = PathNodePool[destination]!;
@@ -513,10 +552,6 @@ public class Pathfinder {
             }
         }
 
-        if (_lastDescriptor != descriptor) {
-            DynamicGraph.Reset(descriptor);
-        }
-
         while (NodeQueue.Count > 0) {
             PathNode currentNode = NodeQueue.Root!;
             var currentPos = currentNode.GridPos;
@@ -524,7 +559,6 @@ public class Pathfinder {
                 if (Timers.Active) {
                     Timers.FindPath.Stop();
                 }
-                _lastDescriptor = descriptor;
                 return PathNodePool[start]!.Connection;
             }
             NodeQueue.RemoveRoot();
@@ -541,19 +575,16 @@ public class Pathfinder {
         if (Timers.Active) {
             Timers.FindPath.Stop();
         }
-        _lastDescriptor = descriptor;
         return null;
     }
 
     public (IVec2 destination, PathConnection connection)? FindPathFrom(
         IVec2 start,
-        IDestinationFinder finder,
-        SlugcatDescriptor descriptor
+        IDestinationFinder finder
     ) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
         if (sharedGraph.GetNode(start) is null) {
             Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
-            _lastDescriptor = descriptor;
             return null;
         }
         if (Timers.Active) {
@@ -578,10 +609,6 @@ public class Pathfinder {
             }
         }
 
-        if (_lastDescriptor != descriptor) {
-            DynamicGraph.Reset(descriptor);
-        }
-
         while (NodeQueue.Count > 0) {
             var currentNode = NodeQueue.Root!;
             var currentPos = currentNode.GridPos;
@@ -590,7 +617,6 @@ public class Pathfinder {
                     Timers.FindPath.Stop();
                 }
                 _lastDestination = finder.Destination();
-                _lastDescriptor = descriptor;
                 if (_lastDestination is null || _lastDestination.Value == start) {
                     return null;
                 }
@@ -611,7 +637,6 @@ public class Pathfinder {
         if (Timers.Active) {
             Timers.FindPath.Stop();
         }
-        _lastDescriptor = descriptor;
         _lastDestination = finder.Destination();
         if (PathNodePool[start] is null) {
             Plugin.Logger!.LogDebug("start node null");
