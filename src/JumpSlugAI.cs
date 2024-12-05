@@ -40,7 +40,6 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         AddModule(new Tracker(this, 10, 10, -1, 0.5f, 5, 5, 10));
         AddModule(new ThreatTracker(this, 10));
         AddModule(new RelationshipTracker(this, tracker));
-        tracker.visualize = true;
         var graphs = _room.GetCWT().DynamicGraphs;
         var descriptor = new SlugcatDescriptor(_slugcat);
         if (!graphs.TryGetValue(descriptor, out var dynGraph)) {
