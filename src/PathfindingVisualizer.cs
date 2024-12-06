@@ -979,55 +979,59 @@ static class VisualizerHooks {
 
     private static void Player_NewRoom(On.Player.orig_NewRoom orig, Player self, Room room) {
         orig(self, room);
-        var graphs = room.GetCWT().DynamicGraphs;
-        var descriptor = new SlugcatDescriptor(self);
-        if (!graphs.TryGetValue(descriptor, out var dynGraph)) {
-            dynGraph = new DynamicGraph(room, descriptor.ToJumpVectors());
-            graphs.Add(descriptor, dynGraph);
+        if (self.abstractCreature == self.room.world.game.Players[0]) {
+            var graphs = room.GetCWT().DynamicGraphs;
+            var descriptor = new SlugcatDescriptor(self);
+            if (!graphs.TryGetValue(descriptor, out var dynGraph)) {
+                dynGraph = new DynamicGraph(room, descriptor.ToJumpVectors());
+                graphs.Add(descriptor, dynGraph);
+            }
+            self.GetCWT().DebugPathfinder?.NewRoom(room, dynGraph);
         }
-        self.GetCWT().DebugPathfinder?.NewRoom(room, dynGraph);
     }
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
-        var debugPathfinder = self.GetCWT().DebugPathfinder;
-        if (debugPathfinder is null) {
-            if (InputHelper.JustPressed(KeyCode.V)) {
-                self.GetCWT().DebugPathfinder = new DebugPathfinder(self.room, new SlugcatDescriptor(self));
-            }
-        } else {
-            if (InputHelper.JustPressed(KeyCode.V)) {
-                if (debugPathfinder.DisplayingSprites) {
-                    debugPathfinder.HideSprites();
-                } else {
-                    debugPathfinder.DisplaySprites();
+        if (self.abstractCreature == self.room.world.game.Players[0]) {
+            var debugPathfinder = self.GetCWT().DebugPathfinder;
+            if (debugPathfinder is null) {
+                if (InputHelper.JustPressed(KeyCode.V)) {
+                    self.GetCWT().DebugPathfinder = new DebugPathfinder(self.room, new SlugcatDescriptor(self));
                 }
-            }
-            if (InputHelper.JustPressedMouseButton(0)) {
-                var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
-                debugPathfinder.InitBackwardPathfinding(
-                    RoomHelper.TilePosition(self.bodyChunks[1].pos),
-                    RoomHelper.TilePosition(mousePos),
-                    new SlugcatDescriptor(self)
-                );
-            } else if (InputHelper.JustPressed(KeyCode.F)) {
-                List<IVec2> itemList = new();
-                foreach (var list in self.room.physicalObjects) {
-                    foreach (var obj in list) {
-                        if (obj is ScavengerBomb) {
-                            itemList.Add(RoomHelper.TilePosition(obj.bodyChunks[0].pos));
-                        }
+            } else {
+                if (InputHelper.JustPressed(KeyCode.V)) {
+                    if (debugPathfinder.DisplayingSprites) {
+                        debugPathfinder.HideSprites();
+                    } else {
+                        debugPathfinder.DisplaySprites();
                     }
                 }
-                debugPathfinder.InitForewardPathfinding(
-                    RoomHelper.TilePosition(self.bodyChunks[1].pos),
-                    (PathNode node) => itemList.Contains(node.GridPos) ? node.GridPos : null,
-                    new SlugcatDescriptor(self)
-                );
-            }
-            if (!debugPathfinder.IsFinished
-                && debugPathfinder.DisplayingSprites
-            ) {
-                debugPathfinder.Poll();
+                if (InputHelper.JustPressedMouseButton(0)) {
+                    var mousePos = (Vector2)Input.mousePosition + self.room.game.cameras[0].pos;
+                    debugPathfinder.InitBackwardPathfinding(
+                        RoomHelper.TilePosition(self.bodyChunks[1].pos),
+                        RoomHelper.TilePosition(mousePos),
+                        new SlugcatDescriptor(self)
+                    );
+                } else if (InputHelper.JustPressed(KeyCode.F)) {
+                    List<IVec2> itemList = new();
+                    foreach (var list in self.room.physicalObjects) {
+                        foreach (var obj in list) {
+                            if (obj is ScavengerBomb) {
+                                itemList.Add(RoomHelper.TilePosition(obj.bodyChunks[0].pos));
+                            }
+                        }
+                    }
+                    debugPathfinder.InitForewardPathfinding(
+                        RoomHelper.TilePosition(self.bodyChunks[1].pos),
+                        (PathNode node) => itemList.Contains(node.GridPos) ? node.GridPos : null,
+                        new SlugcatDescriptor(self)
+                    );
+                }
+                if (!debugPathfinder.IsFinished
+                    && debugPathfinder.DisplayingSprites
+                ) {
+                    debugPathfinder.Poll();
+                }
             }
         }
         orig(self, eu);
