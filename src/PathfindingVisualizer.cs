@@ -494,7 +494,7 @@ public class DebugPathfinder {
     private BitGrid _openNodes;
     private BitGrid _closedNodes;
     private PathNodeQueue _nodeQueue;
-    private readonly DynamicGraph _dynamicGraph;
+    private DynamicGraph _dynamicGraph;
     private Func<PathNode, IVec2?>? _destination;
     private ReversalCursor _reversalCursor;
     public IVec2 Start { get; private set; }
@@ -562,10 +562,10 @@ public class DebugPathfinder {
     /// <summary>
     /// Reinitialize pathfinder for new room. Does nothing if the room has not actually changed.
     /// </summary>
-    public void NewRoom(Room room) {
+    public void NewRoom(Room room, DynamicGraph dynGraph) {
         if (room != _room) {
             _room = room;
-            _dynamicGraph.NewRoom(room);
+            _dynamicGraph = dynGraph;
             _pathNodePool = new PathNodePool(room.GetCWT().SharedGraph!);
             _nodeQueue = new PathNodeQueue(
                 _pathNodePool.NonNullCount,
@@ -979,7 +979,13 @@ static class VisualizerHooks {
 
     private static void Player_NewRoom(On.Player.orig_NewRoom orig, Player self, Room room) {
         orig(self, room);
-        self.GetCWT().DebugPathfinder?.NewRoom(room);
+        var graphs = room.GetCWT().DynamicGraphs;
+        var descriptor = new SlugcatDescriptor(self);
+        if (!graphs.TryGetValue(descriptor, out var dynGraph)) {
+            dynGraph = new DynamicGraph(room, descriptor.ToJumpVectors());
+            graphs.Add(descriptor, dynGraph);
+        }
+        self.GetCWT().DebugPathfinder?.NewRoom(room, dynGraph);
     }
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {

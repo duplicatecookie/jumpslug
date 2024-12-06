@@ -465,7 +465,7 @@ public struct NodeExtension {
 /// Stores connections dependent on slugcat-specific values like jumps.
 /// </summary>
 public class DynamicGraph {
-    private Room _room;
+    private readonly Room _room;
     public JumpVectors Vectors { get; private set; }
 
     public NodeExtension?[,] Extensions;
@@ -483,20 +483,6 @@ public class DynamicGraph {
         Height = sharedGraph.Height;
         Extensions = new NodeExtension?[Width, Height];
         ResetLists();
-    }
-
-    /// <summary>
-    /// Reinitialize the graph for the new room. Does nothing if the room hasn't actually changed.
-    /// </summary>
-    public void NewRoom(Room room) {
-        if (room != _room) {
-            _room = room;
-            var sharedGraph = room.GetCWT().SharedGraph!;
-            Width = sharedGraph.Width;
-            Height = sharedGraph.Height;
-            Extensions = new NodeExtension?[Width, Height];
-            ResetLists();
-        }
     }
 
     private void ResetLists() {

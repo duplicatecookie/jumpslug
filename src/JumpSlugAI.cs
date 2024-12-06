@@ -80,7 +80,13 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         base.NewRoom(room);
         if (_room != room) {
             _room = room;
-            _pathfinder.NewRoom(room);
+            var graphs = _room.GetCWT().DynamicGraphs;
+            var descriptor = new SlugcatDescriptor(_slugcat);
+            if (!graphs.TryGetValue(descriptor, out var dynGraph)) {
+                dynGraph = new DynamicGraph(_room, descriptor.ToJumpVectors());
+                graphs.Add(descriptor, dynGraph);
+            }
+            _pathfinder.NewRoom(room, dynGraph);
             _visualizer?.NewRoom(room);
             _nodeVisualizer.NewRoom(room, _pathfinder.DynamicGraph);
             _threatVisualizer?.NewRoom(room);

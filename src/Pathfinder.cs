@@ -441,7 +441,7 @@ public interface IDestinationFinder {
 public class Pathfinder {
     private Room _room;
     private IVec2? _lastDestination;
-    public readonly DynamicGraph DynamicGraph;
+    public DynamicGraph DynamicGraph;
     public PathNodePool PathNodePool;
     public BitGrid OpenNodes;
     public BitGrid ClosedNodes;
@@ -474,10 +474,10 @@ public class Pathfinder {
     /// <summary>
     /// Reinitialize pathfinder for new room. Does nothing if the room has not actually changed.
     /// </summary>
-    public void NewRoom(Room room) {
+    public void NewRoom(Room room, DynamicGraph dynGraph) {
         if (room != _room) {
             _room = room;
-            DynamicGraph.NewRoom(room);
+            DynamicGraph = dynGraph;
             var sharedGraph = _room.GetCWT().SharedGraph!;
             PathNodePool = new PathNodePool(sharedGraph);
             int width = sharedGraph.Width;
