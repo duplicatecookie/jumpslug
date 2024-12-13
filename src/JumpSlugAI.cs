@@ -369,51 +369,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 _performingAirMovement = false;
                 return Input.DoNothing;
             } else {
-                var currentConnection = _currentConnection!.Value;
-                if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
-                    bool jump;
-                    if (_slugcat.jumpBoost > 0
-                        || _slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
-                    ) {
-                        jump = true;
-                    } else {
-                        jump = false;
-                    }
-                    return new Input {
-                        Direction = new IVec2(jumpDir, 0),
-                        Jump = jump,
-                    };
-                } else if (currentConnection.Type is ConnectionType.JumpUp) {
-                    if (_slugcat.jumpBoost > 0
-                        || _slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam
-                    ) {
-                        return new Input {
-                            Direction = Consts.IVec2.Up,
-                            Jump = true,
-                        };
-                    } else {
-                        return Input.DoNothing;
-                    }
-                } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int ledgeDir)) {
-                    return new Input {
-                        Direction = new IVec2(ledgeDir, 0),
-                        Jump = false,
-                    };
-                } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
-                    return new Input {
-                        Direction = new IVec2(pounceDir, 0),
-                        Jump = false,
-                    };
-                } else if (currentConnection.Type is ConnectionType.Drop
-                    && node?.Type is NodeType.Floor
-                ) {
-                    return new Input {
-                        Direction = Consts.IVec2.Down,
-                        Jump = false,
-                    };
-                } else {
-                    return Input.DoNothing;
-                }
+                return GenerateInAirInputs(_currentConnection!.Value);
             }
         } else {
             var connection = _currentConnection?.FindInPath(node.GridPos);
@@ -423,31 +379,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 _performingAirMovement = false;
                 return GenerateInputs();
             } else if (KeepFalling(node)) {
-                var currentConnection = _currentConnection!.Value;
-                if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
-                    bool jump;
-                    if (_slugcat.jumpBoost > 0) {
-                        jump = true;
-                    } else {
-                        jump = false;
-                    }
-                    return new Input {
-                        Direction = new IVec2(jumpDir, 0),
-                        Jump = jump,
-                    };
-                } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
-                    return new Input {
-                        Direction = new IVec2(walkDir, 0),
-                        Jump = false,
-                    };
-                } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
-                    return new Input {
-                        Direction = new IVec2(pounceDir, 0),
-                        Jump = false,
-                    };
-                } else {
-                    return Input.DoNothing;
-                }
+                return GenerateInAirInputs(_currentConnection!.Value);
             } else {
                 _performingAirMovement = false;
                 _currentNode = node;
@@ -455,6 +387,79 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 _visualizer?.UpdatePath();
                 return GenerateInputs();
             }
+        }
+    }
+
+    private Input GenerateInAirInputs(PathConnection currentConnection) {
+        if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
+            bool jump;
+            if (_slugcat.jumpBoost > 0) {
+                jump = true;
+            } else {
+                jump = false;
+            }
+            return new Input {
+                Direction = new IVec2(jumpDir, 0),
+                Jump = jump,
+            };
+        } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
+            return new Input {
+                Direction = new IVec2(walkDir, 0),
+                Jump = false,
+            };
+        } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
+            return new Input {
+                Direction = new IVec2(pounceDir, 0),
+                Jump = false,
+            };
+        } else if (currentConnection.Type is ConnectionType.WalkOffEdgeOntoLedge(int ledgeWalkDir)) {
+            return new Input {
+                Direction = new IVec2(ledgeWalkDir, 0),
+                Jump = false,
+            };
+        } else if (currentConnection.Type is ConnectionType.PounceOntoLedge(int ledgePounceDir)) {
+            return new Input {
+                Direction = new IVec2(ledgePounceDir, 1),
+                Jump = false,
+            };
+        } else if (currentConnection.Type is ConnectionType.JumpUpToLedge(int jumpUpLedgeDir)) {
+            var headPos = RoomHelper.TilePosition(_slugcat.mainBodyChunk.pos);
+            var sharedGraph = _room.GetCWT().SharedGraph!;
+            var sideNode = sharedGraph.GetNode(headPos.x + jumpUpLedgeDir, headPos.y);
+            if (sideNode?.GridPos == currentConnection.Next.GridPos) {
+                return new Input {
+                    Direction = new IVec2(jumpUpLedgeDir, 0),
+                    Jump = false,
+                };
+            }
+            bool jump;
+            if (_slugcat.jumpBoost > 0) {
+                jump = true;
+            } else {
+                jump = false;
+            }
+            return new Input {
+                Direction = Consts.IVec2.Zero,
+                Jump = jump,
+            };
+        } else if (currentConnection.Type is ConnectionType.JumpToLedge(int ledgeJumpDir)) {
+            bool jump;
+            if (_slugcat.jumpBoost > 0) {
+                jump = true;
+            } else {
+                jump = false;
+            }
+            if (_slugcat.animation == Player.AnimationIndex.LedgeCrawl
+                || _slugcat.animation == Player.AnimationIndex.LedgeGrab
+            ) {
+                jump = false;
+            }
+            return new Input {
+                Direction = new IVec2(ledgeJumpDir, 0),
+                Jump = jump,
+            };
+        } else {
+            return Input.DoNothing;
         }
     }
 
@@ -486,10 +491,14 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             return Drop();
         } else if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
             return Jump(jumpDir);
-        } else if (currentConnection.Type is ConnectionType.JumpUp) {
+        } else if (currentConnection.Type is ConnectionType.JumpToLedge(int ledgeJumpDir)) {
+            return Jump(ledgeJumpDir);
+        } else if (currentConnection.Type is ConnectionType.JumpUp or ConnectionType.JumpUpToLedge) {
             return JumpUp();
         } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir1)) {
             return WalkOffEdge(walkDir1);
+        } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int ledgeWalkDir)) {
+            return WalkOffEdge(ledgeWalkDir);
         } else if (currentConnection.Type is ConnectionType.SlideOnWall(int wallDir)) {
             if (currentConnection.PeekType(1) is ConnectionType.Walk(int walkDir2)) {
                 return new Input {
@@ -503,6 +512,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             };
         } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
             return Pounce(pounceDir);
+        } else if (currentConnection.Type is ConnectionType.Pounce(int ledgePounceDir)) {
+            return Pounce(ledgePounceDir);
         } else {
             Plugin.Logger!.LogWarning($"trying to follow connection of type {currentConnection.Type} but no logic exists to handle it");
             return Input.DoNothing;

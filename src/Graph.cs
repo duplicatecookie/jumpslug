@@ -94,9 +94,13 @@ public record ConnectionType {
     public record Climb(IVec2 Direction) : ConnectionType();
     public record Crawl(IVec2 Direction) : ConnectionType();
     public record Jump(int Direction) : ConnectionType();
+    public record JumpToLedge(int Direction) : ConnectionType();
     public record JumpUp() : ConnectionType();
+    public record JumpUpToLedge(int Direction) : ConnectionType();
     public record WalkOffEdge(int Direction) : ConnectionType();
+    public record WalkOffEdgeOntoLedge(int Direction) : ConnectionType();
     public record Pounce(int Direction) : ConnectionType();
+    public record PounceOntoLedge(int Direction) : ConnectionType();
     public record Shortcut() : ConnectionType();
     public record Drop() : ConnectionType();
     public record SlideOnWall(int Direction) : ConnectionType();
@@ -108,6 +112,10 @@ public record ConnectionType {
         or JumpUp
         or WalkOffEdge
         or Pounce => Color.blue,
+        JumpToLedge
+        or JumpUpToLedge
+        or WalkOffEdgeOntoLedge
+        or PounceOntoLedge => new Color(1f, 0.75f, 0f), // orange
         Drop => Color.red,
         Shortcut => Color.cyan,
         Crawl => Color.green,
@@ -129,7 +137,21 @@ public record ConnectionType {
             Walk(int dir) => $"Walk({dir})",
             WalkOffEdge(int dir) => $"WalkOffEdge({dir})",
             SlideOnWall(int dir) => $"SlideOnWall({dir})",
+            JumpToLedge(int dir) => $"JumpToLedge({dir})",
+            JumpUpToLedge(int dir) => $"JumpUpToLedge({dir})",
+            PounceOntoLedge(int dir) => $"PounceOntoLedge({dir})",
+            WalkOffEdgeOntoLedge(int dir) => $"WalkOffEdgeOntoLedge({dir})",
             _ => "Unknown",
+        };
+    }
+
+    public ConnectionType AsLedgeMove(int direction) {
+        return this switch {
+            Jump => new JumpToLedge(direction),
+            JumpUp => new JumpUpToLedge(direction),
+            WalkOffEdge => new WalkOffEdge(direction),
+            Pounce => new PounceOntoLedge(direction),
+            _ => throw new Exception("connection type doesn't have ledge counterpart")
         };
     }
 }
@@ -637,6 +659,13 @@ public class DynamicGraph {
 
         if (graphNode.Type is NodeType.Floor) {
             var headPos = new IVec2(pos.x, pos.y + 1);
+            if (sharedGraph.GetNode(headPos)?.Type is NodeType.Wall(int wallDir)) {
+                if (wallDir == -1) {
+                    goLeft = false;
+                } else {
+                    goRight = false;
+                }
+            }
             if (goRight) {
                 TraceJump(
                     graphNode,
@@ -644,22 +673,22 @@ public class DynamicGraph {
                     Vectors.FloorJump(1),
                     new ConnectionType.Jump(1)
                 );
-                if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
-                    TraceJump(
-                        graphNode,
-                        headPos,
-                        Vectors.FloorJump(1) with { y = 0 },
-                        new ConnectionType.WalkOffEdge(1)
-                    );
-                    TraceJump(
-                        graphNode,
-                        pos,
-                        Vectors.Pounce(1),
-                        new ConnectionType.Pounce(1),
-                        false,
-                        5f
-                    );
-                }
+            }
+            if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    Vectors.FloorJump(1) with { y = 0 },
+                    new ConnectionType.WalkOffEdge(1)
+                );
+                TraceJump(
+                    graphNode,
+                    pos,
+                    Vectors.Pounce(1),
+                    new ConnectionType.Pounce(1),
+                    false,
+                    5f
+                );
             }
             if (goLeft) {
                 TraceJump(
@@ -668,22 +697,22 @@ public class DynamicGraph {
                     Vectors.FloorJump(-1),
                     new ConnectionType.Jump(-1)
                 );
-                if (sharedGraph.GetNode(pos.x + 1, pos.y - 1)?.Type is NodeType.Wall) {
-                    TraceJump(
-                        graphNode,
-                        headPos,
-                        Vectors.FloorJump(-1) with { y = 0 },
-                        new ConnectionType.WalkOffEdge(1)
-                    );
-                    TraceJump(
-                        graphNode,
-                        pos,
-                        Vectors.Pounce(-1),
-                        new ConnectionType.Pounce(-1),
-                        false,
-                        5f
-                    );
-                }
+            }
+            if (sharedGraph.GetNode(pos.x - 1, pos.y - 1)?.Type is NodeType.Wall) {
+                TraceJump(
+                    graphNode,
+                    headPos,
+                    Vectors.FloorJump(-1) with { y = 0 },
+                    new ConnectionType.WalkOffEdge(-1)
+                );
+                TraceJump(
+                    graphNode,
+                    pos,
+                    Vectors.Pounce(-1),
+                    new ConnectionType.Pounce(-1),
+                    false,
+                    5f
+                );
             }
             TraceJumpUp(pos, Vectors.FloorJumpVector.y);
             if (sharedGraph.GetNode(pos.x, pos.y - 1)?.HasPlatform == true) {
@@ -805,6 +834,20 @@ public class DynamicGraph {
                 y--;
             } else {
                 x += direction;
+                var sideNode = sharedGraph.GetNode(x, y);
+                if (sideNode is not null
+                    && (sideNode.Type is NodeType.Floor
+                        && _room.GetTile(x, y - 1).Terrain == Room.Tile.TerrainType.Solid
+                    || sideNode.Type is NodeType.Slope)
+                ) {
+                    ConnectNodes(
+                        startNode,
+                        sideNode,
+                        type.AsLedgeMove(direction),
+                        new IVec2(x, y).FloatDist(startNode.GridPos) + 3 + weightBoost
+                    );
+                    break;
+                }
             }
 
             if (x < 0 || y < 0 || x >= Width || y >= Height
@@ -861,9 +904,21 @@ public class DynamicGraph {
             ) {
                 break;
             }
+            var leftNode = sharedGraph.GetNode(x - 1, i);
+            if (leftNode?.Type is NodeType.Floor or NodeType.Slope) {
+                ConnectNodes(startNode, leftNode, new ConnectionType.JumpUpToLedge(-1), i - y);
+                break;
+            }
+            var rightNode = sharedGraph.GetNode(x + 1, i);
+            if (rightNode?.Type is NodeType.Floor or NodeType.Slope) {
+                ConnectNodes(startNode, rightNode, new ConnectionType.JumpUpToLedge(1), i - y);
+                break;
+            }
+
             if (currentNode is null) {
                 continue;
             }
+
             if (currentNode.Type is NodeType.Corridor || currentNode.Beam == GraphNode.BeamType.Below) {
                 ConnectNodes(startNode, currentNode, new ConnectionType.JumpUp(), i - y);
                 break;
@@ -906,7 +961,7 @@ public class DynamicGraph {
         }
     }
 
-    private void ConnectNodes(GraphNode startNode, GraphNode endNode, ConnectionType type, float weight = 1) {        
+    private void ConnectNodes(GraphNode startNode, GraphNode endNode, ConnectionType type, float weight = 1) {
         if (startNode is null || endNode is null) {
             return;
         }

@@ -444,6 +444,15 @@ class PathVisualizer {
                 y--;
             } else {
                 x += direction;
+                var sideNode = sharedGraph.GetNode(x, y);
+                if (sideNode is not null
+                    && (sideNode.Type is NodeType.Floor
+                        && _room.GetTile(x, y - 1).Terrain == Room.Tile.TerrainType.Solid
+                    || sideNode.Type is NodeType.Slope)
+                ) {
+                    AddSquare(new IVec2(x, y), Color.cyan);
+                    break;
+                }
             }
 
             if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height
@@ -979,7 +988,8 @@ static class VisualizerHooks {
 
     private static void Player_NewRoom(On.Player.orig_NewRoom orig, Player self, Room room) {
         orig(self, room);
-        if (self.abstractCreature == self.room.world.game.Players[0]) {
+        var players = self.room.world.game.Players;
+        if (players.Count > 0 && self.abstractCreature == players[0]) {
             var graphs = room.GetCWT().DynamicGraphs;
             var descriptor = new SlugcatDescriptor(self);
             if (!graphs.TryGetValue(descriptor, out var dynGraph)) {
@@ -991,7 +1001,8 @@ static class VisualizerHooks {
     }
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
-        if (self.abstractCreature == self.room.world.game.Players[0]) {
+        var players = self.room.world.game.Players;
+        if (players.Count > 0 && self.abstractCreature == players[0]) {
             var debugPathfinder = self.GetCWT().DebugPathfinder;
             if (debugPathfinder is null) {
                 if (InputHelper.JustPressed(KeyCode.V)) {
