@@ -479,6 +479,10 @@ public class SharedGraph {
 }
 
 public struct NodeExtension {
+    public NodeExtension() {
+        IncomingConnections = new();
+        OutgoingConnections = new();
+    }
     public List<NodeConnection> IncomingConnections;
     public List<NodeConnection> OutgoingConnections;
 }
