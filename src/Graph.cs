@@ -104,6 +104,7 @@ public record ConnectionType {
     public record Shortcut() : ConnectionType();
     public record Drop() : ConnectionType();
     public record SlideOnWall(int Direction) : ConnectionType();
+    public record SurfaceSwim(int Direction) : ConnectionType();
 
     private ConnectionType() { }
 
@@ -122,6 +123,7 @@ public record ConnectionType {
         Climb => Color.magenta,
         Walk => Color.white,
         SlideOnWall => Color.yellow,
+        SurfaceSwim => new Color(0f, 0.75f, 0.6f), // teal
         _ => Color.black,
     };
 
@@ -141,6 +143,7 @@ public record ConnectionType {
             JumpUpToLedge(int dir) => $"JumpUpToLedge({dir})",
             PounceOntoLedge(int dir) => $"PounceOntoLedge({dir})",
             WalkOffEdgeOntoLedge(int dir) => $"WalkOffEdgeOntoLedge({dir})",
+            SurfaceSwim(int dir) => $"SurfaceSwim({dir})",
             _ => "Unknown",
         };
     }
@@ -903,7 +906,7 @@ public class DynamicGraph {
         }
         // the max height of the jump in tile space, truncated to prevent overpredition and moved up so it starts at the head tile 
         int maxHeight = y + (int)(0.5f * v0 * v0 / _room.gravity / 20) + 1;
-        for (int i = y + 1; i <= maxHeight; i++) {
+        for (int i = y + 1; i <= maxHeight && i < sharedGraph.Height; i++) {
             var currentTile = _room.GetTile(x, i);
             var currentNode = sharedGraph.GetNode(x, i);
             if (currentTile.Terrain == Room.Tile.TerrainType.Solid

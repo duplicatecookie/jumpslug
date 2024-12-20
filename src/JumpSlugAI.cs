@@ -23,7 +23,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private bool _waitOneTick;
     private IVec2? _destination;
     private readonly Pathfinder _pathfinder;
-    private GraphNode? _currentNode;
+    private IVec2 _currentPos;
     private PathConnection? _currentConnection;
     private bool _performingAirMovement;
     private float _pathThreat;
@@ -113,12 +113,12 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
 
         float lastThreat = _pathThreat;
-        if (_currentNode is not null && _currentConnection is PathConnection connection) {
-            _pathThreat = threatTracker.ThreatAlongPath(_currentNode.GridPos, connection, 15);
+        if (!CanMove() && _currentConnection is PathConnection connection) {
+            _pathThreat = threatTracker.ThreatAlongPath(_currentPos, connection, 15);
         }
 
         if (threatTracker.mostThreateningCreature is not null) {
-            if (_currentNode is not null
+            if (CanMove()
                 && (_currentConnection is null
                 && threatTracker
                     .mostThreateningCreature
@@ -126,7 +126,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     .abstractAI
                     .RealAI
                     .pathFinder
-                    .CoordinateReachable(_room.ToWorldCoordinate(_currentNode.GridPos))
+                    .CoordinateReachable(_room.ToWorldCoordinate(_currentPos))
                 || _pathThreat > lastThreat + 10
                 )
             ) {
@@ -134,6 +134,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             }
         }
 
+        _currentPos = CurrentPos();
         if (_waitOneTick || _destination is null) {
             _slugcat.input[0] = default;
             _waitOneTick = false;
@@ -175,12 +176,13 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             _visualizeNode = !_visualizeNode;
         }
 
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+
         if (_visualizeNode) {
-            var node = CurrentNode();
-            if (node is null) {
-                _nodeVisualizer.ResetSprites();
-            } else {
+            if (sharedGraph.GetNode(_currentPos) is GraphNode node) {
                 _nodeVisualizer.VisualizeNode(node);
+            } else {
+                _nodeVisualizer.ResetSprites();
             }
         } else {
             _nodeVisualizer.ResetSprites();
@@ -188,9 +190,9 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     }
 
     private void FindEscapePathAndDestination() {
-        if (!_performingAirMovement && _currentNode is not null) {
+        if (!_performingAirMovement && CanMove()) {
             var result = _pathfinder.FindPathFrom(
-                _currentNode.GridPos,
+                _currentPos,
                 _escapeFinder
             );
             if (result is (IVec2, PathConnection) tuple) {
@@ -203,32 +205,38 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
+    private bool CanMove() {
+        return _room.GetCWT().SharedGraph!.GetNode(_currentPos) is not null
+            || _slugcat.animation == Player.AnimationIndex.SurfaceSwim;
+    }
+
     private PathConnection? FindPath(bool forceReset = false) {
-        if (_currentNode is null || _destination is null) {
+        if (_destination is null) {
             return null;
-        } else {
+        } else if (CanMove()) {
             return _pathfinder.FindPathTo(
-                _currentNode.GridPos,
+                _currentPos,
                 _destination.Value,
                 forceReset
             );
+        } else {
+            return null;
         }
     }
 
-    private bool KeepFalling(GraphNode startNode) {
+    private bool KeepFalling() {
         _visualizer?.ResetPredictionSprites();
-        if (startNode is null) {
+        var sharedGraph = _slugcat.room.GetCWT().SharedGraph!;
+        if (sharedGraph.GetNode(_currentPos) is null) {
             return true;
         }
         if (_currentConnection is null || _destination is null) {
             return false;
         }
-        var startPathNode = _pathfinder.PathNodePool[startNode.GridPos];
+        var startPathNode = _pathfinder.PathNodePool[_currentPos];
         if (startPathNode is null) {
             return true;
         }
-
-        var sharedGraph = _slugcat.room.GetCWT().SharedGraph!;
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         int x = headPos.x;
         int y = headPos.y;
@@ -309,7 +317,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     /// <returns>
     /// Null if the slugcat is not located at any node in the graph.
     /// </returns>
-    public GraphNode? CurrentNode() {
+    public IVec2 CurrentPos() {
         var sharedGraph = _slugcat.room.GetCWT().SharedGraph!;
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
@@ -318,28 +326,34 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             || _slugcat.animation == Player.AnimationIndex.BeamTip
             || _slugcat.animation == Player.AnimationIndex.StandUp
         ) {
-            return sharedGraph.GetNode(footPos) is GraphNode node
-                ? node
-                : sharedGraph.GetNode(footPos.x, footPos.y - 1);
+            if (sharedGraph.GetNode(footPos) is not null) {
+                return footPos;
+            } else if (sharedGraph.GetNode(footPos + Consts.IVec2.Down) is not null) {
+                return footPos + Consts.IVec2.Down;
+            }
         } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl
             || _slugcat.bodyMode == Player.BodyModeIndex.CorridorClimb
         ) {
-            return sharedGraph.GetNode(headPos) is GraphNode node
-                ? node
-                : sharedGraph.GetNode(footPos);
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
-            if (sharedGraph.GetNode(headPos) is GraphNode node) {
-                return node;
-            } else if (sharedGraph.GetNode(footPos.x, footPos.y - 1) is GraphNode footNode) {
-                return footNode.Type is NodeType.Slope ? footNode : null;
+            if (sharedGraph.GetNode(headPos) is not null) {
+                return headPos;
+            } else if (sharedGraph.GetNode(footPos) is not null) {
+                return footPos;
             }
+        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
+            if (sharedGraph.GetNode(headPos) is not null) {
+                return headPos;
+            } else if (sharedGraph.GetNode(footPos + Consts.IVec2.Down) is GraphNode footNode) {
+                return footNode.Type is NodeType.Slope ? footNode.GridPos : headPos;
+            }
+        } else if (_slugcat.animation == Player.AnimationIndex.SurfaceSwim) {
+            return new IVec2(headPos.x, _room.defaultWaterLevel);
         }
-        return sharedGraph.GetNode(headPos);
+        return headPos;
     }
 
     private Input Move() {
-        _currentNode = CurrentNode();
-        if (_currentNode is null) {
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        if (!CanMove()) {
             if (_currentConnection?.Type is ConnectionType.Drop) {
                 _performingAirMovement = true;
             } else {
@@ -347,12 +361,14 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 _visualizer?.UpdatePath();
             }
             return default;
-        } else if (_currentNode.GridPos == _destination) {
+        } else if (_currentPos == _destination) {
             _currentConnection = null;
             _destination = null;
             _visualizer?.UpdatePath();
             return default;
-        } else if (_currentNode.HasPlatform && _slugcat.bodyMode == Player.BodyModeIndex.Default) {
+        } else if (sharedGraph.GetNode(_currentPos)?.HasPlatform is true
+            && _slugcat.bodyMode == Player.BodyModeIndex.Default
+        ) {
             _performingAirMovement = true;
             return default;
         } else {
@@ -363,31 +379,18 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     }
 
     private Input MoveInAir() {
-        var node = CurrentNode();
-        if (node is null || node == _currentNode) {
-            if (_currentConnection is null) {
-                _performingAirMovement = false;
-                return Input.DoNothing;
-            } else {
-                return GenerateInAirInputs(_currentConnection!.Value);
-            }
+        if (_currentConnection is null) {
+            _performingAirMovement = false;
+            return Input.DoNothing;
+        } else if (!CanMove() || KeepFalling()) {
+            return GenerateInAirInputs(_currentConnection!.Value);
         } else {
-            var connection = _currentConnection?.FindInPath(node.GridPos);
-            if (connection is not null) {
-                _currentNode = node;
-                _currentConnection = connection;
-                _performingAirMovement = false;
-                return GenerateInputs();
-            } else if (KeepFalling(node)) {
-                return GenerateInAirInputs(_currentConnection!.Value);
-            } else {
-                _performingAirMovement = false;
-                _currentNode = node;
-                _currentConnection = FindPath();
-                _visualizer?.UpdatePath();
-                return GenerateInputs();
-            }
+            _performingAirMovement = false;
+            _currentConnection = FindPath();
+            _visualizer?.UpdatePath();
+            return GenerateInputs();
         }
+
     }
 
     private Input GenerateInAirInputs(PathConnection currentConnection) {
@@ -464,29 +467,27 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     }
 
     private Input GenerateInputs() {
-        if (_currentNode is null) {
+        if (!CanMove()) {
             return Input.DoNothing;
         }
+        var currentNode = _room.GetCWT().SharedGraph!.GetNode(_currentPos);
         if (_currentConnection is null) {
-            if (_currentNode?.HasBeam == true && _slugcat.bodyMode != Player.BodyModeIndex.ClimbingOnBeam) {
+            if (currentNode?.HasBeam == true && _slugcat.bodyMode != Player.BodyModeIndex.ClimbingOnBeam) {
                 return new Input {
                     Direction = Consts.IVec2.Up,
                     Jump = false,
                 };
             } else {
-                return new Input {
-                    Direction = Consts.IVec2.Zero,
-                    Jump = false,
-                };
+                return Input.DoNothing;
             }
         }
         var currentConnection = _currentConnection.Value;
         if (currentConnection.Type is ConnectionType.Walk) {
-            return Walk(currentConnection, _currentNode);
+            return Walk(currentConnection, currentNode!);
         } else if (currentConnection.Type is ConnectionType.Crawl) {
-            return Crawl(currentConnection, _currentNode);
+            return Crawl(currentConnection, currentNode!);
         } else if (currentConnection.Type is ConnectionType.Climb) {
-            return Climb(currentConnection, _currentNode);
+            return Climb(currentConnection, currentNode!);
         } else if (currentConnection.Type is ConnectionType.Drop) {
             return Drop();
         } else if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
@@ -514,6 +515,15 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             return Pounce(pounceDir);
         } else if (currentConnection.Type is ConnectionType.Pounce(int ledgePounceDir)) {
             return Pounce(ledgePounceDir);
+        } else if (currentConnection.Type is ConnectionType.SurfaceSwim(int swimDir)) {
+            bool jump = false;
+            if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                jump = true;
+            }
+            return new Input {
+                Direction = new IVec2(swimDir, 0),
+                Jump = jump,
+            };
         } else {
             Plugin.Logger!.LogWarning($"trying to follow connection of type {currentConnection.Type} but no logic exists to handle it");
             return Input.DoNothing;
@@ -763,9 +773,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private Input Jump(int jumpDir) {
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
-        if (_currentNode is null) {
-            return Input.DoNothing;
-        }
+        var sharedGraph = _room.GetCWT().SharedGraph!;
         if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
             bool jump;
             if (_slugcat.flipDirection == jumpDir) {
@@ -829,12 +837,15 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 return Input.DoNothing;
             }
         } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
-            if (_currentNode.Type is NodeType.Wall(int wallDir)) {
+            var currentNode = sharedGraph.GetNode(_currentPos);
+            if (currentNode is null) {
+                return Input.DoNothing;
+            } else if (currentNode.Type is NodeType.Wall(int wallDir)) {
                 return new Input {
                     Direction = new IVec2(wallDir, 0),
                     Jump = true,
                 };
-            } else if (_currentNode.HasBeam) {
+            } else if (currentNode.HasBeam) {
                 return new Input {
                     Direction = Consts.IVec2.Up,
                     Jump = true,
@@ -843,7 +854,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 return Input.DoNothing;
             }
         } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-            if (footPos.x == _currentNode.GridPos.x - jumpDir) {
+            if (footPos.x == _currentPos.x - jumpDir) {
                 return new Input {
                     Direction = new IVec2(jumpDir, 1),
                     Jump = false,
@@ -1022,7 +1033,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         private Room _room;
         private readonly PathVisualizer _pathVisualizer;
         private readonly DebugSprite _inputDirSprite;
-        private readonly DebugSprite _currentNodeSprite;
+        private readonly DebugSprite _currentPosSprite;
         private int _spriteIndex;
         private readonly DebugSprite[] _predictedIntersectionSprites;
         private readonly FLabel _currentConnectionLabel;
@@ -1035,7 +1046,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), _room);
             _inputDirSprite.sprite.color = Color.red;
             _inputDirSprite.sprite.isVisible = false;
-            _currentNodeSprite = new DebugSprite(
+            _currentPosSprite = new DebugSprite(
                 Vector2.zero,
                 new FSprite("pixel") {
                     scale = 10f,
@@ -1071,7 +1082,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             container.AddChild(_currentConnectionLabel);
             container.AddChild(_jumpBoostLabel);
             _room.AddObject(_inputDirSprite);
-            _room.AddObject(_currentNodeSprite);
+            _room.AddObject(_currentPosSprite);
             foreach (var sprite in _predictedIntersectionSprites) {
                 _room.AddObject(sprite);
             }
@@ -1082,7 +1093,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 _room = room;
                 _pathVisualizer.NewRoom(room);
                 _room.AddObject(_inputDirSprite);
-                _room.AddObject(_currentNodeSprite);
+                _room.AddObject(_currentPosSprite);
                 foreach (var sprite in _predictedIntersectionSprites) {
                     _room.AddObject(sprite);
                 }
@@ -1111,12 +1122,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 labelPos.y += 20;
                 _jumpBoostLabel.SetPosition(labelPos);
 
-                if (_ai._currentNode is not null) {
-                    _currentNodeSprite.sprite.isVisible = true;
-                    _currentNodeSprite.pos = RoomHelper.MiddleOfTile(_ai._currentNode.GridPos);
-                } else {
-                    _currentNodeSprite.sprite.isVisible = false;
-                }
+                _currentPosSprite.pos = RoomHelper.MiddleOfTile(_ai._currentPos);
 
                 if (_ai._slugcat.input[0].x == 0 && _ai._slugcat.input[0].y == 0) {
                     _inputDirSprite.sprite.isVisible = false;
@@ -1141,11 +1147,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
 
         public void UpdatePath() {
-            if (!Active || _ai._currentConnection is null || _ai._currentNode is null) {
+            if (!Active || _ai._currentConnection is null) {
                 _pathVisualizer.ClearPath();
             } else if (_room.GetCWT().DynamicGraphs.TryGetValue(new SlugcatDescriptor(_ai._slugcat), out var graph)) {
                 _pathVisualizer.DisplayPath(
-                    _ai._currentNode.GridPos,
+                    _ai._currentPos,
                     _ai._currentConnection.Value,
                     graph
                 );
@@ -1172,11 +1178,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
         public void Activate() {
             Active = true;
-            if (_ai._currentConnection is null || _ai._currentNode is null) {
+            if (_ai._currentConnection is null) {
                 _pathVisualizer.ClearPath();
             } else if (_room.GetCWT().DynamicGraphs.TryGetValue(new SlugcatDescriptor(_ai._slugcat), out var graph)) {
                 _pathVisualizer.DisplayPath(
-                    _ai._currentNode.GridPos,
+                    _ai._currentPos,
                     _ai._currentConnection.Value,
                     graph
                 );
@@ -1184,7 +1190,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             _jumpBoostLabel.isVisible = true;
             _currentConnectionLabel.isVisible = true;
             _inputDirSprite.sprite.isVisible = true;
-            _currentNodeSprite.sprite.isVisible = true;
+            _currentPosSprite.sprite.isVisible = true;
         }
 
         public void Deactivate() {
@@ -1193,7 +1199,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             _jumpBoostLabel.isVisible = false;
             _currentConnectionLabel.isVisible = false;
             _inputDirSprite.sprite.isVisible = false;
-            _currentNodeSprite.sprite.isVisible = false;
+            _currentPosSprite.sprite.isVisible = false;
             ResetPredictionSprites();
         }
     }

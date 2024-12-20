@@ -32,6 +32,8 @@ public class PathNode {
         Heuristic = 0;
     }
 
+    public PathNode(IVec2 pos) : this(pos.x, pos.y) {}
+
     /// <summary>
     /// Overwrite all values except position.
     /// </summary>
@@ -429,8 +431,14 @@ public readonly struct PathNodePool {
         }
     }
 
-    public readonly PathNode? this[int x, int y] => _array[x, y];
-    public readonly PathNode? this[IVec2 pos] => _array[pos.x, pos.y];
+    public PathNode? this[int x, int y] {
+        get => _array[x, y];
+        set => _array[x, y] = value;
+    }
+    public PathNode? this[IVec2 pos] {
+        get => _array[pos.x, pos.y];
+        set => _array[pos.x, pos.y] = value;
+    }
 }
 
 public interface IDestinationFinder {
@@ -510,11 +518,11 @@ public class Pathfinder {
         bool forceUpdate = false
     ) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
-        if (sharedGraph.GetNode(start) is null) {
+        if (sharedGraph.GetNode(start) is null && start.y > _room.defaultWaterLevel) {
             Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
             return null;
         }
-        if (sharedGraph.GetNode(destination) is null) {
+        if (sharedGraph.GetNode(destination) is null && destination.y > _room.defaultWaterLevel) {
             Plugin.Logger!.LogDebug($"no node at destination ({destination.x}, {destination.y})");
             return null;
         }
@@ -528,7 +536,11 @@ public class Pathfinder {
         if (_lastDestination != destination || forceUpdate) {
             OpenNodes.Reset();
             ClosedNodes.Reset();
-            var destNode = PathNodePool[destination]!;
+            var destNode = PathNodePool[destination];
+            if (destNode is null) {
+                destNode = new PathNode(destination);
+                PathNodePool[destination] = destNode;
+            }
             destNode.Reset(null, 0, 0, 0);
             NodeQueue.Reset();
             NodeQueue.Add(destNode);
@@ -565,12 +577,37 @@ public class Pathfinder {
             OpenNodes[currentPos] = false;
             ClosedNodes[currentPos] = true;
 
-            var graphNode = sharedGraph.Nodes[currentPos.x, currentPos.y]!;
-            var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
-
-            foreach (var connection in graphNode.IncomingConnections.Concat(extension.IncomingConnections)) {
-                CheckConnection(currentNode, connection, useHeuristic: true);
+            if (currentNode.GridPos.y == _room.defaultWaterLevel) {
+                var graphNode = sharedGraph.GetNode(currentPos);
+                var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y];
+                if (extension is not null) {
+                    foreach (var connection in extension.Value.IncomingConnections) {
+                        CheckConnection(currentNode, connection, useHeuristic: true);
+                    }
+                }
+                if (graphNode?.HasVerticalBeam is true) {
+                    var climbUp = graphNode.IncomingConnections.Find(
+                        c => c.Type is ConnectionType.Climb(IVec2 climbDir)
+                        && climbDir == Consts.IVec2.Down
+                    );
+                    if (climbUp is not null) {
+                        CheckConnection(currentNode, climbUp, useHeuristic: true);
+                    }
+                }
+                if (_room.GetTile(currentPos.x + 1, currentPos.y).Terrain != Room.Tile.TerrainType.Solid) {
+                    CheckWaterSurfaceConnection(currentNode, 1);
+                }
+                if (_room.GetTile(currentPos.x - 1, currentPos.y).Terrain != Room.Tile.TerrainType.Solid) {
+                    CheckWaterSurfaceConnection(currentNode, -1);
+                }
+            } else {
+                var graphNode = sharedGraph.GetNode(currentPos)!;
+                var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
+                foreach (var connection in graphNode.IncomingConnections.Concat(extension.IncomingConnections)) {
+                    CheckConnection(currentNode, connection, useHeuristic: true);
+                }
             }
+
         }
         if (Timers.Active) {
             Timers.FindPath.Stop();
@@ -646,6 +683,39 @@ public class Pathfinder {
             return null;
         }
         return _lastDestination is null ? null : (_lastDestination.Value, PathNodePool[start]!.Connection!.Value);
+    }
+
+    private void CheckWaterSurfaceConnection(PathNode currentNode, int direction) {
+        IVec2 neighbourPos = new IVec2(currentNode.GridPos.x + direction, currentNode.GridPos.y);
+        PathNode? currentNeighbour = PathNodePool[neighbourPos];
+        if (currentNeighbour is null) {
+            var node = new PathNode(neighbourPos);
+            PathNodePool[neighbourPos] = node;
+            currentNeighbour = node;
+        }
+        
+        if (ClosedNodes[neighbourPos]) {
+            return;
+        }
+
+        if (!OpenNodes[neighbourPos]) {
+            OpenNodes[neighbourPos] = true;
+            currentNeighbour.Reset(
+                new PathConnection(new ConnectionType.SurfaceSwim(-direction), currentNode),
+                currentNode.PathCost + 1,
+                _threatTracker.ThreatAtTile(neighbourPos),
+                currentNode.GridPos.FloatDist(neighbourPos)
+            );
+            NodeQueue.Add(currentNeighbour);
+        }
+
+        if (currentNode.PathCost + currentNode.Threat + 1
+            < currentNeighbour.PathCost + currentNeighbour.Threat
+        ) {
+            currentNeighbour.PathCost = currentNode.PathCost + 1;
+            currentNeighbour.Connection = new PathConnection(new ConnectionType.SurfaceSwim(-direction), currentNode);
+            NodeQueue.DecreasePriority(currentNeighbour.GridPos);
+        }
     }
 
     private void CheckConnection(PathNode currentNode, NodeConnection connection, bool useHeuristic) {
