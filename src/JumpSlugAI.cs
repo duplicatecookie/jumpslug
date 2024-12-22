@@ -26,7 +26,6 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private IVec2 _currentPos;
     private PathConnection? _currentConnection;
     private bool _performingAirMovement;
-    private float _pathThreat;
     private readonly EscapeFinder _escapeFinder;
     private Visualizer? _visualizer;
     private bool _visualizeNode;
@@ -98,40 +97,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         if (_room is null) {
             return;
         }
-        foreach (var layer in _room.physicalObjects) {
-            foreach (var obj in layer) {
-                if (obj is Creature creature) {
-                    tracker.SeeCreature(creature.abstractCreature);
-                }
-            }
-        }
         if (InputHelper.JustPressedMouseButton(0)) {
             var mousePos = (Vector2)UnityEngine.Input.mousePosition + _room!.game.cameras[0].pos;
             _destination = _room.GetTilePosition(mousePos);
             _currentConnection = FindPath();
             _visualizer?.UpdatePath();
-        }
-
-        float lastThreat = _pathThreat;
-        if (!CanMove() && _currentConnection is PathConnection connection) {
-            _pathThreat = threatTracker.ThreatAlongPath(_currentPos, connection, 15);
-        }
-
-        if (threatTracker.mostThreateningCreature is not null) {
-            if (CanMove()
-                && (_currentConnection is null
-                && threatTracker
-                    .mostThreateningCreature
-                    .representedCreature
-                    .abstractAI
-                    .RealAI
-                    .pathFinder
-                    .CoordinateReachable(_room.ToWorldCoordinate(_currentPos))
-                || _pathThreat > lastThreat + 10
-                )
-            ) {
-                FindEscapePathAndDestination();
-            }
         }
 
         _currentPos = CurrentPos();
