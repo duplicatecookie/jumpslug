@@ -315,7 +315,9 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             } else if (sharedGraph.GetNode(footPos + Consts.IVec2.Down) is GraphNode footNode) {
                 return footNode.Type is NodeType.Slope ? footNode.GridPos : headPos;
             }
-        } else if (_slugcat.animation == Player.AnimationIndex.SurfaceSwim) {
+        } else if (_slugcat.animation == Player.AnimationIndex.SurfaceSwim
+            && _room.GetTile(headPos.x, _room.defaultWaterLevel).Terrain != Room.Tile.TerrainType.Solid
+        ) {
             return new IVec2(headPos.x, _room.defaultWaterLevel);
         }
         return headPos;
