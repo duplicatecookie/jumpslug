@@ -207,7 +207,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
     private bool CanMove() {
         return _room.GetCWT().SharedGraph!.GetNode(_currentPos) is not null
-            || _slugcat.animation == Player.AnimationIndex.SurfaceSwim;
+            || _slugcat.bodyMode == Player.BodyModeIndex.Swimming;
     }
 
     private PathConnection? FindPath(bool forceReset = false) {
@@ -515,13 +515,13 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             return Pounce(pounceDir);
         } else if (currentConnection.Type is ConnectionType.Pounce(int ledgePounceDir)) {
             return Pounce(ledgePounceDir);
-        } else if (currentConnection.Type is ConnectionType.SurfaceSwim(int swimDir)) {
+        } else if (currentConnection.Type is ConnectionType.Swim(IVec2 swimDir)) {
             bool jump = false;
             if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
                 jump = true;
             }
             return new Input {
-                Direction = new IVec2(swimDir, 0),
+                Direction = swimDir,
                 Jump = jump,
             };
         } else {

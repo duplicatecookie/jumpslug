@@ -93,6 +93,7 @@ public record ConnectionType {
     public record Walk(int Direction) : ConnectionType();
     public record Climb(IVec2 Direction) : ConnectionType();
     public record Crawl(IVec2 Direction) : ConnectionType();
+    public record Swim(IVec2 Direction) : ConnectionType();
     public record Jump(int Direction) : ConnectionType();
     public record JumpToLedge(int Direction) : ConnectionType();
     public record JumpUp() : ConnectionType();
@@ -104,7 +105,6 @@ public record ConnectionType {
     public record Shortcut() : ConnectionType();
     public record Drop() : ConnectionType();
     public record SlideOnWall(int Direction) : ConnectionType();
-    public record SurfaceSwim(int Direction) : ConnectionType();
 
     private ConnectionType() { }
 
@@ -123,7 +123,7 @@ public record ConnectionType {
         Climb => Color.magenta,
         Walk => Color.white,
         SlideOnWall => Color.yellow,
-        SurfaceSwim => new Color(0f, 0.75f, 0.6f), // teal
+        Swim => new Color(0f, 0.75f, 0.6f), // teal
         _ => Color.black,
     };
 
@@ -131,6 +131,7 @@ public record ConnectionType {
         return this switch {
             Climb(IVec2 dir) => $"Climb({dir.x}, {dir.y})",
             Crawl(IVec2 dir) => $"Crawl({dir.x}, {dir.y})",
+            Swim(IVec2 dir) => $"Swim({dir.x}, {dir.y})",
             Drop => "Drop",
             Jump(int dir) => $"Jump({dir})",
             JumpUp => "JumpUp",
@@ -143,7 +144,6 @@ public record ConnectionType {
             JumpUpToLedge(int dir) => $"JumpUpToLedge({dir})",
             PounceOntoLedge(int dir) => $"PounceOntoLedge({dir})",
             WalkOffEdgeOntoLedge(int dir) => $"WalkOffEdgeOntoLedge({dir})",
-            SurfaceSwim(int dir) => $"SurfaceSwim({dir})",
             _ => "Unknown",
         };
     }

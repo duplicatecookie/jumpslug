@@ -32,7 +32,7 @@ public class PathNode {
         Heuristic = 0;
     }
 
-    public PathNode(IVec2 pos) : this(pos.x, pos.y) {}
+    public PathNode(IVec2 pos) : this(pos.x, pos.y) { }
 
     /// <summary>
     /// Overwrite all values except position.
@@ -447,6 +447,19 @@ public interface IDestinationFinder {
 }
 
 public class Pathfinder {
+    public static readonly IVec2[] LowerFiveDirections = {
+        new IVec2(-1, 0),
+        new IVec2(-1, -1),
+        new IVec2(0, -1),
+        new IVec2(1,-1),
+        new IVec2(1, 0),
+    };
+
+    public static readonly IVec2[] UpperThreeDirections = {
+        new IVec2(-1, 1),
+        new IVec2(0, 1),
+        new IVec2(1, 1),
+    };
     private Room _room;
     private IVec2? _lastDestination;
     public DynamicGraph DynamicGraph;
@@ -577,7 +590,12 @@ public class Pathfinder {
             OpenNodes[currentPos] = false;
             ClosedNodes[currentPos] = true;
 
-            if (currentNode.GridPos.y == _room.defaultWaterLevel) {
+            if (currentPos.y == _room.defaultWaterLevel) {
+                foreach (var dir in LowerFiveDirections) {
+                    if (_room.GetTile(currentPos + dir).Terrain != Room.Tile.TerrainType.Solid) {
+                        CheckWaterSurfaceConnection(currentNode, dir);
+                    }
+                }
                 var graphNode = sharedGraph.GetNode(currentPos);
                 var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y];
                 if (extension is not null) {
@@ -594,11 +612,17 @@ public class Pathfinder {
                         CheckConnection(currentNode, climbUp, useHeuristic: true);
                     }
                 }
-                if (_room.GetTile(currentPos.x + 1, currentPos.y).Terrain != Room.Tile.TerrainType.Solid) {
-                    CheckWaterSurfaceConnection(currentNode, 1);
+            } else if (currentPos.y < _room.defaultWaterLevel) {
+                var graphNode = sharedGraph.GetNode(currentPos);
+                if (graphNode?.Type is NodeType.Corridor) {
+                    foreach (var connection in graphNode.IncomingConnections) {
+                        CheckConnection(currentNode, connection, useHeuristic: true);
+                    }
                 }
-                if (_room.GetTile(currentPos.x - 1, currentPos.y).Terrain != Room.Tile.TerrainType.Solid) {
-                    CheckWaterSurfaceConnection(currentNode, -1);
+                foreach (var dir in Custom.eightDirections) {
+                    if (_room.GetTile(currentPos + dir).Terrain != Room.Tile.TerrainType.Solid) {
+                        CheckWaterSurfaceConnection(currentNode, dir);
+                    }
                 }
             } else {
                 var graphNode = sharedGraph.GetNode(currentPos)!;
@@ -685,15 +709,15 @@ public class Pathfinder {
         return _lastDestination is null ? null : (_lastDestination.Value, PathNodePool[start]!.Connection!.Value);
     }
 
-    private void CheckWaterSurfaceConnection(PathNode currentNode, int direction) {
-        IVec2 neighbourPos = new IVec2(currentNode.GridPos.x + direction, currentNode.GridPos.y);
+    private void CheckWaterSurfaceConnection(PathNode currentNode, IVec2 direction) {
+        IVec2 neighbourPos = currentNode.GridPos + direction;
         PathNode? currentNeighbour = PathNodePool[neighbourPos];
         if (currentNeighbour is null) {
             var node = new PathNode(neighbourPos);
             PathNodePool[neighbourPos] = node;
             currentNeighbour = node;
         }
-        
+
         if (ClosedNodes[neighbourPos]) {
             return;
         }
@@ -701,7 +725,7 @@ public class Pathfinder {
         if (!OpenNodes[neighbourPos]) {
             OpenNodes[neighbourPos] = true;
             currentNeighbour.Reset(
-                new PathConnection(new ConnectionType.SurfaceSwim(-direction), currentNode),
+                new PathConnection(new ConnectionType.Swim(direction.Inverse()), currentNode),
                 currentNode.PathCost + 1,
                 _threatTracker.ThreatAtTile(neighbourPos),
                 currentNode.GridPos.FloatDist(neighbourPos)
@@ -713,7 +737,7 @@ public class Pathfinder {
             < currentNeighbour.PathCost + currentNeighbour.Threat
         ) {
             currentNeighbour.PathCost = currentNode.PathCost + 1;
-            currentNeighbour.Connection = new PathConnection(new ConnectionType.SurfaceSwim(-direction), currentNode);
+            currentNeighbour.Connection = new PathConnection(new ConnectionType.Swim(direction.Inverse()), currentNode);
             NodeQueue.DecreasePriority(currentNeighbour.GridPos);
         }
     }

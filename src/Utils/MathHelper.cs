@@ -8,6 +8,10 @@ static class IVec2Extension {
     public static int Dot(this IVec2 self, IVec2 other) {
         return self.x * other.x + self.y * other.y;
     }
+    
+    public static IVec2 Inverse(this IVec2 self) {
+        return new IVec2(-self.x, -self.y);
+    }
 
     public static Vector2 ToVector2(this IVec2 self) {
         return new Vector2(self.x, self.y);
