@@ -45,7 +45,12 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             dynGraph = new DynamicGraph(_room, descriptor.ToJumpVectors());
             graphs.Add(descriptor, dynGraph);
         }
-        _pathfinder = new Pathfinder(_room!, dynGraph, threatTracker);
+        _pathfinder = new Pathfinder(
+            _room!,
+            dynGraph,
+            threatTracker,
+            Pathfinder.FindDivingLimit(3f, _slugcat.slugcatStats.lungsFac, 0.5f)
+        );
         _nodeVisualizer = new NodeVisualizer(_room!, _pathfinder.DynamicGraph);
         _escapeFinder = new EscapeFinder();
     }

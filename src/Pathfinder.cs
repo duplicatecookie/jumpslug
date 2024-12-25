@@ -22,6 +22,7 @@ public class PathNode {
     public float Heuristic;
     public float FCost => PathCost + Heuristic;
     public float Threat;
+    public int DiveLength;
 
     /// <summary>
     /// Create new node at specified grid position.
@@ -30,6 +31,7 @@ public class PathNode {
         GridPos = new IVec2(x, y);
         PathCost = 0;
         Heuristic = 0;
+        DiveLength = 0;
     }
 
     public PathNode(IVec2 pos) : this(pos.x, pos.y) { }
@@ -46,11 +48,12 @@ public class PathNode {
     /// <param name="cost">
     /// the new path cost to assign to the node.
     /// </param>
-    public void Reset(PathConnection? connection, float cost, float threat, float heuristic) {
+    public void Reset(PathConnection? connection, float cost, float threat, float heuristic, int diveLength) {
         PathCost = cost;
         Connection = connection;
         Heuristic = heuristic;
         Threat = threat;
+        DiveLength = diveLength;
     }
 }
 
@@ -447,19 +450,13 @@ public interface IDestinationFinder {
 }
 
 public class Pathfinder {
-    public static readonly IVec2[] LowerFiveDirections = {
-        new IVec2(-1, 0),
+    public const float BASE_BREATH_USE = 1f / (40f * 9f * 1.28f);
+    public static readonly IVec2[] LowerThreeDirections = {
         new IVec2(-1, -1),
         new IVec2(0, -1),
         new IVec2(1,-1),
-        new IVec2(1, 0),
     };
-
-    public static readonly IVec2[] UpperThreeDirections = {
-        new IVec2(-1, 1),
-        new IVec2(0, 1),
-        new IVec2(1, 1),
-    };
+    public int DivingLimit;
     private Room _room;
     private IVec2? _lastDestination;
     public DynamicGraph DynamicGraph;
@@ -478,9 +475,10 @@ public class Pathfinder {
     /// <param name="descriptor">
     /// relevant information about the slugcat using this pathfinder.
     /// </param>
-    public Pathfinder(Room room, DynamicGraph dynGraph, ThreatTracker threatTracker) {
+    public Pathfinder(Room room, DynamicGraph dynGraph, ThreatTracker threatTracker, int divingLimit) {
         _room = room;
         _lastDestination = null;
+        DivingLimit = divingLimit;
         DynamicGraph = dynGraph;
         var sharedGraph = _room.GetCWT().SharedGraph!;
         PathNodePool = new PathNodePool(sharedGraph);
@@ -507,6 +505,10 @@ public class Pathfinder {
             ClosedNodes = new BitGrid(width, height);
             NodeQueue = new PathNodeQueue(PathNodePool.NonNullCount, width, height);
         }
+    }
+
+    public static int FindDivingLimit(float averageSpeed, float lungsFac, float airInLungCutoff) {
+        return Mathf.CeilToInt(averageSpeed * airInLungCutoff / (BASE_BREATH_USE * lungsFac) / 20f);
     }
 
     /// <summary>
@@ -554,7 +556,7 @@ public class Pathfinder {
                 destNode = new PathNode(destination);
                 PathNodePool[destination] = destNode;
             }
-            destNode.Reset(null, 0, 0, 0);
+            destNode.Reset(null, 0f, 0f, 0f, 0);
             NodeQueue.Reset();
             NodeQueue.Add(destNode);
             OpenNodes[destination] = true;
@@ -589,18 +591,28 @@ public class Pathfinder {
             NodeQueue.RemoveRoot();
             OpenNodes[currentPos] = false;
             ClosedNodes[currentPos] = true;
-
+            if (currentNode.DiveLength > DivingLimit) {
+                continue;
+            }
             if (currentPos.y == _room.defaultWaterLevel) {
-                foreach (var dir in LowerFiveDirections) {
-                    if (_room.GetTile(currentPos + dir).Terrain != Room.Tile.TerrainType.Solid) {
-                        CheckWaterSurfaceConnection(currentNode, dir);
+                var dir = Consts.IVec2.Left;
+                if (_room.GetTile(dir).Terrain != Room.Tile.TerrainType.Solid) {
+                    CheckWaterSurfaceConnection(currentNode, dir, false);
+                }
+                dir = Consts.IVec2.Right;
+                if (_room.GetTile(dir).Terrain != Room.Tile.TerrainType.Solid) {
+                    CheckWaterSurfaceConnection(currentNode, dir, false);
+                }
+                foreach (var diveDir in LowerThreeDirections) {
+                    if (_room.GetTile(diveDir).Terrain != Room.Tile.TerrainType.Solid) {
+                        CheckWaterSurfaceConnection(currentNode, diveDir, false);
                     }
                 }
                 var graphNode = sharedGraph.GetNode(currentPos);
                 var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y];
                 if (extension is not null) {
                     foreach (var connection in extension.Value.IncomingConnections) {
-                        CheckConnection(currentNode, connection, useHeuristic: true);
+                        CheckConnection(currentNode, connection, useHeuristic: true, underwater: false);
                     }
                 }
                 if (graphNode?.HasVerticalBeam is true) {
@@ -609,26 +621,27 @@ public class Pathfinder {
                         && climbDir == Consts.IVec2.Down
                     );
                     if (climbUp is not null) {
-                        CheckConnection(currentNode, climbUp, useHeuristic: true);
+                        CheckConnection(currentNode, climbUp, useHeuristic: true, underwater: false);
                     }
                 }
             } else if (currentPos.y < _room.defaultWaterLevel) {
                 var graphNode = sharedGraph.GetNode(currentPos);
                 if (graphNode?.Type is NodeType.Corridor) {
                     foreach (var connection in graphNode.IncomingConnections) {
-                        CheckConnection(currentNode, connection, useHeuristic: true);
+                        CheckConnection(currentNode, connection, useHeuristic: true, underwater: true);
                     }
-                }
-                foreach (var dir in Custom.eightDirections) {
-                    if (_room.GetTile(currentPos + dir).Terrain != Room.Tile.TerrainType.Solid) {
-                        CheckWaterSurfaceConnection(currentNode, dir);
+                } else {
+                    foreach (var dir in Custom.eightDirections) {
+                        if (_room.GetTile(currentPos + dir).Terrain != Room.Tile.TerrainType.Solid) {
+                            CheckWaterSurfaceConnection(currentNode, dir, true);
+                        }
                     }
                 }
             } else {
                 var graphNode = sharedGraph.GetNode(currentPos)!;
                 var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
                 foreach (var connection in graphNode.IncomingConnections.Concat(extension.IncomingConnections)) {
-                    CheckConnection(currentNode, connection, useHeuristic: true);
+                    CheckConnection(currentNode, connection, useHeuristic: true, underwater: false);
                 }
             }
 
@@ -654,7 +667,7 @@ public class Pathfinder {
         OpenNodes.Reset();
         ClosedNodes.Reset();
         var startNode = PathNodePool[start]!;
-        startNode.Reset(null, 0, 0, 0);
+        startNode.Reset(null, 0f, 0f, 0f, 0);
         NodeQueue.Reset();
         NodeQueue.Add(startNode);
         OpenNodes[start] = true;
@@ -692,7 +705,7 @@ public class Pathfinder {
             var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
 
             foreach (var connection in graphNode.OutgoingConnections.Concat(extension.OutgoingConnections)) {
-                CheckConnection(currentNode, connection, useHeuristic: false);
+                CheckConnection(currentNode, connection, useHeuristic: false, underwater: false);
             }
         }
         if (Timers.Active) {
@@ -709,7 +722,7 @@ public class Pathfinder {
         return _lastDestination is null ? null : (_lastDestination.Value, PathNodePool[start]!.Connection!.Value);
     }
 
-    private void CheckWaterSurfaceConnection(PathNode currentNode, IVec2 direction) {
+    private void CheckWaterSurfaceConnection(PathNode currentNode, IVec2 direction, bool underwater) {
         IVec2 neighbourPos = currentNode.GridPos + direction;
         PathNode? currentNeighbour = PathNodePool[neighbourPos];
         if (currentNeighbour is null) {
@@ -728,7 +741,8 @@ public class Pathfinder {
                 new PathConnection(new ConnectionType.Swim(direction.Inverse()), currentNode),
                 currentNode.PathCost + 1,
                 _threatTracker.ThreatAtTile(neighbourPos),
-                currentNode.GridPos.FloatDist(neighbourPos)
+                currentNode.GridPos.FloatDist(neighbourPos),
+                underwater ? currentNode.DiveLength + 1 : 0
             );
             NodeQueue.Add(currentNeighbour);
         }
@@ -742,7 +756,7 @@ public class Pathfinder {
         }
     }
 
-    private void CheckConnection(PathNode currentNode, NodeConnection connection, bool useHeuristic) {
+    private void CheckConnection(PathNode currentNode, NodeConnection connection, bool useHeuristic, bool underwater) {
         IVec2 neighbourPos = connection.Next.GridPos;
         PathNode currentNeighbour = PathNodePool[neighbourPos]!;
         if (ClosedNodes[neighbourPos]) {
@@ -755,7 +769,8 @@ public class Pathfinder {
                 new PathConnection(connection.Type, currentNode),
                 currentNode.PathCost + connection.Weight,
                 _threatTracker.ThreatAtTile(neighbourPos),
-                useHeuristic ? currentNode.GridPos.FloatDist(neighbourPos) : 0
+                useHeuristic ? currentNode.GridPos.FloatDist(neighbourPos) : 0,
+                underwater ? currentNode.DiveLength + 1 : 0
             );
             NodeQueue.Add(currentNeighbour);
         }
