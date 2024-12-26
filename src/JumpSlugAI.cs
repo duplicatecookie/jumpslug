@@ -98,8 +98,14 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     }
 
     public override void Update() {
+        if (Timers.Active) {
+            Timers.JumpSlugAI_Update.Start();
+        }
         base.Update();
         if (_room is null) {
+            if (Timers.Active) {
+                Timers.JumpSlugAI_Update.Stop();
+            }
             return;
         }
         if (InputHelper.JustPressedMouseButton(0)) {
@@ -123,6 +129,9 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
 
         UpdateVisualization();
+        if (Timers.Active) {
+            Timers.JumpSlugAI_Update.Stop();
+        }
     }
 
     private void UpdateVisualization() {

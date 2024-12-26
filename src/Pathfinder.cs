@@ -544,11 +544,11 @@ public class Pathfinder {
         if (start == destination) {
             return null;
         }
-        if (Timers.Active) {
-            Timers.FindPath.Start();
-        }
 
         if (_lastDestination != destination || forceUpdate) {
+            if (Timers.Active) {
+                Timers.FindPathTo_Setup.Start();
+            }
             OpenNodes.Reset();
             ClosedNodes.Reset();
             var destNode = PathNodePool[destination];
@@ -571,6 +571,9 @@ public class Pathfinder {
                     }
                 }
             }
+            if (Timers.Active) {
+                Timers.FindPathTo_Setup.Stop();
+            }
         } else {
             if (ClosedNodes[start]) {
                 return PathNodePool[start]!.Connection;
@@ -579,12 +582,18 @@ public class Pathfinder {
             }
         }
 
+        if (Timers.Active) {
+            Timers.FindPathTo_MainLoop_Individual.Watch.Start();
+            Timers.FindPathTo_MainLoop_Total.Start();
+        }
+
         while (NodeQueue.Count > 0) {
             PathNode currentNode = NodeQueue.Root!;
             var currentPos = currentNode.GridPos;
             if (currentPos == start) {
                 if (Timers.Active) {
-                    Timers.FindPath.Stop();
+                    Timers.FindPathTo_MainLoop_Individual.Stop();
+                    Timers.FindPathTo_MainLoop_Total.Stop();
                 }
                 return PathNodePool[start]!.Connection;
             }
@@ -644,10 +653,13 @@ public class Pathfinder {
                     CheckConnection(currentNode, connection, useHeuristic: true, underwater: false);
                 }
             }
-
+            if (Timers.Active) {
+                Timers.FindPathTo_MainLoop_Individual.Invocations += 1;
+            }
         }
         if (Timers.Active) {
-            Timers.FindPath.Stop();
+            Timers.FindPathTo_MainLoop_Individual.Stop();
+            Timers.FindPathTo_MainLoop_Total.Stop();
         }
         return null;
     }
@@ -662,7 +674,7 @@ public class Pathfinder {
             return null;
         }
         if (Timers.Active) {
-            Timers.FindPath.Start();
+            Timers.FindPathFrom_Setup.Start();
         }
         OpenNodes.Reset();
         ClosedNodes.Reset();
@@ -682,13 +694,22 @@ public class Pathfinder {
                 }
             }
         }
+        if (Timers.Active) {
+            Timers.FindPathFrom_Setup.Stop();
+        }
+
+        if (Timers.Active) {
+            Timers.FindPathFrom_MainLoop_Individual.Watch.Start();
+            Timers.FindPathFrom_MainLoop_Total.Start();
+        }
 
         while (NodeQueue.Count > 0) {
             var currentNode = NodeQueue.Root!;
             var currentPos = currentNode.GridPos;
             if (finder.StopSearching(currentNode)) {
                 if (Timers.Active) {
-                    Timers.FindPath.Stop();
+                    Timers.FindPathFrom_MainLoop_Individual.Stop();
+                    Timers.FindPathFrom_MainLoop_Total.Stop();
                 }
                 _lastDestination = finder.Destination();
                 if (_lastDestination is null || _lastDestination.Value == start) {
@@ -707,9 +728,14 @@ public class Pathfinder {
             foreach (var connection in graphNode.OutgoingConnections.Concat(extension.OutgoingConnections)) {
                 CheckConnection(currentNode, connection, useHeuristic: false, underwater: false);
             }
+
+            if (Timers.Active) {
+                Timers.FindPathTo_MainLoop_Individual.Invocations += 1;
+            }
         }
         if (Timers.Active) {
-            Timers.FindPath.Stop();
+            Timers.FindPathFrom_MainLoop_Individual.Stop();
+            Timers.FindPathFrom_MainLoop_Total.Stop();
         }
         _lastDestination = finder.Destination();
         if (PathNodePool[start] is null) {

@@ -10,7 +10,7 @@ class FunctionTimer {
     public Stopwatch Watch;
     public int Invocations;
     public FunctionTimer(string name) {
-        this.Name = name;
+        Name = name;
         Watch = new Stopwatch();
         Invocations = 0;
     }
@@ -24,7 +24,7 @@ class FunctionTimer {
     }
 
     public void Report() {
-        double totalSeconds = ((double)Watch.ElapsedTicks / (double)Stopwatch.Frequency);
+        double totalSeconds = (double)Watch.ElapsedTicks / (double)Stopwatch.Frequency;
         Plugin.Logger!.LogInfo(
             String.Format(
                 "name: {0}, invocations: {1}, ticks: {2} total time: {3} ms, average time: {4} μs",
@@ -32,7 +32,7 @@ class FunctionTimer {
                 Invocations,
                 Watch.ElapsedTicks,
                 Math.Round(totalSeconds * 1000.0),
-                Math.Round((totalSeconds * 1000_000.0) / (double)Invocations)
+                Math.Round(totalSeconds * 1000_000.0 / (double)Invocations)
             )
         );
     }
@@ -40,8 +40,14 @@ class FunctionTimer {
 
 static class Timers {
     public static bool Active = false;
-    public static FunctionTimer FindPath = new FunctionTimer("Pathfinder.FindPath");
+    public static FunctionTimer FindPathTo_MainLoop_Individual = new FunctionTimer("Pathfinder.FindPathTo_MainLoop_Individual");
+    public static FunctionTimer FindPathFrom_MainLoop_Individual = new FunctionTimer("Pathfinder.FindPathFrom_MainLoop_Individual");
+    public static FunctionTimer FindPathTo_MainLoop_Total = new FunctionTimer("Pathfinder.FindPathTo_MainLoop_Total");
+    public static FunctionTimer FindPathFrom_MainLoop_Total = new FunctionTimer("Pathfinder.FindPathFrom_MainLoop_Total");
+    public static FunctionTimer FindPathTo_Setup = new FunctionTimer("Pathfinder.FindPathTo_Setup");
+    public static FunctionTimer FindPathFrom_Setup = new FunctionTimer("Pathfinder.FindPathFrom_Setup");
     public static FunctionTimer TraceFromNode = new FunctionTimer("DynamicGraph.TraceFromNode");
+    public static FunctionTimer JumpSlugAI_Update = new FunctionTimer("JumpSlugAI.Update");
 }
 
 static class TimerHooks {
@@ -55,8 +61,14 @@ static class TimerHooks {
 
     private static void Player_Update(On.Player.orig_Update orig, Player self, bool eu) {
         if (InputHelper.JustPressed(KeyCode.R) && Timers.Active) {
-            Timers.FindPath.Report();
+            Timers.FindPathTo_MainLoop_Individual.Report();
+            Timers.FindPathFrom_MainLoop_Individual.Report();
+            Timers.FindPathTo_MainLoop_Total.Report();
+            Timers.FindPathFrom_MainLoop_Total.Report();
+            Timers.FindPathTo_Setup.Report();
+            Timers.FindPathFrom_Setup.Report();
             Timers.TraceFromNode.Report();
+            Timers.JumpSlugAI_Update.Report();
         }
         orig(self, eu);
     }
