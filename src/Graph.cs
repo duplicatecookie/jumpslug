@@ -482,12 +482,8 @@ public class SharedGraph {
 }
 
 public struct NodeExtension {
-    public NodeExtension() {
-        IncomingConnections = new();
-        OutgoingConnections = new();
-    }
-    public List<NodeConnection> IncomingConnections;
-    public List<NodeConnection> OutgoingConnections;
+    public List<NodeConnection>? IncomingConnections;
+    public List<NodeConnection>? OutgoingConnections;
 }
 
 /// <summary>
@@ -497,7 +493,7 @@ public class DynamicGraph {
     private readonly Room _room;
     public JumpVectors Vectors { get; private set; }
 
-    public NodeExtension?[,] Extensions;
+    public NodeExtension[,] Extensions;
     public int Width { get; private set; }
     public int Height { get; private set; }
 
@@ -510,25 +506,10 @@ public class DynamicGraph {
         var sharedGraph = room.GetCWT().SharedGraph!;
         Width = sharedGraph.Width;
         Height = sharedGraph.Height;
-        Extensions = new NodeExtension?[Width, Height];
-        ResetLists();
-    }
-
-    private void ResetLists() {
-        var sharedGraph = _room.GetCWT().SharedGraph!;
+        Extensions = new NodeExtension[Width, Height];
         for (int y = 0; y < Height; y++) {
             for (int x = 0; x < Width; x++) {
                 if (sharedGraph.Nodes[x, y] is not null) {
-                    Extensions[x, y] = new NodeExtension {
-                        IncomingConnections = new(),
-                        OutgoingConnections = new()
-                    };
-                }
-            }
-        }
-        for (int y = 0; y < Height; y++) {
-            for (int x = 0; x < Width; x++) {
-                if (Extensions[x, y] is not null) {
                     TraceFromNode(new IVec2(x, y));
                 }
             }
@@ -537,11 +518,17 @@ public class DynamicGraph {
 
     public void Reset(JumpVectors vectors) {
         Vectors = vectors;
+        var sharedGraph = _room.GetCWT().SharedGraph!;
         for (int y = 0; y < Height; y++) {
             for (int x = 0; x < Width; x++) {
-                if (Extensions[x, y] is NodeExtension ext) {
+                var ext = Extensions[x, y];
+                if (ext.IncomingConnections is not null) {
                     ext.IncomingConnections.Clear();
+                }
+                if (ext.OutgoingConnections is not null) {
                     ext.OutgoingConnections.Clear();
+                }
+                if (sharedGraph.Nodes[x, y] is not null) {
                     TraceFromNode(new IVec2(x, y));
                 }
             }
@@ -831,8 +818,7 @@ public class DynamicGraph {
                     break;
                 }
                 var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
-                var extension = Extensions[x, upright ? y - 1 : y];
-                if (extension is not null && currentNode?.Type is NodeType.Floor or NodeType.Slope) {
+                if (currentNode?.Type is NodeType.Floor or NodeType.Slope) {
                     ConnectNodes(startNode, currentNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost);
                 }
                 if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
@@ -864,7 +850,7 @@ public class DynamicGraph {
             }
 
             var shiftedNode = sharedGraph.Nodes[x, y];
-            if (shiftedNode is null || Extensions[x, y] is null) {
+            if (shiftedNode is null) {
                 continue;
             }
             if (shiftedNode.Type is NodeType.Corridor) {
@@ -979,16 +965,19 @@ public class DynamicGraph {
         if (startNode is null || endNode is null) {
             return;
         }
-        var startExt = Extensions[startNode.GridPos.x, startNode.GridPos.y]!.Value;
-        var endExt = Extensions[endNode.GridPos.x, endNode.GridPos.y]!.Value;
+        ref var startExt = ref Extensions[startNode.GridPos.x, startNode.GridPos.y];
+        ref var endExt = ref Extensions[endNode.GridPos.x, endNode.GridPos.y];
+
+        startExt.OutgoingConnections ??= new(1);
+        endExt.IncomingConnections ??= new(1);
+
         startExt.OutgoingConnections.Add(new NodeConnection(type, endNode, weight));
         endExt.IncomingConnections.Add(new NodeConnection(type, startNode, weight));
     }
 
     private void AddIncomingConnection(int x, int y, ConnectionType type, GraphNode next, float weight) {
-        if (Extensions[x, y] is null) {
-            Extensions[x, y] = new NodeExtension();
-        }
-        Extensions[x, y]!.Value.IncomingConnections.Add(new NodeConnection(type, next, weight));
+        ref var ext = ref Extensions[x, y];
+        ext.IncomingConnections ??= new(1);
+        ext.IncomingConnections.Add(new NodeConnection(type, next, weight));
     }
 }

@@ -137,10 +137,11 @@ class NodeVisualizer {
         foreach (var connection in node.IncomingConnections) {
             AddConnection(node.GridPos, connection);
         }
-        var extension = _dynamicGraph.Extensions[node.GridPos.x, node.GridPos.y]!.Value;
-        foreach (var connection in extension.IncomingConnections) {
+        var extension = _dynamicGraph.Extensions[node.GridPos.x, node.GridPos.y];
+        foreach (var connection in extension.IncomingConnections!) {
             AddConnection(node.GridPos, connection);
         }
+        
         for (int i = _connectionIndex; i < _connectionSprites.Count; i++) {
             _connectionSprites[i].sprite.isVisible = false;
         }
@@ -324,11 +325,11 @@ class PathVisualizer {
 
     private void AddLabel(ConnectionType connectionType, IVec2 startTile, IVec2 endTile, Vector2 v0) {
         NodeConnection? nodeConnection = null;
-        var maybeExt = _pathfinder.DynamicGraph.Extensions[startTile.x, startTile.y];
-        if (maybeExt is null) {
+        var ext = _pathfinder.DynamicGraph.Extensions[startTile.x, startTile.y];
+        if (ext.IncomingConnections is null) {
             return;
         }
-        foreach (var connection in maybeExt.Value.IncomingConnections) {
+        foreach (var connection in ext.IncomingConnections) {
             if (connection.Type == connectionType && connection.Next.GridPos == endTile) {
                 nodeConnection = connection;
                 break;
@@ -743,7 +744,7 @@ public class DebugPathfinder {
             _nodeSprites[currentPos.x, currentPos.y]!.sprite.scale = 5f;
 
             var graphNode = _room.GetCWT().SharedGraph!.Nodes[currentPos.x, currentPos.y]!;
-            var extension = _dynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
+            var extension = _dynamicGraph.Extensions[currentPos.x, currentPos.y];
 
             foreach (var connection in graphNode.IncomingConnections.Concat(extension.IncomingConnections)) {
                 CheckConnection(connection, currentNode);
@@ -777,10 +778,10 @@ public class DebugPathfinder {
             _nodeSprites[currentPos.x, currentPos.y]!.sprite.scale = 5f;
 
             var graphNode = _room.GetCWT().SharedGraph!.Nodes[currentPos.x, currentPos.y]!;
-            var extension = _dynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
+            var extension = _dynamicGraph.Extensions[currentPos.x, currentPos.y];
 
-            Plugin.Logger!.LogDebug($"outgoing connections: {graphNode.OutgoingConnections.Count + extension.OutgoingConnections.Count}");
-            foreach (var connection in graphNode.OutgoingConnections.Concat(extension.OutgoingConnections)) {
+            Plugin.Logger!.LogDebug($"outgoing connections: {graphNode.OutgoingConnections.Count + extension.OutgoingConnections!.Count}");
+            foreach (var connection in graphNode.OutgoingConnections.Concat(extension.OutgoingConnections!)) {
                 CheckConnection(connection, currentNode);
             }
             IsFinished = false;
@@ -868,9 +869,6 @@ public class DebugPathfinder {
             ? null
             : new PathConnection(cursor.PreviousType, cursor.PreviousNode!);
         cursor.PreviousType = cursor.CurrentType;
-        var pos = cursor.CurrentNode.GridPos;
-        var graphNode = sharedGraph.Nodes[pos.x, pos.y]!;
-        var extension = _dynamicGraph.Extensions[pos.x, pos.y]!.Value;
         cursor.PreviousNode = cursor.CurrentNode;
         cursor.CurrentNode = cursor.NextNode;
     }

@@ -617,8 +617,8 @@ public class Pathfinder {
                 }
                 var graphNode = sharedGraph.GetNode(currentPos);
                 var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y];
-                if (extension is not null) {
-                    foreach (var connection in extension.Value.IncomingConnections) {
+                if (extension.IncomingConnections is not null) {
+                    foreach (var connection in extension.IncomingConnections) {
                         CheckConnection(currentNode, connection, useHeuristic: true, underwater: false);
                     }
                 }
@@ -646,9 +646,14 @@ public class Pathfinder {
                 }
             } else {
                 var graphNode = sharedGraph.GetNode(currentPos)!;
-                var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
-                foreach (var connection in graphNode.IncomingConnections.Concat(extension.IncomingConnections)) {
+                var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y];
+                foreach (var connection in graphNode.IncomingConnections) {
                     CheckConnection(currentNode, connection, useHeuristic: true, underwater: false);
+                }
+                if (extension.IncomingConnections is not null) {
+                    foreach (var connection in extension.IncomingConnections) {
+                        CheckConnection(currentNode, connection, useHeuristic: true, underwater: false);
+                    }
                 }
             }
             if (Timers.Active) {
@@ -720,10 +725,15 @@ public class Pathfinder {
             ClosedNodes[currentPos] = true;
 
             var graphNode = sharedGraph.Nodes[currentPos.x, currentPos.y]!;
-            var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y]!.Value;
+            var extension = DynamicGraph.Extensions[currentPos.x, currentPos.y];
 
-            foreach (var connection in graphNode.OutgoingConnections.Concat(extension.OutgoingConnections)) {
-                CheckConnection(currentNode, connection, useHeuristic: false, underwater: false);
+            foreach (var connection in graphNode.OutgoingConnections) {
+                CheckConnection(currentNode, connection, useHeuristic: true, underwater: false);
+            }
+            if (extension.OutgoingConnections is not null) {
+                foreach (var connection in extension.OutgoingConnections) {
+                    CheckConnection(currentNode, connection, useHeuristic: true, underwater: false);
+                }
             }
 
             if (Timers.Active) {
