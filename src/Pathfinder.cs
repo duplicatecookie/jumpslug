@@ -534,11 +534,9 @@ public class Pathfinder {
     ) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
         if (sharedGraph.GetNode(start) is null && start.y > _room.defaultWaterLevel) {
-            Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
             return null;
         }
         if (sharedGraph.GetNode(destination) is null && destination.y > _room.defaultWaterLevel) {
-            Plugin.Logger!.LogDebug($"no node at destination ({destination.x}, {destination.y})");
             return null;
         }
         if (start == destination) {
@@ -670,7 +668,6 @@ public class Pathfinder {
     ) {
         var sharedGraph = _room.GetCWT().SharedGraph!;
         if (sharedGraph.GetNode(start) is null) {
-            Plugin.Logger!.LogDebug($"no node at start ({start.x}, {start.y})");
             return null;
         }
         if (Timers.Active) {
