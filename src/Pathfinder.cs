@@ -603,15 +603,15 @@ public class Pathfinder {
             }
             if (currentPos.y == _room.defaultWaterLevel) {
                 var dir = Consts.IVec2.Left;
-                if (_room.GetTile(dir).Terrain != Room.Tile.TerrainType.Solid) {
+                if (_room.GetTile(currentPos + dir).Terrain != Room.Tile.TerrainType.Solid) {
                     CheckWaterSurfaceConnection(currentNode, dir, false);
                 }
                 dir = Consts.IVec2.Right;
-                if (_room.GetTile(dir).Terrain != Room.Tile.TerrainType.Solid) {
+                if (_room.GetTile(currentPos + dir).Terrain != Room.Tile.TerrainType.Solid) {
                     CheckWaterSurfaceConnection(currentNode, dir, false);
                 }
                 foreach (var diveDir in LowerThreeDirections) {
-                    if (_room.GetTile(diveDir).Terrain != Room.Tile.TerrainType.Solid) {
+                    if (_room.GetTile(currentPos + diveDir).Terrain != Room.Tile.TerrainType.Solid) {
                         CheckWaterSurfaceConnection(currentNode, diveDir, false);
                     }
                 }
