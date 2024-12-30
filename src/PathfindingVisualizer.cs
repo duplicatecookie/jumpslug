@@ -5,6 +5,7 @@ using UnityEngine;
 
 using IVec2 = RWCustom.IntVector2;
 using System.Linq;
+using UnityEngine.Windows.WebCam;
 namespace JumpSlug.Pathfinding;
 
 class SharedGraphVisualizer {
@@ -95,6 +96,79 @@ class SharedGraphVisualizer {
     }
 }
 
+class DynamicGraphVisualizer {
+    public Mode CurrentMode { get; private set; }
+    public ConnectionType DisplayType { get; private set; }
+    private readonly ConnectionVisualizer _visualizer;
+
+    public DynamicGraphVisualizer(Room room, DynamicGraph graph, ConnectionType displayType) {
+        CurrentMode = Mode.Outgoing;
+        DisplayType = displayType;
+        _visualizer = new ConnectionVisualizer(room, graph);
+    }
+
+    public void NewGraph(DynamicGraph graph) {
+        _visualizer.NewGraph(graph);
+        Recalculate();
+    }
+
+    public void SetMode(Mode mode) {
+        if (mode != CurrentMode) {
+            CurrentMode = mode;
+            Recalculate();
+        }
+    }
+
+    public void SetType(ConnectionType type) {
+        // no duplication check because of pattern matching restrictions
+        DisplayType = type;
+        Recalculate();
+    }
+
+    public void Clear() {
+        _visualizer.Clear();
+    }
+
+    public void Recalculate() {
+        Clear();
+        var graph = _visualizer.Graph();
+        if (CurrentMode == Mode.Incoming) {
+            for (int y = 0; y < graph.Height; y++) {
+                for (int x = 0; x < graph.Width; x++) {
+                    var ext = graph.Extensions[x, y];
+                    if (ext.IncomingConnections is null) {
+                        continue;
+                    }
+                    foreach (var connection in ext.IncomingConnections) {
+                        if (connection.Type.GetType() == DisplayType.GetType()) {
+                            _visualizer.AddConnection(new IVec2(x, y), connection.Type, connection.Next.GridPos);
+                        }
+                    }
+                }
+            }
+        } else if (CurrentMode == Mode.Outgoing) {
+            for (int y = 0; y < graph.Height; y++) {
+                for (int x = 0; x < graph.Width; x++) {
+                    var ext = graph.Extensions[x, y];
+                    if (ext.OutgoingConnections is null) {
+                        continue;
+                    }
+                    foreach (var connection in ext.OutgoingConnections) {
+                        if (connection.Type.GetType() == DisplayType.GetType()) {
+                            _visualizer.AddConnection(new IVec2(x, y), connection.Type, connection.Next.GridPos);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public enum Mode {
+        Incoming,
+        Outgoing,
+    }
+}
+
 class NodeVisualizer {
     private Room _room;
     private DynamicGraph _dynamicGraph;
@@ -141,7 +215,7 @@ class NodeVisualizer {
         foreach (var connection in extension.IncomingConnections!) {
             AddConnection(node.GridPos, connection);
         }
-        
+
         for (int i = _connectionIndex; i < _connectionSprites.Count; i++) {
             _connectionSprites[i].sprite.isVisible = false;
         }
@@ -191,9 +265,9 @@ class NodeVisualizer {
     }
 }
 
-class PathVisualizer {
+class ConnectionVisualizer {
     private Room _room;
-    private readonly Pathfinder _pathfinder;
+    private DynamicGraph _dynGraph;
     private int _spriteCursor;
     private readonly List<DebugSprite> _lineSprites;
     private int _traceCursor;
@@ -202,8 +276,9 @@ class PathVisualizer {
     private readonly List<FLabel> _weightLabels;
     private FContainer _foreground;
 
-    public PathVisualizer(Room room, Pathfinder pathfinder) {
+    public ConnectionVisualizer(Room room, DynamicGraph dynGraph) {
         _room = room;
+        _dynGraph = dynGraph;
         _spriteCursor = 0;
         _lineSprites = new();
         _traceCursor = 0;
@@ -211,7 +286,6 @@ class PathVisualizer {
         _labelCursor = 0;
         _weightLabels = new();
         _foreground = room.game.cameras[0].ReturnFContainer("Foreground");
-        _pathfinder = pathfinder;
     }
 
     public void NewRoom(Room room) {
@@ -236,7 +310,16 @@ class PathVisualizer {
         }
     }
 
-    public void ClearPath() {
+    public void NewGraph(DynamicGraph dynGraph) {
+        Clear();
+        _dynGraph = dynGraph;
+    }
+
+    public DynamicGraph Graph() {
+        return _dynGraph;
+    }
+
+    public void Clear() {
         _spriteCursor = 0;
         foreach (var sprite in _lineSprites) {
             sprite.sprite.isVisible = false;
@@ -253,58 +336,48 @@ class PathVisualizer {
         }
     }
 
-    public void DisplayPath(IVec2 startPos, PathConnection startConnection, DynamicGraph dynGraph) {
-        ClearPath();
-        PathConnection? cursor = startConnection;
-        var currentPos = startPos;
-        while (cursor is not null) {
-            IVec2 startTile = currentPos;
-            IVec2 endTile = cursor.Value.Next.GridPos;
-            var start = RoomHelper.MiddleOfTile(startTile);
-            var end = RoomHelper.MiddleOfTile(endTile);
-            var connectionType = cursor.Value.Type;
-            var color = connectionType.VisualizationColor;
-            var sharedGraph = _room.GetCWT().SharedGraph!;
-            var vectors = dynGraph.Vectors;
-            if (connectionType is ConnectionType.Jump jump) {
-                // this node can be null only if the path is constructed incorrectly so this should throw
-                GraphNode graphNode = sharedGraph.GetNode(startTile)!;
-                Vector2 v0 = Vector2.zero;
-                if (graphNode.Beam == GraphNode.BeamType.Vertical) {
-                    v0 = vectors.VerticalPoleJump(jump.Direction);
-                    VisualizeJump(v0, startTile, endTile);
-                    VisualizeJumpTracing(v0, startTile);
-                } else if (graphNode.Beam == GraphNode.BeamType.Horizontal
-                    || graphNode.Type is NodeType.Floor
-                ) {
-                    var headPos = new IVec2(startTile.x, startTile.y + 1);
-                    v0 = vectors.HorizontalPoleJump(jump.Direction);
-                    VisualizeJump(v0, headPos, endTile);
-                    VisualizeJumpTracing(v0, headPos);
-                    AddLine(start, RoomHelper.MiddleOfTile(headPos), Color.white);
-                } else if (graphNode.Type is NodeType.Wall wall) {
-                    v0 = vectors.WallJump(wall.Direction);
-                    VisualizeJump(v0, startTile, endTile);
-                    VisualizeJumpTracing(v0, startTile);
-                }
-                AddLabel(connectionType, startTile, endTile, v0);
-            } else if (connectionType is ConnectionType.WalkOffEdge edgeWalk) {
-                var edgeWalkStart = new IVec2(
-                    startTile.x,
-                    sharedGraph.GetNode(startTile)?.Type is NodeType.Corridor ? startTile.y : startTile.y + 1
-                );
-                var v0 = vectors.HorizontalCorridorFall(edgeWalk.Direction);
-                VisualizeJump(v0, edgeWalkStart, endTile);
-                VisualizeJumpTracing(v0, edgeWalkStart);
-                AddLine(start, RoomHelper.MiddleOfTile(edgeWalkStart), Color.white);
-                AddLabel(connectionType, startTile, endTile, v0);
-            } else if (connectionType is ConnectionType.Drop) {
-                AddLabel(connectionType, startTile, endTile, Vector2.zero);
+    public void AddConnection(IVec2 startTile, ConnectionType connectionType, IVec2 endTile) {
+        var start = RoomHelper.MiddleOfTile(startTile);
+        var end = RoomHelper.MiddleOfTile(endTile);
+        var color = connectionType.VisualizationColor;
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        var vectors = _dynGraph.Vectors;
+        if (connectionType is ConnectionType.Jump jump) {
+            // this node can be null only if the path is constructed incorrectly so this should throw
+            GraphNode graphNode = sharedGraph.GetNode(startTile)!;
+            Vector2 v0 = Vector2.zero;
+            if (graphNode.Beam == GraphNode.BeamType.Vertical) {
+                v0 = vectors.VerticalPoleJump(jump.Direction);
+                VisualizeJump(v0, startTile, endTile);
+                VisualizeJumpTracing(v0, startTile);
+            } else if (graphNode.Beam == GraphNode.BeamType.Horizontal
+                || graphNode.Type is NodeType.Floor
+            ) {
+                var headPos = new IVec2(startTile.x, startTile.y + 1);
+                v0 = vectors.HorizontalPoleJump(jump.Direction);
+                VisualizeJump(v0, headPos, endTile);
+                VisualizeJumpTracing(v0, headPos);
+                AddLine(start, RoomHelper.MiddleOfTile(headPos), Color.white);
+            } else if (graphNode.Type is NodeType.Wall wall) {
+                v0 = vectors.WallJump(wall.Direction);
+                VisualizeJump(v0, startTile, endTile);
+                VisualizeJumpTracing(v0, startTile);
             }
-            AddLine(start, end, color);
-            currentPos = cursor.Value.Next.GridPos;
-            cursor = cursor.Value.Next.Connection;
+            AddLabel(connectionType, startTile, endTile, v0);
+        } else if (connectionType is ConnectionType.WalkOffEdge edgeWalk) {
+            var edgeWalkStart = new IVec2(
+                startTile.x,
+                sharedGraph.GetNode(startTile)?.Type is NodeType.Corridor ? startTile.y : startTile.y + 1
+            );
+            var v0 = vectors.HorizontalCorridorFall(edgeWalk.Direction);
+            VisualizeJump(v0, edgeWalkStart, endTile);
+            VisualizeJumpTracing(v0, edgeWalkStart);
+            AddLine(start, RoomHelper.MiddleOfTile(edgeWalkStart), Color.white);
+            AddLabel(connectionType, startTile, endTile, v0);
+        } else if (connectionType is ConnectionType.Drop) {
+            AddLabel(connectionType, startTile, endTile, Vector2.zero);
         }
+        AddLine(start, end, color);
     }
 
     private void AddLine(Vector2 start, Vector2 end, Color color) {
@@ -325,7 +398,7 @@ class PathVisualizer {
 
     private void AddLabel(ConnectionType connectionType, IVec2 startTile, IVec2 endTile, Vector2 v0) {
         NodeConnection? nodeConnection = null;
-        var ext = _pathfinder.DynamicGraph.Extensions[startTile.x, startTile.y];
+        var ext = _dynGraph.Extensions[startTile.x, startTile.y];
         if (ext.IncomingConnections is null) {
             return;
         }
@@ -488,6 +561,35 @@ class PathVisualizer {
             } else if (shiftedNode.Beam == GraphNode.BeamType.Cross) {
                 AddSquare(new IVec2(x, y), Color.cyan);
             }
+        }
+    }
+}
+
+class PathVisualizer {
+    private readonly ConnectionVisualizer _connections;
+
+    public PathVisualizer(Room room, DynamicGraph dynGraph) {
+        _connections = new ConnectionVisualizer(room, dynGraph);
+    }
+
+    public void NewRoom(Room room) {
+        _connections.NewRoom(room);
+    }
+
+    public void ClearPath() {
+        _connections.Clear();
+    }
+
+    public void DisplayPath(IVec2 startPos, PathConnection startConnection) {
+        ClearPath();
+        PathConnection? cursor = startConnection;
+        var currentPos = startPos;
+        while (cursor is not null) {
+            IVec2 startTile = currentPos;
+            IVec2 endTile = cursor.Value.Next.GridPos;
+            _connections.AddConnection(startTile, cursor.Value.Type, endTile);
+            currentPos = cursor.Value.Next.GridPos;
+            cursor = cursor.Value.Next.Connection;
         }
     }
 }

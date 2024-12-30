@@ -1018,6 +1018,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         private readonly JumpSlugAI _ai;
         private Room _room;
         private readonly PathVisualizer _pathVisualizer;
+        private readonly DynamicGraphVisualizer _dynGraphVisualizer;
         private readonly DebugSprite _inputDirSprite;
         private readonly DebugSprite _currentPosSprite;
         private int _spriteIndex;
@@ -1028,7 +1029,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         public Visualizer(JumpSlugAI ai) {
             _ai = ai;
             _room = _ai._room!;
-            _pathVisualizer = new PathVisualizer(_room, _ai._pathfinder);
+            _pathVisualizer = new PathVisualizer(_room, _ai._pathfinder.DynamicGraph);
+            _dynGraphVisualizer = new DynamicGraphVisualizer(_room, _ai._pathfinder.DynamicGraph, new ConnectionType.Jump(1));
             _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), _room);
             _inputDirSprite.sprite.color = Color.red;
             _inputDirSprite.sprite.isVisible = false;
@@ -1078,6 +1080,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             if (room != _room) {
                 _room = room;
                 _pathVisualizer.NewRoom(room);
+                _dynGraphVisualizer.NewGraph(_ai._pathfinder.DynamicGraph);
                 _room.AddObject(_inputDirSprite);
                 _room.AddObject(_currentPosSprite);
                 foreach (var sprite in _predictedIntersectionSprites) {
@@ -1087,59 +1090,81 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
 
         public void Update() {
-            if (Active) {
-                if (_ai._currentConnection is PathConnection connection) {
-                    _currentConnectionLabel.text = connection.Type.ToString();
+            if (!Active) {
+                return;
+            }
+            if (_ai._currentConnection is PathConnection connection) {
+                _currentConnectionLabel.text = connection.Type.ToString();
+            } else {
+                _currentConnectionLabel.text = "None";
+            }
+            if (_ai._performingAirMovement) {
+                _currentConnectionLabel.color = Color.green;
+            } else {
+                ResetPredictionSprites();
+                _currentConnectionLabel.color = Color.white;
+            }
+
+            _jumpBoostLabel.text = _ai._slugcat.jumpBoost.ToString();
+
+            var labelPos = _ai._slugcat.bodyChunks[0].pos - _room.game.cameras[0].pos;
+            labelPos.y += 60;
+            _currentConnectionLabel.SetPosition(labelPos);
+            labelPos.y += 20;
+            _jumpBoostLabel.SetPosition(labelPos);
+
+            _currentPosSprite.pos = RoomHelper.MiddleOfTile(_ai._currentPos);
+
+            if (InputHelper.JustPressed(KeyCode.Alpha1)) {
+                _dynGraphVisualizer.SetType(new ConnectionType.Jump(1));
+            } else if (InputHelper.JustPressed(KeyCode.Alpha2)) {
+                _dynGraphVisualizer.SetType(new ConnectionType.JumpToLedge(1));
+            } else if (InputHelper.JustPressed(KeyCode.Alpha3)) {
+                _dynGraphVisualizer.SetType(new ConnectionType.JumpUp());
+            } else if (InputHelper.JustPressed(KeyCode.Alpha4)) {
+                _dynGraphVisualizer.SetType(new ConnectionType.JumpUpToLedge(1));
+            } else if (InputHelper.JustPressed(KeyCode.Alpha5)) {
+                _dynGraphVisualizer.SetType(new ConnectionType.WalkOffEdge(1));
+            } else if (InputHelper.JustPressed(KeyCode.Alpha6)) {
+                _dynGraphVisualizer.SetType(new ConnectionType.WalkOffEdgeOntoLedge(1));
+            } else if (InputHelper.JustPressed(KeyCode.Alpha7)) {
+                _dynGraphVisualizer.SetType(new ConnectionType.Pounce(1));
+            } else if (InputHelper.JustPressed(KeyCode.Alpha8)) {
+                _dynGraphVisualizer.SetType(new ConnectionType.PounceOntoLedge(1));
+            } else if (InputHelper.JustPressed(KeyCode.Alpha9)) {
+                _dynGraphVisualizer.SetType(new ConnectionType.Drop());
+            } else if (InputHelper.JustPressed(KeyCode.Alpha0)) {
+                _dynGraphVisualizer.Clear();
+            }
+
+            if (_ai._slugcat.input[0].x == 0 && _ai._slugcat.input[0].y == 0) {
+                _inputDirSprite.sprite.isVisible = false;
+            } else {
+                _inputDirSprite.pos = _ai._slugcat.mainBodyChunk.pos;
+                _inputDirSprite.sprite.isVisible = true;
+                if (_ai._slugcat.input[0].jmp == true) {
+                    _inputDirSprite.sprite.color = Color.green;
                 } else {
-                    _currentConnectionLabel.text = "None";
+                    _inputDirSprite.sprite.color = Color.red;
                 }
-                if (_ai._performingAirMovement) {
-                    _currentConnectionLabel.color = Color.green;
-                } else {
-                    ResetPredictionSprites();
-                    _currentConnectionLabel.color = Color.white;
-                }
-
-                _jumpBoostLabel.text = _ai._slugcat.jumpBoost.ToString();
-
-                var labelPos = _ai._slugcat.bodyChunks[0].pos - _room.game.cameras[0].pos;
-                labelPos.y += 60;
-                _currentConnectionLabel.SetPosition(labelPos);
-                labelPos.y += 20;
-                _jumpBoostLabel.SetPosition(labelPos);
-
-                _currentPosSprite.pos = RoomHelper.MiddleOfTile(_ai._currentPos);
-
-                if (_ai._slugcat.input[0].x == 0 && _ai._slugcat.input[0].y == 0) {
-                    _inputDirSprite.sprite.isVisible = false;
-                } else {
-                    _inputDirSprite.pos = _ai._slugcat.mainBodyChunk.pos;
-                    _inputDirSprite.sprite.isVisible = true;
-                    if (_ai._slugcat.input[0].jmp == true) {
-                        _inputDirSprite.sprite.color = Color.green;
-                    } else {
-                        _inputDirSprite.sprite.color = Color.red;
-                    }
-                    LineHelper.ReshapeLine(
-                        (TriangleMesh)_inputDirSprite.sprite,
-                        _ai._slugcat.mainBodyChunk.pos,
-                        new Vector2(
-                            _ai._slugcat.mainBodyChunk.pos.x + _ai._slugcat.input[0].x * 50,
-                            _ai._slugcat.mainBodyChunk.pos.y + _ai._slugcat.input[0].y * 50
-                        )
-                    );
-                }
+                LineHelper.ReshapeLine(
+                    (TriangleMesh)_inputDirSprite.sprite,
+                    _ai._slugcat.mainBodyChunk.pos,
+                    new Vector2(
+                        _ai._slugcat.mainBodyChunk.pos.x + _ai._slugcat.input[0].x * 50,
+                        _ai._slugcat.mainBodyChunk.pos.y + _ai._slugcat.input[0].y * 50
+                    )
+                );
             }
         }
 
         public void UpdatePath() {
             if (!Active || _ai._currentConnection is null) {
                 _pathVisualizer.ClearPath();
-            } else if (_room.GetCWT().DynamicGraphs.TryGetValue(new SlugcatDescriptor(_ai._slugcat), out var graph)) {
+            } else {
                 _pathVisualizer.DisplayPath(
                     _ai._currentPos,
-                    _ai._currentConnection.Value,
-                    graph
+                    _ai._currentConnection.Value
                 );
             }
         }
@@ -1166,11 +1191,10 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             Active = true;
             if (_ai._currentConnection is null) {
                 _pathVisualizer.ClearPath();
-            } else if (_room.GetCWT().DynamicGraphs.TryGetValue(new SlugcatDescriptor(_ai._slugcat), out var graph)) {
+            } else {
                 _pathVisualizer.DisplayPath(
                     _ai._currentPos,
-                    _ai._currentConnection.Value,
-                    graph
+                    _ai._currentConnection.Value
                 );
             }
             _jumpBoostLabel.isVisible = true;
@@ -1182,6 +1206,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         public void Deactivate() {
             Active = false;
             _pathVisualizer.ClearPath();
+            _dynGraphVisualizer.Clear();
             _jumpBoostLabel.isVisible = false;
             _currentConnectionLabel.isVisible = false;
             _inputDirSprite.sprite.isVisible = false;
