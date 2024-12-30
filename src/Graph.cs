@@ -736,18 +736,20 @@ public class DynamicGraph {
             ) {
                 TraceDrop(pos);
             }
-        } else if (graphNode.Type is NodeType.Wall jumpWall
-            && !graphNode.HasBeam
+        } else if (graphNode.Type is NodeType.Wall jumpWall) {
+            TraceDrop(pos);
+            if (!graphNode.HasBeam
             && sharedGraph.GetNode(pos.x, pos.y - 1)?.Type is NodeType.Wall footJumpWall
             && sharedGraph.GetNode(pos.x, pos.y + 1)?.Type is NodeType.Wall // pressing jump under a ledge doesn't always wall jump
             && jumpWall.Direction == footJumpWall.Direction
         ) {
-            TraceJump(
-                graphNode,
-                pos,
-                Vectors.WallJump(-jumpWall.Direction),
-                new ConnectionType.Jump(-jumpWall.Direction)
-            );
+                TraceJump(
+                    graphNode,
+                    pos,
+                    Vectors.WallJump(-jumpWall.Direction),
+                    new ConnectionType.Jump(-jumpWall.Direction)
+                );
+            }
         }
         if (Timers.Active) {
             Timers.TraceFromNode.Stop();
@@ -940,13 +942,24 @@ public class DynamicGraph {
         if (startNode is null) {
             return;
         }
+        bool previousIsWall = startNode.Type is NodeType.Wall;
         for (int i = y - 1; i >= 0; i--) {
             var currentNode = sharedGraph.GetNode(x, i);
             if (currentNode is null) {
                 AddIncomingConnection(x, i, new ConnectionType.Drop(), startNode, y - i);
                 continue;
             }
-            if (currentNode.Type is NodeType.Air) {
+            if (previousIsWall) {
+                if (currentNode.Type is NodeType.Wall) {
+                    if (y - i > 3) { // so slides are still chosed for short distances
+                        ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    previousIsWall = false;
+                }
+            } else if (currentNode.Type is NodeType.Air) {
                 if (sharedGraph.Nodes[x, i + 1]?.HasVerticalBeam == true) {
                     if (currentNode.Beam == GraphNode.BeamType.Horizontal) {
                         ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
@@ -954,6 +967,8 @@ public class DynamicGraph {
                 } else if (currentNode.HasBeam) {
                     ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i + 2);
                 }
+            } else if (currentNode.Type is NodeType.Wall) {
+                break;
             } else {
                 ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
                 break;
