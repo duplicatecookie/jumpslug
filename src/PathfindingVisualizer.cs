@@ -364,17 +364,56 @@ class ConnectionVisualizer {
                 VisualizeJumpTracing(v0, startTile);
             }
             AddLabel(connectionType, startTile, endTile, v0);
+        } else if (connectionType is ConnectionType.JumpToLedge ledgeJump) {
+            GraphNode graphNode = sharedGraph.GetNode(startTile)!;
+            Vector2 v0 = Vector2.zero;
+            if (graphNode.Beam == GraphNode.BeamType.Vertical) {
+                v0 = vectors.VerticalPoleJump(ledgeJump.Direction);
+                VisualizeJump(v0, startTile, endTile);
+                VisualizeJumpTracing(v0, startTile);
+            } else if (graphNode.Beam == GraphNode.BeamType.Horizontal
+                || graphNode.Type is NodeType.Floor
+            ) {
+                var headPos = new IVec2(startTile.x, startTile.y + 1);
+                v0 = vectors.HorizontalPoleJump(ledgeJump.Direction);
+                VisualizeJump(v0, headPos, endTile);
+                VisualizeJumpTracing(v0, headPos);
+                AddLine(start, RoomHelper.MiddleOfTile(headPos), Color.white);
+            } else if (graphNode.Type is NodeType.Wall wall) {
+                v0 = vectors.WallJump(wall.Direction);
+                VisualizeJump(v0, startTile, endTile);
+                VisualizeJumpTracing(v0, startTile);
+            }
+            AddLabel(connectionType, startTile, endTile, v0);
         } else if (connectionType is ConnectionType.WalkOffEdge edgeWalk) {
             var edgeWalkStart = new IVec2(
                 startTile.x,
                 sharedGraph.GetNode(startTile)?.Type is NodeType.Corridor ? startTile.y : startTile.y + 1
             );
-            var v0 = vectors.HorizontalCorridorFall(edgeWalk.Direction);
+            var v0 = vectors.FloorJump(edgeWalk.Direction) with { y = 0 };
             VisualizeJump(v0, edgeWalkStart, endTile);
             VisualizeJumpTracing(v0, edgeWalkStart);
             AddLine(start, RoomHelper.MiddleOfTile(edgeWalkStart), Color.white);
             AddLabel(connectionType, startTile, endTile, v0);
-        } else if (connectionType is ConnectionType.Drop) {
+        } else if (connectionType is ConnectionType.WalkOffEdgeOntoLedge walkOntoLedge) {
+            var edgeWalkStart = new IVec2(
+                startTile.x,
+                sharedGraph.GetNode(startTile)?.Type is NodeType.Corridor ? startTile.y : startTile.y + 1
+            );
+            var v0 = vectors.FloorJump(walkOntoLedge.Direction) with { y = 0 };
+            VisualizeJump(v0, edgeWalkStart, endTile);
+            VisualizeJumpTracing(v0, edgeWalkStart);
+            AddLine(start, RoomHelper.MiddleOfTile(edgeWalkStart), Color.white);
+            AddLabel(connectionType, startTile, endTile, v0);
+        } else if (connectionType is ConnectionType.Pounce pounce) {
+            var v0 = vectors.Pounce(pounce.Direction);
+            VisualizeJump(v0, startTile, endTile);
+            VisualizeJumpTracing(v0, startTile);
+        } else if (connectionType is ConnectionType.PounceOntoLedge ledgePounce) {
+            var v0 = vectors.Pounce(ledgePounce.Direction);
+            VisualizeJump(v0, startTile, endTile);
+            VisualizeJumpTracing(v0, startTile);
+        } else if (connectionType is ConnectionType.Drop or ConnectionType.JumpUp or ConnectionType.JumpUpToLedge) {
             AddLabel(connectionType, startTile, endTile, Vector2.zero);
         }
         AddLine(start, end, color);
