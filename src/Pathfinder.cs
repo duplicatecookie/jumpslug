@@ -247,7 +247,7 @@ public struct JumpVectors {
     }
 
     public readonly Vector2 WallJump(int jumpDirection) {
-        return new Vector2(-WallJumpVector.x * jumpDirection, WallJumpVector.y);
+        return new Vector2(WallJumpVector.x * jumpDirection, WallJumpVector.y);
     }
 
     public readonly Vector2 Pounce(int direction) {
