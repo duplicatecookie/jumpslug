@@ -376,7 +376,6 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             _visualizer?.UpdatePath();
             return GenerateInputs();
         }
-
     }
 
     private Input GenerateInAirInputs(PathConnection currentConnection) {
@@ -741,7 +740,9 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     Direction = Consts.IVec2.Down,
                     Jump = false,
                 };
-            } else if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
+            } else if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam
+                || _slugcat.bodyMode == Player.BodyModeIndex.Default
+            ) {
                 _performingAirMovement = true;
                 return new Input {
                     Direction = Consts.IVec2.Down,
