@@ -833,8 +833,6 @@ public class DynamicGraph {
                 var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
                 if (currentNode?.Type is NodeType.Floor or NodeType.Slope) {
                     ConnectNodes(startNode, currentNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost);
-                }
-                if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == TileType.Solid) {
                     break;
                 }
                 y--;
@@ -866,7 +864,7 @@ public class DynamicGraph {
             if (shiftedNode is null) {
                 continue;
             }
-            if (shiftedNode.Type is NodeType.Corridor) {
+            if (shiftedNode.Type is NodeType.Corridor or NodeType.Floor) {
                 break;
             }
             float weight = new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost;

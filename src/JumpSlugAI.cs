@@ -5,6 +5,7 @@ using Mono.Cecil.Cil;
 using MonoMod.Cil;
 
 using IVec2 = RWCustom.IntVector2;
+using TileType = Room.Tile.TerrainType;
 
 using UnityEngine;
 
@@ -269,8 +270,8 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 }
 
                 if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height
-                    || _room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid
-                    || _room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope) {
+                    || _room.Tiles[x, y].Terrain is TileType.Solid or TileType.Slope or TileType.Floor
+                ) {
                     break;
                 }
 
