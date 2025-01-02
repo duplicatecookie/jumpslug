@@ -380,15 +380,14 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
     private Input GenerateInAirInputs(PathConnection currentConnection) {
         if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
-            bool jump;
-            if (_slugcat.jumpBoost > 0) {
-                jump = true;
-            } else {
-                jump = false;
-            }
             return new Input {
                 Direction = new IVec2(jumpDir, 0),
-                Jump = jump,
+                Jump = _slugcat.jumpBoost > 0,
+            };
+        } else if (currentConnection.Type is ConnectionType.JumpUp) {
+            return new Input {
+                Direction = Consts.IVec2.Zero,
+                Jump = _slugcat.jumpBoost > 0,
             };
         } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
             return new Input {
@@ -861,12 +860,29 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
         if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
+            if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) > 0.5f) {
+                return Input.DoNothing;
+            // make sure the slugcat is centered before jumping, unaligned jumps have a tendency to miss
+            } else if (_slugcat.mainBodyChunk.pos.x % 20f < 5f) {
+                return new Input {
+                    Direction = Consts.IVec2.Right,
+                    Jump = false,
+                };
+            } else if (_slugcat.mainBodyChunk.pos.x % 20f > 15f) {
+                return new Input {
+                    Direction = Consts.IVec2.Left,
+                    Jump = false,
+                };
+            }
             _performingAirMovement = true;
             return new Input {
                 Direction = Consts.IVec2.Zero,
                 Jump = true,
             };
         } else if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+            if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) > 0.5f) {
+                return Input.DoNothing;
+            }
             if (_slugcat.animation == Player.AnimationIndex.StandOnBeam
                 || _slugcat.animation == Player.AnimationIndex.BeamTip
             ) {

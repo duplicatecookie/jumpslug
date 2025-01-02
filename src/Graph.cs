@@ -712,7 +712,9 @@ public class DynamicGraph {
                     5f
                 );
             }
-            TraceJumpUp(pos, Vectors.FloorJumpVector.y);
+            if (!graphNode.HasVerticalBeam) {
+                TraceJumpUp(pos, Vectors.FloorJumpVector.y);
+            }
             if (sharedGraph.GetNode(pos.x, pos.y - 1)?.HasPlatform == true) {
                 TraceDrop(pos);
             }
