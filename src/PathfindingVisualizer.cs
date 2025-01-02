@@ -107,6 +107,10 @@ class DynamicGraphVisualizer {
         _visualizer = new ConnectionVisualizer(room, graph);
     }
 
+    public void NewRoom(Room room) {
+        _visualizer.NewRoom(room);
+    }
+
     public void NewGraph(DynamicGraph graph) {
         _visualizer.NewGraph(graph);
         Recalculate();
@@ -191,7 +195,7 @@ class NodeVisualizer {
     }
 
     public void NewRoom(Room room, DynamicGraph dynamicGraph) {
-        if (_room != room) {
+        if (_room.abstractRoom.index != room.abstractRoom.index) {
             _room = room;
             _dynamicGraph = dynamicGraph;
             _nodeSprite.sprite.isVisible = false;
@@ -289,7 +293,7 @@ class ConnectionVisualizer {
     }
 
     public void NewRoom(Room room) {
-        if (room != _room) {
+        if (room.abstractRoom.index != _room.abstractRoom.index) {
             _room = room;
             _foreground = _room.game.cameras[0].ReturnFContainer("Foreground");
             _spriteCursor = 0;
@@ -343,9 +347,12 @@ class ConnectionVisualizer {
         var sharedGraph = _room.GetCWT().SharedGraph!;
         var vectors = _dynGraph.Vectors;
         if (connectionType is ConnectionType.Jump jump) {
-            // this node can be null only if the path is constructed incorrectly so this should throw
-            GraphNode graphNode = sharedGraph.GetNode(startTile)!;
             Vector2 v0 = Vector2.zero;
+            var graphNode = sharedGraph.GetNode(startTile);
+            if (graphNode is null) {
+                Plugin.Logger!.LogError("tried drawing a jump connection from a nonexistant node");
+                return;
+            }
             if (graphNode.Beam == GraphNode.BeamType.Vertical) {
                 v0 = vectors.VerticalPoleJump(jump.Direction);
                 VisualizeJump(v0, startTile, endTile);
@@ -365,7 +372,11 @@ class ConnectionVisualizer {
             }
             AddLabel(connectionType, startTile, endTile, v0);
         } else if (connectionType is ConnectionType.JumpToLedge ledgeJump) {
-            GraphNode graphNode = sharedGraph.GetNode(startTile)!;
+            var graphNode = sharedGraph.GetNode(startTile);
+            if (graphNode is null) {
+                Plugin.Logger!.LogError("tried drawing a jump connection from a nonexistant node");
+                return;
+            }
             Vector2 v0 = Vector2.zero;
             if (graphNode.Beam == GraphNode.BeamType.Vertical) {
                 v0 = vectors.VerticalPoleJump(ledgeJump.Direction);

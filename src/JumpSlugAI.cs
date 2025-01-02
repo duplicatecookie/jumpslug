@@ -75,14 +75,14 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         if (distance > _slugcat.abstractCreature.creatureTemplate.visualRadius) {
             return 0;
         } else {
-            // TODO: add restrictions for water and ambush predators (white lizards, dropswigs, pole plants)
+            // TODO: add restrictions for water and ambush predators (white lizards, dropwigs, pole plants)
             return 1;
         }
     }
 
     public override void NewRoom(Room room) {
         base.NewRoom(room);
-        if (_room != room) {
+        if (_room.abstractRoom.index != room.abstractRoom.index) {
             _room = room;
             var graphs = _room.GetCWT().DynamicGraphs;
             var descriptor = new SlugcatDescriptor(_slugcat);
@@ -1078,10 +1078,12 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
 
         public void NewRoom(Room room) {
-            if (room != _room) {
+            if (room.abstractRoom.index != _room.abstractRoom.index) {
                 _room = room;
                 _pathVisualizer.NewRoom(room);
+                _dynGraphVisualizer.NewRoom(room);
                 _dynGraphVisualizer.NewGraph(_ai._pathfinder.DynamicGraph);
+                _dynGraphVisualizer.Clear();
                 _room.AddObject(_inputDirSprite);
                 _room.AddObject(_currentPosSprite);
                 foreach (var sprite in _predictedIntersectionSprites) {

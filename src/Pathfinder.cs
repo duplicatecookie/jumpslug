@@ -494,7 +494,7 @@ public class Pathfinder {
     /// Reinitialize pathfinder for new room. Does nothing if the room has not actually changed.
     /// </summary>
     public void NewRoom(Room room, DynamicGraph dynGraph) {
-        if (room != _room) {
+        if (room.abstractRoom.index != _room.abstractRoom.index) {
             _room = room;
             DynamicGraph = dynGraph;
             var sharedGraph = _room.GetCWT().SharedGraph!;
@@ -874,7 +874,7 @@ public class Pathfinder {
         }
 
         public void NewRoom(Room room) {
-            if (_room == room) {
+            if (_room.abstractRoom.index != room.abstractRoom.index) {
                 _room = room;
                 _labels = new FLabel[_room.Width, _room.Height];
                 CreateLabels();
