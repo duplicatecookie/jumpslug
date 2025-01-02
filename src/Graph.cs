@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using IVec2 = RWCustom.IntVector2;
+using TileType = Room.Tile.TerrainType;
 
 namespace JumpSlug.Pathfinding;
 
@@ -205,60 +206,64 @@ public class SharedGraph {
                 if (x - 1 < 0 || x + 1 >= Width || y - 1 < 0 || y + 1 >= Height) {
                     continue;
                 }
-                if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid) {
+                if (room.Tiles[x, y].Terrain == TileType.Solid) {
                     continue;
-                } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Air
-                    || room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Floor
+                } else if (room.Tiles[x, y].Terrain == TileType.Air
+                    || room.Tiles[x, y].Terrain == TileType.Floor
                 ) {
-                    if (!(room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x - 1, y + 1].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Air)
-                        && !(room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x + 1, y + 1].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Air)
-                        && !(room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x - 1, y - 1].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Air)
-                        && !(room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x + 1, y - 1].Terrain == Room.Tile.TerrainType.Air
-                            && room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Air)
+                    if (!(room.Tiles[x - 1, y].Terrain is TileType.Air or TileType.Floor
+                            && room.Tiles[x - 1, y + 1].Terrain is TileType.Air or TileType.Floor
+                            && room.Tiles[x, y + 1].Terrain is TileType.Air or TileType.Floor
+                        )
+                        && !(room.Tiles[x + 1, y].Terrain is TileType.Air or TileType.Floor
+                            && room.Tiles[x + 1, y + 1].Terrain is TileType.Air or TileType.Floor
+                            && room.Tiles[x, y + 1].Terrain is TileType.Air or TileType.Floor
+                        )
+                        && !(room.Tiles[x - 1, y].Terrain is TileType.Air or TileType.Floor
+                            && room.Tiles[x - 1, y - 1].Terrain is TileType.Air or TileType.Floor
+                            && room.Tiles[x, y - 1].Terrain is TileType.Air or TileType.Floor
+                        )
+                        && !(room.Tiles[x + 1, y].Terrain is TileType.Air or TileType.Floor
+                            && room.Tiles[x + 1, y - 1].Terrain is TileType.Air or TileType.Floor
+                            && room.Tiles[x, y - 1].Terrain is TileType.Air or TileType.Floor
+                        )
                     ) {
                         Nodes[x, y] = new GraphNode(new NodeType.Corridor(), x, y);
                     } else if (
-                          room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Solid
-                          || room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.ShortcutEntrance
+                          room.Tiles[x, y - 1].Terrain == TileType.Solid
+                          || room.Tiles[x, y - 1].Terrain == TileType.ShortcutEntrance
                           // pretend invalid slope is solid
-                          || room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Slope
-                          && room.Tiles[x - 1, y - 1].Terrain == Room.Tile.TerrainType.Solid
-                          && room.Tiles[x + 1, y - 1].Terrain == Room.Tile.TerrainType.Solid
+                          || room.Tiles[x, y - 1].Terrain == TileType.Slope
+                          && room.Tiles[x - 1, y - 1].Terrain == TileType.Solid
+                          && room.Tiles[x + 1, y - 1].Terrain == TileType.Solid
                     ) {
                         Nodes[x, y] = new GraphNode(new NodeType.Floor(), x, y);
-                    } else if (room.Tiles[x, y - 1].Terrain == Room.Tile.TerrainType.Floor) {
+                    } else if (room.Tiles[x, y - 1].Terrain == TileType.Floor) {
                         Nodes[x, y] = new GraphNode(new NodeType.Floor(), x, y);
-                    } else if ((room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Air
-                        || room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Floor)
-                        && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid
+                    } else if ((room.Tiles[x - 1, y].Terrain == TileType.Air
+                        || room.Tiles[x - 1, y].Terrain == TileType.Floor)
+                        && room.Tiles[x + 1, y].Terrain == TileType.Solid
                     ) {
                         Nodes[x, y] = new GraphNode(new NodeType.Wall(1), x, y);
-                    } else if (room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
-                        && (room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Air
-                        || room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Floor)
+                    } else if (room.Tiles[x - 1, y].Terrain == TileType.Solid
+                        && (room.Tiles[x + 1, y].Terrain == TileType.Air
+                        || room.Tiles[x + 1, y].Terrain == TileType.Floor)
                     ) {
                         Nodes[x, y] = new GraphNode(new NodeType.Wall(-1), x, y);
                     }
-                    if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Floor) {
+                    if (room.Tiles[x, y].Terrain == TileType.Floor) {
                         if (Nodes[x, y] is null) {
                             Nodes[x, y] = new GraphNode(new NodeType.Air(), x, y);
                         }
                         Nodes[x, y]!.HasPlatform = true;
                     }
-                } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope
-                      && room.Tiles[x, y + 1].Terrain == Room.Tile.TerrainType.Air
-                      && !(room.Tiles[x - 1, y].Terrain == Room.Tile.TerrainType.Solid
-                          && room.Tiles[x + 1, y].Terrain == Room.Tile.TerrainType.Solid)
+                } else if (room.Tiles[x, y].Terrain == TileType.Slope
+                      && room.Tiles[x, y + 1].Terrain == TileType.Air
+                      && !(room.Tiles[x - 1, y].Terrain == TileType.Solid
+                          && room.Tiles[x + 1, y].Terrain == TileType.Solid)
                 ) {
                     Nodes[x, y] = new GraphNode(new NodeType.Slope(), x, y);
-                } else if (room.Tiles[x, y].Terrain == Room.Tile.TerrainType.ShortcutEntrance) {
+                } else if (room.Tiles[x, y].Terrain == TileType.ShortcutEntrance) {
                     int index = Array.IndexOf(room.shortcutsIndex, new IVec2(x, y));
                     if (index > -1) {
                         var type = room.shortcuts[index].shortCutType;
@@ -284,14 +289,14 @@ public class SharedGraph {
                         Nodes[x, y] = new GraphNode(new NodeType.Air(), x, y);
                     }
                     Nodes[x, y]!.Beam = GraphNode.BeamType.Horizontal;
-                } else if (room.Tiles[x, y - 1].Terrain != Room.Tile.TerrainType.Solid
+                } else if (room.Tiles[x, y - 1].Terrain != TileType.Solid
                     && room.Tiles[x, y - 1].verticalBeam
                 ) {
                     if (Nodes[x, y] is null) {
                         Nodes[x, y] = new GraphNode(new NodeType.Air(), x, y);
                     }
                     Nodes[x, y]!.Beam = GraphNode.BeamType.Above;
-                } else if (room.Tiles[x, y + 1].Terrain != Room.Tile.TerrainType.Solid
+                } else if (room.Tiles[x, y + 1].Terrain != TileType.Solid
                     && room.Tiles[x, y + 1].verticalBeam
                 ) {
                     if (Nodes[x, y] is null) {
@@ -738,7 +743,7 @@ public class DynamicGraph {
                 );
             }
             if (sharedGraph.GetNode(pos.x, pos.y - 1) is null
-                && _room.Tiles[pos.x, pos.y - 1].Terrain == Room.Tile.TerrainType.Air
+                && _room.Tiles[pos.x, pos.y - 1].Terrain == TileType.Air
             ) {
                 TraceDrop(pos);
             }
@@ -829,7 +834,7 @@ public class DynamicGraph {
                 if (currentNode?.Type is NodeType.Floor or NodeType.Slope) {
                     ConnectNodes(startNode, currentNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost);
                 }
-                if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
+                if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == TileType.Solid) {
                     break;
                 }
                 y--;
@@ -838,7 +843,7 @@ public class DynamicGraph {
                 var sideNode = sharedGraph.GetNode(x, y);
                 if (sideNode is not null
                     && (sideNode.Type is NodeType.Floor
-                        && _room.GetTile(x, y - 1).Terrain == Room.Tile.TerrainType.Solid
+                        && _room.GetTile(x, y - 1).Terrain == TileType.Solid
                     || sideNode.Type is NodeType.Slope)
                 ) {
                     ConnectNodes(
@@ -852,8 +857,8 @@ public class DynamicGraph {
             }
 
             if (x < 0 || y < 0 || x >= Width || y >= Height
-                || _room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Solid
-                || _room.Tiles[x, y].Terrain == Room.Tile.TerrainType.Slope) {
+                || _room.Tiles[x, y].Terrain == TileType.Solid
+                || _room.Tiles[x, y].Terrain == TileType.Slope) {
                 break;
             }
 
@@ -903,8 +908,8 @@ public class DynamicGraph {
         for (int i = y + 1; i <= maxHeight && i < sharedGraph.Height; i++) {
             var currentTile = _room.GetTile(x, i);
             var currentNode = sharedGraph.GetNode(x, i);
-            if (currentTile.Terrain == Room.Tile.TerrainType.Solid
-                || currentTile.Terrain == Room.Tile.TerrainType.Slope
+            if (currentTile.Terrain == TileType.Solid
+                || currentTile.Terrain == TileType.Slope
             ) {
                 break;
             }
