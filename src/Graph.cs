@@ -724,7 +724,9 @@ public class DynamicGraph {
                 TraceDrop(pos);
             }
         } else if (graphNode.Type is NodeType.Corridor) {
-            if (sharedGraph.GetNode(pos.x + 1, pos.y) is null) {
+            var rightTile = _room.GetTile(pos.x + 1, pos.y);
+            var rightNode = sharedGraph.GetNode(pos.x + 1, pos.y);
+            if (rightTile.Terrain is TileType.Air && rightNode?.Type is not NodeType.Corridor) {
                 TraceJump(
                     graphNode,
                     pos,
@@ -733,7 +735,9 @@ public class DynamicGraph {
                     upright: false
                 );
             }
-            if (sharedGraph.GetNode(pos.x - 1, pos.y) is null) {
+            var leftTile = _room.GetTile(pos.x - 1, pos.y);
+            var leftNode = sharedGraph.GetNode(pos.x - 1, pos.y);
+            if (leftTile.Terrain is TileType.Air && leftNode?.Type is not NodeType.Corridor) {
                 TraceJump(
                     graphNode,
                     pos,
@@ -827,14 +831,6 @@ public class DynamicGraph {
             if (result > y + 1) {
                 y++;
             } else if (result < y) {
-                if (y - 2 < 0) {
-                    break;
-                }
-                var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
-                if (currentNode?.Type is NodeType.Floor or NodeType.Slope) {
-                    ConnectNodes(startNode, currentNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost);
-                    break;
-                }
                 y--;
             } else {
                 x += direction;
@@ -865,6 +861,7 @@ public class DynamicGraph {
                 continue;
             }
             if (shiftedNode.Type is NodeType.Corridor or NodeType.Floor) {
+                ConnectNodes(startNode, shiftedNode, type, new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost);
                 break;
             }
             float weight = new IVec2(x, y).FloatDist(startNode.GridPos) + 1 + weightBoost;

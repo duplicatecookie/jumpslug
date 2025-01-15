@@ -243,7 +243,7 @@ public struct JumpVectors {
     }
 
     public readonly Vector2 HorizontalCorridorFall(int direction) {
-        return new Vector2(HorizontalCorridorFallVector.x * direction, VerticalPoleJumpVector.y);
+        return new Vector2(HorizontalCorridorFallVector.x * direction, HorizontalCorridorFallVector.y);
     }
 
     public readonly Vector2 WallJump(int jumpDirection) {

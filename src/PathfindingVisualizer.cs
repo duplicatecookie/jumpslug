@@ -558,13 +558,6 @@ class ConnectionVisualizer {
                 if (y - 2 < 0) {
                     break;
                 }
-                var currentNode = sharedGraph.Nodes[x, upright ? y - 1 : y];
-                if (currentNode?.Type is NodeType.Floor or NodeType.Slope) {
-                    AddSquare(new IVec2(x, y), Color.cyan);
-                }
-                if (_room.Tiles[x, upright ? y - 2 : y - 1].Terrain == Room.Tile.TerrainType.Solid) {
-                    break;
-                }
                 y--;
             } else {
                 x += direction;
@@ -590,7 +583,8 @@ class ConnectionVisualizer {
             if (shiftedNode is null) {
                 continue;
             }
-            if (shiftedNode.Type is NodeType.Corridor) {
+            if (shiftedNode.Type is NodeType.Corridor or NodeType.Floor) {
+                AddSquare(new IVec2(x, y), Color.cyan);
                 break;
             }
             if (shiftedNode.Type is NodeType.Wall wall && wall.Direction == direction) {
