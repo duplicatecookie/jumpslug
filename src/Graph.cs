@@ -723,7 +723,24 @@ public class DynamicGraph {
             if (sharedGraph.GetNode(pos.x, pos.y - 1)?.HasPlatform == true) {
                 TraceDrop(pos);
             }
-        } else if (graphNode.Type is NodeType.Corridor) {
+        } else if (graphNode.Type is NodeType.Slope) {
+            if (goRight) {
+                TraceJump(
+                    graphNode,
+                    new IVec2(pos.x, pos.y + 1),
+                    Vectors.FloorJump(1) with {y = 0},
+                    new ConnectionType.WalkOffEdge(1)
+                );
+            }
+            if (goLeft) {
+                TraceJump(
+                    graphNode,
+                    new IVec2(pos.x, pos.y + 1),
+                    Vectors.FloorJump(-1) with {y = 0},
+                    new ConnectionType.WalkOffEdge(-1)
+                );
+            }
+        }  else if (graphNode.Type is NodeType.Corridor) {
             var rightTile = _room.GetTile(pos.x + 1, pos.y);
             var rightNode = sharedGraph.GetNode(pos.x + 1, pos.y);
             if (rightTile.Terrain is TileType.Air && rightNode?.Type is not NodeType.Corridor) {

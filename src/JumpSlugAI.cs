@@ -931,6 +931,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private Input WalkOffEdge(int walkDir) {
         IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
         IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
+        var sharedGraph = _room.GetCWT().SharedGraph!;
         if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
             if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
                 _performingAirMovement = true;
@@ -965,6 +966,13 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 Jump = false,
             };
         } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
+            var footNode = sharedGraph.GetNode(footPos);
+            if (footNode?.Type is NodeType.Corridor) {
+                return new Input {
+                    Direction = new IVec2(walkDir, 0),
+                    Jump = false,
+                };
+            }
             return new Input {
                 Direction = Consts.IVec2.Up,
                 Jump = false,
