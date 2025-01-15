@@ -361,7 +361,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         } else {
             _currentConnection = FindPath();
             _visualizer?.UpdatePath();
-            return GenerateInputs();
+            return GenerateInputs(_currentConnection);
         }
     }
 
@@ -375,7 +375,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             _performingAirMovement = false;
             _currentConnection = FindPath();
             _visualizer?.UpdatePath();
-            return GenerateInputs();
+            return GenerateInputs(_currentConnection);
         }
     }
 
@@ -451,22 +451,20 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    private Input GenerateInputs() {
+    private Input GenerateInputs(PathConnection? connection) {
         if (!CanMove()) {
             return Input.DoNothing;
         }
         var currentNode = _room.GetCWT().SharedGraph!.GetNode(_currentPos);
-        if (_currentConnection is null) {
+        if (connection is null) {
             if (currentNode?.HasBeam == true && _slugcat.bodyMode != Player.BodyModeIndex.ClimbingOnBeam) {
-                return new Input {
-                    Direction = Consts.IVec2.Up,
-                    Jump = false,
-                };
+                return new Input { Direction = Consts.IVec2.Up, Jump = false, };
             } else {
                 return Input.DoNothing;
             }
         }
-        var currentConnection = _currentConnection.Value;
+
+        var currentConnection = connection.Value;
         if (currentConnection.Type is ConnectionType.Walk) {
             return Walk(currentConnection, currentNode!);
         } else if (currentConnection.Type is ConnectionType.Crawl) {
@@ -486,25 +484,13 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int ledgeWalkDir)) {
             return WalkOffEdge(ledgeWalkDir);
         } else if (currentConnection.Type is ConnectionType.SlideOnWall(int wallDir)) {
-            if (currentConnection.PeekType(1) is ConnectionType.Walk(int walkDir2)) {
-                return new Input {
-                    Direction = new IVec2(walkDir2, 0),
-                    Jump = false,
-                };
-            }
-            return new Input {
-                Direction = new IVec2(wallDir, 0),
-                Jump = false,
-            };
+            return SlideOnWall(currentConnection);
         } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
             return Pounce(pounceDir);
         } else if (currentConnection.Type is ConnectionType.Pounce(int ledgePounceDir)) {
             return Pounce(ledgePounceDir);
         } else if (currentConnection.Type is ConnectionType.Swim(IVec2 swimDir)) {
-            bool jump = false;
-            if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-                jump = true;
-            }
+            bool jump = _slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam;
             return new Input {
                 Direction = swimDir,
                 Jump = jump,
@@ -570,7 +556,10 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     Jump = false,
                 };
             }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default && currentNode.Beam == GraphNode.BeamType.Above) {
+        } else if (
+            _slugcat.bodyMode == Player.BodyModeIndex.Default
+            && currentNode.Beam == GraphNode.BeamType.Above
+        ) {
             return new Input {
                 Direction = new IVec2(walkDir, 0),
                 Jump = false,
@@ -1024,6 +1013,21 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Pounce, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
             return Input.DoNothing;
         }
+    }
+
+    private Input SlideOnWall(PathConnection currentConnection) {
+        int wallDir = ((ConnectionType.SlideOnWall)currentConnection.Type).Direction;
+        var nextType = currentConnection.PeekType(1);
+        if (nextType is not ConnectionType.SlideOnWall
+            or ConnectionType.Jump
+            or ConnectionType.JumpToLedge
+        ) {
+            return GenerateInputs(currentConnection.Next.Connection);
+        }
+        return new Input {
+            Direction = new IVec2(wallDir, 0),
+            Jump = false,
+        };
     }
 
     private struct Input {
