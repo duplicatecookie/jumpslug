@@ -512,6 +512,11 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     Direction = new IVec2(walkDir, 0),
                     Jump = false,
                 };
+            } else if (_slugcat.animation == Player.AnimationIndex.BeamTip) {
+                return new Input {
+                    Direction = new IVec2(walkDir, 0),
+                    Jump = false,
+                };
             } else if (currentNode.GridPos.y == headPos.y) {
                 return new Input {
                     Direction = Consts.IVec2.Up,
@@ -521,11 +526,6 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 return new Input {
                     Direction = Consts.IVec2.Down,
                     Jump = true,
-                };
-            } else if (_slugcat.animation == Player.AnimationIndex.BeamTip) {
-                return new Input {
-                    Direction = new IVec2(walkDir, 0),
-                    Jump = false,
                 };
             }
             Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Walk, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
