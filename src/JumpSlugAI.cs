@@ -21,16 +21,12 @@ class JumpSlugAbstractAI : AbstractCreatureAI {
 class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
     private readonly Player _slugcat;
     private Room _room;
-    private bool _waitOneTick;
     private IVec2? _destination;
     private readonly Pathfinder _pathfinder;
-    private IVec2 _currentPos;
-    private PathConnection? _currentConnection;
-    private bool _performingAirMovement;
+    private bool _waitOneTick;
     private readonly EscapeFinder _escapeFinder;
     private Visualizer? _visualizer;
     private bool _visualizeNode;
-    private readonly NodeVisualizer _nodeVisualizer;
     private bool _visualizeThreat;
     private Pathfinder.ThreatMapVisualizer? _threatVisualizer;
 
@@ -52,7 +48,6 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             threatTracker,
             Pathfinder.FindDivingLimit(3f, _slugcat.slugcatStats.lungsFac, 0.5f)
         );
-        _nodeVisualizer = new NodeVisualizer(_room!, _pathfinder.DynamicGraph);
         _escapeFinder = new EscapeFinder();
     }
 
@@ -93,7 +88,6 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             }
             _pathfinder.NewRoom(room, dynGraph);
             _visualizer?.NewRoom(room);
-            _nodeVisualizer.NewRoom(room, _pathfinder.DynamicGraph);
             _threatVisualizer?.NewRoom(room);
         }
     }
@@ -112,29 +106,21 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         if (InputHelper.JustPressedMouseButton(0)) {
             var mousePos = (Vector2)UnityEngine.Input.mousePosition + _room!.game.cameras[0].pos;
             _destination = _room.GetTilePosition(mousePos);
-            _currentConnection = FindPath();
             _visualizer?.UpdatePath();
         }
-
-        _currentPos = CurrentPos();
-        if (_waitOneTick || _destination is null) {
-            _slugcat.input[0] = default;
-            _waitOneTick = false;
-        } else {
-            var input = _performingAirMovement ? MoveInAir() : Move();
-            _slugcat.input[0] = default(Player.InputPackage) with {
-                x = input.Direction.x,
-                y = input.Direction.y,
-                jmp = input.Jump,
-            };
-        }
-
+        
+        var input = GenerateInputs();
+        _slugcat.input[0] = default(Player.InputPackage) with {
+            x = input.Direction.x,
+            y = input.Direction.y,
+            jmp = input.Jump,
+        };
         UpdateVisualization();
         if (Timers.Active) {
             Timers.JumpSlugAI_Update.Stop();
         }
     }
-
+    
     private void UpdateVisualization() {
         if (InputHelper.JustPressed(KeyCode.P)) {
             _visualizer ??= new Visualizer(this);
@@ -160,874 +146,219 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         if (InputHelper.JustPressed(KeyCode.M)) {
             _visualizeNode = !_visualizeNode;
         }
+    }
 
-        var sharedGraph = _room.GetCWT().SharedGraph!;
-
-        if (_visualizeNode) {
-            if (sharedGraph.GetNode(_currentPos) is GraphNode node) {
-                _nodeVisualizer.VisualizeNode(node);
-            } else {
-                _nodeVisualizer.ResetSprites();
-            }
-        } else {
-            _nodeVisualizer.ResetSprites();
+    private Input GenerateInputs() {
+        // do this before destination check so _waitOneTick always gets reset
+        if (_waitOneTick) {
+            _waitOneTick = false;
+            return Input.DoNothing;
         }
-    }
-
-    private void FindEscapePathAndDestination() {
-        if (!_performingAirMovement && CanMove()) {
-            var result = _pathfinder.FindPathFrom(
-                _currentPos,
-                _escapeFinder
-            );
-            if (result is (IVec2, PathConnection) tuple) {
-                _destination = tuple.destination;
-                _currentConnection = tuple.connection;
-                _visualizer?.UpdatePath();
-            } else {
-                Plugin.Logger!.LogDebug("failed to find escape route");
-            }
-        }
-    }
-
-    private bool CanMove() {
-        return _room.GetCWT().SharedGraph!.GetNode(_currentPos) is not null
-            || _slugcat.bodyMode == Player.BodyModeIndex.Swimming;
-    }
-
-    private PathConnection? FindPath(bool forceReset = false) {
+        
         if (_destination is null) {
-            return null;
-        } else if (CanMove()) {
-            return _pathfinder.FindPathTo(
-                _currentPos,
-                _destination.Value,
-                forceReset
-            );
-        } else {
-            return null;
+            return Input.DoNothing;
         }
-    }
-
-    private bool KeepFalling() {
-        _visualizer?.ResetPredictionSprites();
-        var sharedGraph = _slugcat.room.GetCWT().SharedGraph!;
-        if (sharedGraph.GetNode(_currentPos) is null) {
-            return true;
-        }
-        if (_currentConnection is null || _destination is null) {
-            return false;
-        }
-        var startPathNode = _pathfinder.PathNodePool[_currentPos];
-        if (startPathNode is null) {
-            return true;
-        }
-        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
-        int x = headPos.x;
-        int y = headPos.y;
-        if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height) {
-            return false;
-        }
-        Vector2 v0 = _slugcat.mainBodyChunk.vel;
-        if (v0.x == 0) {
-            while (y > 0) {
-                y--;
-                var currentNode = sharedGraph.Nodes[x, y];
-                var currentPathNode = _pathfinder.PathNodePool[x, y];
-                if (currentNode is null || currentPathNode is null) {
-                    continue;
-                }
-
-                _visualizer?.AddPredictionSprite(x, y);
-
-                if (!_pathfinder.ClosedNodes[x, y]) {
-                    _pathfinder.FindPathTo(
-                        new IVec2(x, y),
-                        _destination.Value
-                    );
-                }
-                if (currentPathNode.PathCost < startPathNode.PathCost) {
-                    return true;
-                }
-                if (currentNode.Type is NodeType.Floor or NodeType.Slope) {
-                    break;
-                }
-            }
-        } else {
-            int direction = v0.x > 0 ? 1 : -1;
-            int xOffset = (direction + 1) / 2;
-            var pathOffset = RoomHelper.MiddleOfTile(headPos);
-
-            while (true) {
-                float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
-                float result = DynamicGraph.Parabola(pathOffset.y, v0, _room!.gravity, t) / 20;
-                if (result > y + 1) {
-                    y++;
-                } else if (result < y) {
-                    y--;
-                } else {
-                    x += direction;
-                }
-
-                if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height
-                    || _room.Tiles[x, y].Terrain is TileType.Solid or TileType.Slope or TileType.Floor
-                ) {
-                    break;
-                }
-
-                var currentPathNode = _pathfinder.PathNodePool[x, y];
-                if (currentPathNode is null) {
-                    continue;
-                }
-
-                _visualizer?.AddPredictionSprite(x, y);
-
-                if (!_pathfinder.ClosedNodes[x, y]) {
-                    _pathfinder.FindPathTo(
-                        new IVec2(x, y),
-                        _destination.Value
-                    );
-                }
-                if (currentPathNode.PathCost < startPathNode.PathCost) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Find the node the requested slugcat is currently at.
-    /// </summary>
-    /// <returns>
-    /// Null if the slugcat is not located at any node in the graph.
-    /// </returns>
-    public IVec2 CurrentPos() {
-        var sharedGraph = _slugcat.room.GetCWT().SharedGraph!;
-        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
-        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
-        if (_slugcat.bodyMode == Player.BodyModeIndex.Stand
-            || _slugcat.animation == Player.AnimationIndex.StandOnBeam
-            || _slugcat.animation == Player.AnimationIndex.BeamTip
-            || _slugcat.animation == Player.AnimationIndex.StandUp
-        ) {
-            if (sharedGraph.GetNode(footPos) is not null) {
-                return footPos;
-            } else if (sharedGraph.GetNode(footPos + Consts.IVec2.Down) is not null) {
-                return footPos + Consts.IVec2.Down;
-            }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl
-            || _slugcat.bodyMode == Player.BodyModeIndex.CorridorClimb
-        ) {
-            if (sharedGraph.GetNode(headPos) is not null) {
-                return headPos;
-            } else if (sharedGraph.GetNode(footPos) is not null) {
-                return footPos;
-            }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
-            if (sharedGraph.GetNode(headPos) is not null) {
-                return headPos;
-            } else if (sharedGraph.GetNode(footPos + Consts.IVec2.Down) is GraphNode footNode) {
-                return footNode.Type is NodeType.Slope ? footNode.GridPos : headPos;
-            }
-        } else if (_slugcat.animation == Player.AnimationIndex.SurfaceSwim
-            && _room.GetTile(headPos.x, _room.defaultWaterLevel).Terrain != Room.Tile.TerrainType.Solid
-        ) {
-            return new IVec2(headPos.x, _room.defaultWaterLevel);
-        }
-        return headPos;
-    }
-
-    private Input Move() {
-        var sharedGraph = _room.GetCWT().SharedGraph!;
-        if (!CanMove()) {
-            if (_currentConnection?.Type is ConnectionType.Drop) {
-                _performingAirMovement = true;
-            } else {
-                _currentConnection = null;
-                _visualizer?.UpdatePath();
-            }
-            return default;
-        } else if (_currentPos == _destination) {
-            _currentConnection = null;
+        
+        var headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
+        var footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
+        
+        if (_destination == headPos || _destination == footPos) {
             _destination = null;
-            _visualizer?.UpdatePath();
-            return default;
-        } else if (sharedGraph.GetNode(_currentPos)?.HasPlatform is true
-            && _slugcat.bodyMode == Player.BodyModeIndex.Default
-        ) {
-            _performingAirMovement = true;
-            return default;
-        } else {
-            _currentConnection = FindPath();
-            _visualizer?.UpdatePath();
-            return GenerateInputs(_currentConnection);
-        }
-    }
-
-    private Input MoveInAir() {
-        if (_currentConnection is null) {
-            _performingAirMovement = false;
-            return Input.DoNothing;
-        } else if (!CanMove() || KeepFalling()) {
-            return GenerateInAirInputs(_currentConnection!.Value);
-        } else {
-            _performingAirMovement = false;
-            _currentConnection = FindPath();
-            _visualizer?.UpdatePath();
-            return GenerateInputs(_currentConnection);
-        }
-    }
-
-    private Input GenerateInAirInputs(PathConnection currentConnection) {
-        if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
-            return new Input {
-                Direction = new IVec2(jumpDir, 0),
-                Jump = _slugcat.jumpBoost > 0,
-            };
-        } else if (currentConnection.Type is ConnectionType.JumpUp) {
-            return new Input {
-                Direction = Consts.IVec2.Zero,
-                Jump = _slugcat.jumpBoost > 0,
-            };
-        } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir)) {
-            return new Input {
-                Direction = new IVec2(walkDir, 0),
-                Jump = false,
-            };
-        } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
-            return new Input {
-                Direction = new IVec2(pounceDir, 0),
-                Jump = false,
-            };
-        } else if (currentConnection.Type is ConnectionType.WalkOffEdgeOntoLedge(int ledgeWalkDir)) {
-            return new Input {
-                Direction = new IVec2(ledgeWalkDir, 0),
-                Jump = false,
-            };
-        } else if (currentConnection.Type is ConnectionType.PounceOntoLedge(int ledgePounceDir)) {
-            return new Input {
-                Direction = new IVec2(ledgePounceDir, 1),
-                Jump = false,
-            };
-        } else if (currentConnection.Type is ConnectionType.JumpUpToLedge(int jumpUpLedgeDir)) {
-            var headPos = RoomHelper.TilePosition(_slugcat.mainBodyChunk.pos);
-            var sharedGraph = _room.GetCWT().SharedGraph!;
-            var sideNode = sharedGraph.GetNode(headPos.x + jumpUpLedgeDir, headPos.y);
-            if (sideNode?.GridPos == currentConnection.Next.GridPos) {
-                return new Input {
-                    Direction = new IVec2(jumpUpLedgeDir, 0),
-                    Jump = false,
-                };
-            }
-            bool jump;
-            if (_slugcat.jumpBoost > 0) {
-                jump = true;
-            } else {
-                jump = false;
-            }
-            return new Input {
-                Direction = Consts.IVec2.Zero,
-                Jump = jump,
-            };
-        } else if (currentConnection.Type is ConnectionType.JumpToLedge(int ledgeJumpDir)) {
-            bool jump;
-            if (_slugcat.jumpBoost > 0) {
-                jump = true;
-            } else {
-                jump = false;
-            }
-            if (_slugcat.animation == Player.AnimationIndex.LedgeCrawl
-                || _slugcat.animation == Player.AnimationIndex.LedgeGrab
-            ) {
-                jump = false;
-            }
-            return new Input {
-                Direction = new IVec2(ledgeJumpDir, 0),
-                Jump = jump,
-            };
-        } else {
             return Input.DoNothing;
         }
-    }
-
-    private Input GenerateInputs(PathConnection? connection) {
-        if (!CanMove()) {
-            return Input.DoNothing;
-        }
-        var currentNode = _room.GetCWT().SharedGraph!.GetNode(_currentPos);
-        if (connection is null) {
-            if (currentNode?.HasBeam == true && _slugcat.bodyMode != Player.BodyModeIndex.ClimbingOnBeam) {
-                return new Input { Direction = Consts.IVec2.Up, Jump = false, };
-            } else {
-                return Input.DoNothing;
-            }
-        }
-
-        var currentConnection = connection.Value;
-        if (currentConnection.Type is ConnectionType.Walk) {
-            return Walk(currentConnection, currentNode!);
-        } else if (currentConnection.Type is ConnectionType.Crawl) {
-            return Crawl(currentConnection, currentNode!);
-        } else if (currentConnection.Type is ConnectionType.Climb) {
-            return Climb(currentConnection, currentNode!);
-        } else if (currentConnection.Type is ConnectionType.Drop) {
-            return Drop();
-        } else if (currentConnection.Type is ConnectionType.Jump(int jumpDir)) {
-            return Jump(jumpDir);
-        } else if (currentConnection.Type is ConnectionType.JumpToLedge(int ledgeJumpDir)) {
-            return Jump(ledgeJumpDir);
-        } else if (currentConnection.Type is ConnectionType.JumpUp or ConnectionType.JumpUpToLedge) {
-            return JumpUp();
-        } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int walkDir1)) {
-            return WalkOffEdge(walkDir1);
-        } else if (currentConnection.Type is ConnectionType.WalkOffEdge(int ledgeWalkDir)) {
-            return WalkOffEdge(ledgeWalkDir);
-        } else if (currentConnection.Type is ConnectionType.SlideOnWall(int wallDir)) {
-            return SlideOnWall(currentConnection);
-        } else if (currentConnection.Type is ConnectionType.Pounce(int pounceDir)) {
-            return Pounce(pounceDir);
-        } else if (currentConnection.Type is ConnectionType.Pounce(int ledgePounceDir)) {
-            return Pounce(ledgePounceDir);
-        } else if (currentConnection.Type is ConnectionType.Swim(IVec2 swimDir)) {
-            bool jump = _slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam;
-            return new Input {
-                Direction = swimDir,
-                Jump = jump,
-            };
-        } else {
-            Plugin.Logger!.LogWarning($"trying to follow connection of type {currentConnection.Type} but no logic exists to handle it");
-            return Input.DoNothing;
-        }
-    }
-
-    private Input Walk(PathConnection currentConnection, GraphNode currentNode) {
-        int walkDir = ((ConnectionType.Walk)currentConnection.Type).Direction;
-        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
-        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
+        
+        var orientation = headPos - footPos;
         var sharedGraph = _room.GetCWT().SharedGraph!;
-        if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-            if (sharedGraph.GetNode(footPos)?.Type is NodeType.Corridor) {
-                return new Input {
-                    Direction = new IVec2(walkDir, 0),
-                    Jump = false,
-                };
-            } else if (_slugcat.animation == Player.AnimationIndex.BeamTip) {
-                return new Input {
-                    Direction = new IVec2(walkDir, 0),
-                    Jump = false,
-                };
-            } else if (currentNode.GridPos.y == headPos.y) {
-                return new Input {
-                    Direction = Consts.IVec2.Up,
-                    Jump = false,
-                };
-            } else if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
-                return new Input {
-                    Direction = Consts.IVec2.Down,
-                    Jump = true,
-                };
+        var headNode = sharedGraph.GetNode(headPos);
+        var footNode = sharedGraph.GetNode(footPos);
+        
+        // correct positions on slopes
+        if (headNode is null) {
+            var pos = headPos + Consts.IVec2.Down;
+            var node = sharedGraph.GetNode(pos);
+            if (node?.Type is NodeType.Slope) {
+                headPos = pos;
+                headNode = node;
             }
-            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Walk, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
-            return Input.DoNothing;
-        } else if (currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 crawlDir)) {
-            if (crawlDir.y < 0) {
-                if (_slugcat.animation != Player.AnimationIndex.DownOnFours
-                    && _slugcat.bodyMode != Player.BodyModeIndex.Default
-                ) {
-                    return new Input {
-                        Direction = new IVec2(walkDir, -1),
-                        Jump = false,
-                    };
-                }
-                return new Input {
-                    Direction = Consts.IVec2.Down,
-                    Jump = false,
-                };
-            } else {
-                int yDir;
-                if (crawlDir.x != 0 && currentConnection.PeekPos(2)?.y == currentNode.GridPos.y) {
-                    yDir = -1;
-                } else {
-                    yDir = 0;
-                }
-                return new Input {
-                    Direction = new IVec2(walkDir, yDir),
-                    Jump = false,
-                };
-            }
-        } else if (
-            _slugcat.bodyMode == Player.BodyModeIndex.Default
-            && currentNode.Beam == GraphNode.BeamType.Above
-        ) {
-            return new Input {
-                Direction = new IVec2(walkDir, 0),
-                Jump = false,
-            };
-        } else {
-            int yDir = 0;
-            if (currentConnection.PeekType(1) is ConnectionType.Drop
-                || currentConnection.PeekType(2) is ConnectionType.Drop
-            ) {
-                if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
-                    yDir = -1;
-                }
-            } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-                yDir = 1;
-            }
-            return new Input {
-                Direction = new IVec2(walkDir, yDir),
-                Jump = false,
-            };
         }
-    }
 
-    private Input Crawl(PathConnection currentConnection, GraphNode currentNode) {
-        IVec2 crawlDir = ((ConnectionType.Crawl)currentConnection.Type).Direction;
-        // the sign of the dot product indicates whether the angle between two vectors is greater or lesser than 90°
-        bool backwards = (_slugcat.bodyChunks[0].pos - _slugcat.bodyChunks[1].pos).Dot(crawlDir.ToVector2()) < 0;
-        // turn around if going backwards
-        // should not trigger when in a corner because that can lock the ai into switching forever when trying to go up an inverse T junction
-        if (_slugcat.bodyMode != Player.BodyModeIndex.WallClimb) {
-            if (_slugcat.bodyMode == Player.BodyModeIndex.Default
-                && _slugcat.animation == Player.AnimationIndex.StandUp
-            ) {
-                _waitOneTick = true;
+        if (footNode is null) {
+            var pos = footPos + Consts.IVec2.Down;
+            var node = sharedGraph.GetNode(pos);
+            if (node?.Type is NodeType.Slope) {
+                footPos = pos;
+                footNode = node;
+            }
+        }
+        
+        var headConnection = _pathfinder.FindPathTo(headPos, _destination.Value);
+        var footConnection = _pathfinder.FindPathTo(footPos, _destination.Value);
+        _visualizer?.UpdatePath();
+        
+        if (headConnection is null) {
+            if (footConnection is null) {
                 return Input.DoNothing;
-            } else if (currentConnection.PeekType(1) is ConnectionType.Crawl(IVec2 nextDir)
-                && currentNode.Type is not NodeType.Floor
-                && backwards
-            ) {
-                if (crawlDir == nextDir) {
-                    return new Input {
-                        Direction = crawlDir,
-                        Jump = true,
-                    };
-                } else if (crawlDir.Dot(nextDir) == 0) {
-                    return new Input {
-                        Direction = nextDir,
-                        Jump = false,
-                    };
-                }
             }
-        }
-        return new Input {
-            Direction = crawlDir,
-            Jump = false,
-        };
-    }
-
-    private Input Climb(PathConnection currentConnection, GraphNode currentNode) {
-        IVec2 climbDir = ((ConnectionType.Climb)currentConnection.Type).Direction;
-        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
-        if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-            if (currentConnection.PeekType(1) is ConnectionType.Walk) {
-                if (climbDir.y < 0) {
-                    return new Input {
-                        Direction = Consts.IVec2.Down,
-                        Jump = true,
-                    };
-                } else if (climbDir.y > 0) {
-                    return new Input {
-                        Direction = Consts.IVec2.Up,
-                        Jump = false,
-                    };
-                } else {
-                    return new Input {
-                        Direction = climbDir with { y = 0 },
-                        Jump = false,
-                    };
-                }
-            } else {
-                int yDir = 0;
-                if (climbDir.x != 0 && (_slugcat.flipDirection != climbDir.x || _slugcat.animation == Player.AnimationIndex.ClimbOnBeam)) {
-                    _waitOneTick = true;
-                } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
-                    if (climbDir.y != 0) {
-                        yDir = 1;
+            switch (footConnection.Value.Type) {
+                case ConnectionType.Walk walk:
+                    if (AnySolidAtHeadLevel(footPos, footConnection.Value, 4)) {
+                        return new Input(new IVec2(walk.Direction, -1), false);
                     }
-                    if (climbDir.x != 0) {
-                        var nextPos = currentConnection.PeekPos(2);
-                        if (nextPos is not null) {
-                            var terrain = _room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
-                            if (terrain == Room.Tile.TerrainType.Solid
-                                || terrain == Room.Tile.TerrainType.Slope
-                            ) {
-                                yDir = -1;
-                            }
-                        }
+                    // get down before crawling down into corridor
+                    if (footConnection.Value.PeekType(1) is ConnectionType.Crawl({x: 0, y: -1})) {
+                        return new Input(Consts.IVec2.Down, false);
                     }
-                } else if (_slugcat.animation != Player.AnimationIndex.GetUpOnBeam
-                    && currentNode.Beam == GraphNode.BeamType.Horizontal
-                    && _room!.GetTile(currentNode.GridPos.x, currentNode.GridPos.y + 1).Terrain == Room.Tile.TerrainType.Air
-                    && _slugcat.input[1].y != 1
-                ) {
-                    var nextPos = currentConnection.PeekPos(2);
-                    if (nextPos is not null) {
-                        var terrain = _room!.GetTile(nextPos.Value.x, nextPos.Value.y + 1).Terrain;
-                        if (terrain != Room.Tile.TerrainType.Solid
-                            && terrain != Room.Tile.TerrainType.Slope
-                        ) {
-                            yDir = 1;
-                        }
+                    return new Input(new IVec2(walk.Direction, 0), false);
+                case ConnectionType.Climb climb: // climbing up onto beam tip, standing on horizontal pole
+                    // drop down to avoid getting stuck on wall or when entering corridor
+                    if (climb.Direction.x != 0 && AnySolidAtHeadLevel(footPos, footConnection.Value, 4)) {
+                        return new Input(climb.Direction with { y = -1 }, false);
                     }
-                } else {
-                    yDir = climbDir.y;
-                }
-                return new Input {
-                    Direction = climbDir with { y = yDir },
-                    Jump = false,
-                };
-            }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.CorridorClimb) {
-            return new Input {
-                Direction = climbDir,
-                Jump = false,
-            };
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
-            if (currentConnection.PeekType(1) is ConnectionType.Walk(int walkDir1) && climbDir.y < 0) {
-                return new Input {
-                    Direction = new IVec2(walkDir1, 0),
-                    Jump = false,
-                };
-            } else {
-                return new Input {
-                    Direction = climbDir with { y = 1 },
-                    Jump = false,
-                };
-            }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Stand
-            && (currentNode.GridPos == footPos
-                || currentNode.GridPos == new IVec2(footPos.x, footPos.y - 1))
-            && climbDir.x != 0
-        ) {
-            return new Input {
-                Direction = climbDir with { y = 0 },
-                Jump = false,
-            };
-        } else {
-            if (currentNode.Beam != GraphNode.BeamType.None) {
-                _waitOneTick = true;
-                return new Input {
-                    Direction = climbDir with { y = 1 },
-                    Jump = false,
-                };
-            } else {
-                Plugin.Logger!.LogWarning("trying to climb on node without pole");
-                return new Input {
-                    Direction = climbDir,
-                    Jump = false,
-                };
-            }
-        }
-    }
-    private Input Drop() {
-        if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) < 0.5f) {
-            if (_slugcat.animation == Player.AnimationIndex.HangUnderVerticalBeam) {
-                _waitOneTick = true;
-                return new Input {
-                    Direction = Consts.IVec2.Down,
-                    Jump = false,
-                };
-            } else if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam
-                || _slugcat.bodyMode == Player.BodyModeIndex.Default
-            ) {
-                _performingAirMovement = true;
-                return new Input {
-                    Direction = Consts.IVec2.Down,
-                    Jump = true,
-                };
-            } else {
-                return new Input {
-                    Direction = Consts.IVec2.Down,
-                    Jump = false,
-                };
-            }
-        }
-        return Input.DoNothing;
-    }
-    private Input Jump(int jumpDir) {
-        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
-        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
-        var sharedGraph = _room.GetCWT().SharedGraph!;
-        if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
-            bool jump;
-            if (_slugcat.flipDirection == jumpDir) {
-                _performingAirMovement = true;
-                jump = true;
-            } else {
-                jump = false;
-            }
-            return new Input {
-                Direction = new IVec2(jumpDir, 0),
-                Jump = jump,
-            };
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.WallClimb) {
-            _performingAirMovement = true;
-            return new Input {
-                Direction = new IVec2(jumpDir, 0),
-                Jump = true,
-            };
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-            if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
-                bool jump;
-                if (_slugcat.flipDirection == jumpDir) {
-                    jump = true;
-                    _performingAirMovement = true;
-                } else {
-                    jump = false;
-                }
-                return new Input {
-                    Direction = new IVec2(jumpDir, 0),
-                    Jump = jump,
-                };
-            } else if (_slugcat.animation == Player.AnimationIndex.HangFromBeam) {
-                _waitOneTick = true;
-                return new Input {
-                    Direction = Consts.IVec2.Up,
-                    Jump = false,
-                };
-            } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
-                if (headPos.x == footPos.x
-                    && headPos.y == footPos.y + 1
-                    && _slugcat.bodyChunks[0].vel.x < 5f
-                ) {
-                    _performingAirMovement = true;
-                    return new Input {
-                        Direction = new IVec2(jumpDir, 0),
-                        Jump = true,
-                    };
-                } else {
-                    return new Input {
-                        Direction = Consts.IVec2.Up,
-                        Jump = false,
-                    };
-                }
-            } else if (_slugcat.animation == Player.AnimationIndex.BeamTip) {
-                return new Input {
-                    Direction = new IVec2(jumpDir, 0),
-                    Jump = true,
-                };
-            } else {
-                Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Jump, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
-                return Input.DoNothing;
-            }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
-            var currentNode = sharedGraph.GetNode(_currentPos);
-            if (currentNode is null) {
-                return Input.DoNothing;
-            } else if (currentNode.Type is NodeType.Wall(int wallDir)) {
-                return new Input {
-                    Direction = new IVec2(wallDir, 0),
-                    Jump = true,
-                };
-            } else if (currentNode.HasBeam) {
-                return new Input {
-                    Direction = Consts.IVec2.Up,
-                    Jump = true,
-                };
-            } else {
-                return Input.DoNothing;
-            }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-            if (footPos.x == _currentPos.x - jumpDir) {
-                return new Input {
-                    Direction = new IVec2(jumpDir, 1),
-                    Jump = false,
-                };
-            }
-            return new Input {
-                Direction = Consts.IVec2.Up,
-                Jump = false,
-            };
-        } else {
-            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Jump, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
-            return Input.DoNothing;
-        }
-    }
-
-    private Input JumpUp() {
-        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
-        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
-        if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
-            if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) > 0.5f) {
-                return Input.DoNothing;
-            // make sure the slugcat is centered before jumping, unaligned jumps have a tendency to miss
-            } else if (_slugcat.mainBodyChunk.pos.x % 20f < 5f) {
-                return new Input {
-                    Direction = Consts.IVec2.Right,
-                    Jump = false,
-                };
-            } else if (_slugcat.mainBodyChunk.pos.x % 20f > 15f) {
-                return new Input {
-                    Direction = Consts.IVec2.Left,
-                    Jump = false,
-                };
-            }
-            _performingAirMovement = true;
-            return new Input {
-                Direction = Consts.IVec2.Zero,
-                Jump = true,
-            };
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-            if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) > 0.5f) {
-                return Input.DoNothing;
-            }
-            if (_slugcat.animation == Player.AnimationIndex.StandOnBeam
-                || _slugcat.animation == Player.AnimationIndex.BeamTip
-            ) {
-                if (headPos.x == footPos.x
-                    && headPos.y == footPos.y + 1
-                    && _slugcat.bodyChunks[0].vel.x < 5f
-                ) {
-                    _performingAirMovement = true;
-                    return new Input {
-                        Direction = Consts.IVec2.Zero,
-                        Jump = true,
-                    };
-                } else {
-                    return new Input {
-                        Direction = Consts.IVec2.Up,
-                        Jump = false,
-                    };
-                }
-            } else if (_slugcat.animation == Player.AnimationIndex.HangFromBeam) {
-                _waitOneTick = true;
-                return new Input {
-                    Direction = Consts.IVec2.Up,
-                    Jump = false,
-                };
-            } else {
-                Plugin.Logger!.LogError($"missing movement logic: ConnectionType.JumpUp, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
-                return Input.DoNothing;
-            }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-            return new Input {
-                Direction = Consts.IVec2.Up,
-                Jump = false,
-            };
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.WallClimb) {
-            return new Input {
-                Direction = new IVec2(-_slugcat.flipDirection, 0),
-                Jump = false,
-            };
-        } else {
-            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.JumpUp, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
-            return Input.DoNothing;
-        }
-    }
-
-    private Input WalkOffEdge(int walkDir) {
-        IVec2 headPos = RoomHelper.TilePosition(_slugcat.bodyChunks[0].pos);
-        IVec2 footPos = RoomHelper.TilePosition(_slugcat.bodyChunks[1].pos);
-        var sharedGraph = _room.GetCWT().SharedGraph!;
-        if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
-            if (_slugcat.animation == Player.AnimationIndex.ClimbOnBeam) {
-                _performingAirMovement = true;
-                return new Input {
-                    Direction = new IVec2(walkDir, -1),
-                    Jump = true,
-                };
-            } else if (_slugcat.animation == Player.AnimationIndex.StandOnBeam) {
-                if (headPos.x == footPos.x
-                    && headPos.y == footPos.y + 1
-                    && _slugcat.bodyChunks[0].vel.x < 5f
-                ) {
-                    _performingAirMovement = true;
-                    return new Input {
-                        Direction = new IVec2(walkDir, -1),
-                        Jump = false,
-                    };
-                } else {
+                    return new Input(climb.Direction, false);
+                case ConnectionType.Crawl crawl: // should only be triggered when crawling out of or into corridors
+                    return new Input(crawl.Direction, false);
+                default: // not implementing other stuff for now
                     return Input.DoNothing;
+            }
+        }
+
+        switch (headConnection.Value.Type) {
+            case ConnectionType.Walk walk: // crawling up out of corridor or from pole, crawling horizontally
+                // climbing up onto platform
+                if (footConnection?.Type is ConnectionType.Climb(IVec2 { x: 0, y: 1 })
+                    && footNode?.Type is not NodeType.Corridor
+                ) {
+                    return new Input(Consts.IVec2.Up, false);
                 }
-            } else {
-                _performingAirMovement = true;
-                return new Input {
-                    Direction = Consts.IVec2.Down,
-                    Jump = false,
-                };
-            }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
-            _performingAirMovement = true;
-            return new Input {
-                Direction = new IVec2(walkDir, 0),
-                Jump = false,
-            };
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-            var footNode = sharedGraph.GetNode(footPos);
-            if (footNode?.Type is NodeType.Corridor) {
-                return new Input {
-                    Direction = new IVec2(walkDir, 0),
-                    Jump = false,
-                };
-            }
-            return new Input {
-                Direction = Consts.IVec2.Up,
-                Jump = false,
-            };
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.CorridorClimb) {
-            return new Input {
-                Direction = new IVec2(walkDir, 0),
-                Jump = false,
-            };
-        } else {
-            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.WalkOffEdge, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
-            return Input.DoNothing;
+                
+                // don't get up if you should be staying down
+                if (orientation is IVec2 { x: not 0, y: 0 }
+                    && !AnySolidAtHeadLevel(headPos, headConnection.Value, 4)
+                ) {
+                    return new Input(new IVec2(walk.Direction, 1), false);
+                }
+                
+                return new Input(new IVec2(walk.Direction, 0), false);
+            case ConnectionType.Climb climb:
+                if (climb.Direction == Consts.IVec2.Down) {
+                    if (footConnection?.Type is ConnectionType.Walk nextWalk) {
+                        if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
+                            // let go of pole
+                            return new Input(Consts.IVec2.Down, true);
+                        }
+                        // skip the head connection and start walking
+                        return new Input(new IVec2(nextWalk.Direction, 0), false);
+                    }
+
+                    // don't grab onto pole right before going into corridor
+                    if (footConnection?.Type is ConnectionType.Crawl crawl) {
+                        _waitOneTick = true; // gets stuck otherwise;
+                        return new Input(crawl.Direction, false);
+                    }
+
+                    // make sure no code path past this point tries to let go of the pole,
+                    // it will result in a cycle.
+                    // if you do need to do that, move this statement somewhere else
+                    if (_slugcat.bodyMode != Player.BodyModeIndex.ClimbingOnBeam
+                        && footNode?.Type is null or not NodeType.Corridor
+                    ) {
+                        // grab onto pole
+                        return new Input(Consts.IVec2.Up, false);
+                    }
+                    
+                    if (footConnection?.Type is ConnectionType.Climb nextClimb
+                        && nextClimb.Direction.x != 0
+                    ) {
+                        // drop down to horizontal pole level normally to prevent running into wall
+                        if (_room.GetTile(headPos + nextClimb.Direction).Terrain is not TileType.Air
+                            // moving to the side here is going to lead to the wrong beam
+                            || headNode!.Beam == GraphNode.BeamType.Cross
+                        ) {
+                            return new Input(climb.Direction, false);
+                        }
+                        
+                        if (_slugcat.flipDirection != nextClimb.Direction.x) {
+                            // make sure there is a gap between the inputs for changing flip direction
+                            // and for moving sideways. it gets stuck otherwise
+                            _waitOneTick = true;
+                            return new Input(nextClimb.Direction, false);
+                        }
+                        
+                        // switch to horizontal pole while it is at foot level
+                        return new Input(nextClimb.Direction, false);
+                    }
+
+                    return new Input(climb.Direction, false);
+                }
+                
+                // make sure no code path past this point tries to let go of the pole,
+                // it will result in a cycle.
+                // if you do need to do that, move this statement somewhere else
+                if (_slugcat.bodyMode != Player.BodyModeIndex.ClimbingOnBeam) {
+                    _waitOneTick = true; // prevents getting stuck when moving up out of corridor
+                    // grab onto pole
+                    return new Input(Consts.IVec2.Up, false);
+                }
+
+                if (climb.Direction.x != 0) {
+                    if (headNode!.Beam == GraphNode.BeamType.Cross) {
+                        // make sure there is a gap between the inputs for changing flip direction
+                        // and for moving sideways. it gets stuck otherwise
+                        _waitOneTick = true;
+                        return new Input(climb.Direction, false);
+                    }
+
+                    // get up when hanging from beam
+                    if (!AnySolidAtHeadLevel(headPos, headConnection.Value, 4)) {
+                        return new Input(climb.Direction with { y = 1 }, false);
+                    }
+                }
+                
+                return new Input(climb.Direction, false);
+            case ConnectionType.Crawl crawl:
+                // try to get unstuck if movement into corridor isn't working
+                if (crawl.Direction == Consts.IVec2.Down
+                    && headNode!.Type is NodeType.Floor
+                    && _slugcat.bodyChunks[0].vel.magnitude < 0.1f
+                ) {
+                    _waitOneTick = true;
+                    if (_slugcat.input[1].x == 0 && footConnection?.Type is ConnectionType.Walk walk) {
+                        return new Input(new IVec2(walk.Direction, -1), false);
+                    }
+                    return new Input(Consts.IVec2.Down, false);
+                }
+                // turn around if going backwards
+                bool backwards = orientation == crawl.Direction.Inverse();
+                bool jump = backwards && orientation.y != -1;
+                return new Input(crawl.Direction, jump);
+            default: // implement later
+                return Input.DoNothing; 
         }
     }
 
-    private Input Pounce(int pounceDir) {
-        if (_slugcat.bodyMode == Player.BodyModeIndex.Stand) {
-            if (_slugcat.flipDirection != pounceDir) {
-                return new Input {
-                    Direction = new IVec2(pounceDir, -1),
-                    Jump = false,
-                };
+    private bool AnySolidAtHeadLevel(IVec2 position, PathConnection connection, int lookAhead) {
+        PathConnection? cursor = connection;
+        bool anySolidAtHeadLevel = false;
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        for (int i = 0; i < lookAhead; i++) {
+            if (cursor is not null) {
+                var headLevel = cursor.Value.Next.GridPos + Consts.IVec2.Up;
+                if (position.y == cursor.Value.Next.GridPos.y
+                    && _room.GetTile(headLevel).Terrain is not TileType.Air
+                ) {
+                    anySolidAtHeadLevel = true;
+                    break;
+                }
+                position = cursor.Value.Next.GridPos;
+                if (sharedGraph.GetNode(position)?.Type is NodeType.Corridor) {
+                    break;
+                }
+                cursor = cursor.Value.Next.Connection;
             } else {
-                return new Input {
-                    Direction = Consts.IVec2.Down,
-                    Jump = false,
-                };
+                break;
             }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Crawl) {
-            if (_slugcat.flipDirection != pounceDir) {
-                return new Input {
-                    Direction = new IVec2(pounceDir, 0),
-                    Jump = false,
-                };
-            } else if (_slugcat.superLaunchJump < 20) {
-                // hold down jump button to set up pounce
-                return new Input {
-                    Direction = Consts.IVec2.Zero,
-                    Jump = true,
-                };
-            } else {
-                // release jump button to perform pounce
-                _performingAirMovement = true;
-                return Input.DoNothing;
-            }
-        } else if (_slugcat.bodyMode == Player.BodyModeIndex.Default) {
-            return Input.DoNothing;
-        } else {
-            Plugin.Logger!.LogError($"missing movement logic: ConnectionType.Pounce, mode: {_slugcat.bodyMode}, animation: {_slugcat.animation}");
-            return Input.DoNothing;
         }
-    }
-
-    private Input SlideOnWall(PathConnection currentConnection) {
-        int wallDir = ((ConnectionType.SlideOnWall)currentConnection.Type).Direction;
-        var nextType = currentConnection.PeekType(1);
-        if (nextType is not ConnectionType.SlideOnWall
-            or ConnectionType.Jump
-            or ConnectionType.JumpToLedge
-        ) {
-            return GenerateInputs(currentConnection.Next.Connection);
-        }
-        return new Input {
-            Direction = new IVec2(wallDir, 0),
-            Jump = false,
-        };
+        return anySolidAtHeadLevel;
     }
 
     private struct Input {
@@ -1050,11 +381,10 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         private readonly PathVisualizer _pathVisualizer;
         private readonly DynamicGraphVisualizer _dynGraphVisualizer;
         private readonly DebugSprite _inputDirSprite;
-        private readonly DebugSprite _currentPosSprite;
+        private readonly DebugSprite[] _currentPosSprites;
         private int _spriteIndex;
         private readonly DebugSprite[] _predictedIntersectionSprites;
-        private readonly FLabel _currentConnectionLabel;
-        private readonly FLabel _jumpBoostLabel;
+        private readonly FLabel[] _currentConnectionLabels;
         public bool Active { get; private set; }
         public Visualizer(JumpSlugAI ai) {
             _ai = ai;
@@ -1064,15 +394,18 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             _inputDirSprite = new DebugSprite(Vector2.zero, TriangleMesh.MakeLongMesh(1, false, true), _room);
             _inputDirSprite.sprite.color = Color.red;
             _inputDirSprite.sprite.isVisible = false;
-            _currentPosSprite = new DebugSprite(
-                Vector2.zero,
-                new FSprite("pixel") {
-                    scale = 10f,
-                    color = Color.blue,
-                    isVisible = false
-                },
-                _room
-            );
+            _currentPosSprites = new DebugSprite[2];
+            for (int i = 0; i < 2; i++) {
+                _currentPosSprites[i] = new DebugSprite(
+                    Vector2.zero,
+                    new FSprite("pixel") {
+                        scale = 10f,
+                        color = Color.blue,
+                        isVisible = false
+                    },
+                    _room
+                );
+            }
             _spriteIndex = 0;
             _predictedIntersectionSprites = new DebugSprite[MAX_SPRITES];
             for (int i = 0; i < MAX_SPRITES; i++) {
@@ -1086,21 +419,23 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     _room
                 );
             }
-            _currentConnectionLabel = new FLabel(Custom.GetFont(), "None") {
-                alignment = FLabelAlignment.Center,
-                color = Color.white,
-            };
-
-            _jumpBoostLabel = new FLabel(Custom.GetFont(), "None") {
-                alignment = FLabelAlignment.Center,
-                color = Color.white,
-            };
+            
+            _currentConnectionLabels = new FLabel[2];
+            for (int i = 0; i < 2; i++) {
+                _currentConnectionLabels[i] = new FLabel(Custom.GetFont(), "None") {
+                    alignment = FLabelAlignment.Center,
+                    color = Color.white,
+                };
+            }
 
             var container = _room!.game.cameras[0].ReturnFContainer("Foreground");
-            container.AddChild(_currentConnectionLabel);
-            container.AddChild(_jumpBoostLabel);
+            foreach (var label in _currentConnectionLabels) {
+                container.AddChild(label);
+            }
             _room.AddObject(_inputDirSprite);
-            _room.AddObject(_currentPosSprite);
+            foreach (var sprite in _currentPosSprites) {
+                _room.AddObject(sprite);
+            }
             foreach (var sprite in _predictedIntersectionSprites) {
                 _room.AddObject(sprite);
             }
@@ -1114,7 +449,9 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 _dynGraphVisualizer.NewGraph(_ai._pathfinder.DynamicGraph);
                 _dynGraphVisualizer.Clear();
                 _room.AddObject(_inputDirSprite);
-                _room.AddObject(_currentPosSprite);
+                foreach (var sprite in _currentPosSprites) {
+                    _room.AddObject(sprite);
+                }
                 foreach (var sprite in _predictedIntersectionSprites) {
                     _room.AddObject(sprite);
                 }
@@ -1125,27 +462,28 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             if (!Active) {
                 return;
             }
-            if (_ai._currentConnection is PathConnection connection) {
-                _currentConnectionLabel.text = connection.Type.ToString();
-            } else {
-                _currentConnectionLabel.text = "None";
-            }
-            if (_ai._performingAirMovement) {
-                _currentConnectionLabel.color = Color.green;
-            } else {
-                ResetPredictionSprites();
-                _currentConnectionLabel.color = Color.white;
+
+            var headPos = RoomHelper.TilePosition(_ai._slugcat.bodyChunks[0].pos);
+            var footPos = RoomHelper.TilePosition(_ai._slugcat.bodyChunks[1].pos);
+            
+            PathConnection? headConnection = null;
+            PathConnection? footConnection = null;
+            if (_ai._destination is not null) {
+                headConnection = _ai._pathfinder.FindPathTo(headPos, _ai._destination.Value);
+                footConnection = _ai._pathfinder.FindPathTo(footPos, _ai._destination.Value);
             }
 
-            _jumpBoostLabel.text = _ai._slugcat.jumpBoost.ToString();
+            _currentConnectionLabels[0].text = headConnection is null ? "None" : headConnection.Value.Type.ToString();
+            _currentConnectionLabels[1].text = footConnection is null ? "None" : footConnection.Value.Type.ToString();
 
             var labelPos = _ai._slugcat.bodyChunks[0].pos - _room.game.cameras[0].pos;
-            labelPos.y += 60;
-            _currentConnectionLabel.SetPosition(labelPos);
-            labelPos.y += 20;
-            _jumpBoostLabel.SetPosition(labelPos);
+            labelPos += new Vector2(30f, 10f);
+            _currentConnectionLabels[0].SetPosition(labelPos);
+            labelPos.y -= 20f;
+            _currentConnectionLabels[1].SetPosition(labelPos);
 
-            _currentPosSprite.pos = RoomHelper.MiddleOfTile(_ai._currentPos);
+            _currentPosSprites[0].pos = RoomHelper.MiddleOfTile(headPos);
+            _currentPosSprites[1].pos = RoomHelper.MiddleOfTile(footPos);
 
             if (InputHelper.JustPressed(KeyCode.Alpha1)) {
                 _dynGraphVisualizer.SetType(new ConnectionType.Jump(1));
@@ -1191,12 +529,22 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
 
         public void UpdatePath() {
-            if (!Active || _ai._currentConnection is null) {
+            if (!Active || _ai._destination is null) {
                 _pathVisualizer.ClearPath();
-            } else {
+                return;
+            }
+            
+            var pos = RoomHelper.TilePosition(_ai._slugcat.bodyChunks[0].pos);
+            PathConnection? connection = _ai._pathfinder.FindPathTo(pos, _ai._destination.Value);
+            if (connection is null) {
+                pos = RoomHelper.TilePosition(_ai._slugcat.bodyChunks[1].pos);
+                connection = _ai._pathfinder.FindPathTo(pos, _ai._destination.Value);
+            }
+
+            if (connection is not null) {
                 _pathVisualizer.DisplayPath(
-                    _ai._currentPos,
-                    _ai._currentConnection.Value
+                    pos,
+                    connection.Value
                 );
             }
         }
@@ -1221,28 +569,28 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
         public void Activate() {
             Active = true;
-            if (_ai._currentConnection is null) {
-                _pathVisualizer.ClearPath();
-            } else {
-                _pathVisualizer.DisplayPath(
-                    _ai._currentPos,
-                    _ai._currentConnection.Value
-                );
-            }
-            _jumpBoostLabel.isVisible = true;
-            _currentConnectionLabel.isVisible = true;
+            UpdatePath();
+            
             _inputDirSprite.sprite.isVisible = true;
-            _currentPosSprite.sprite.isVisible = true;
+            foreach (var label in _currentConnectionLabels) {
+                label.isVisible = true;
+            }
+            foreach (var sprite in _currentPosSprites) {
+                sprite.sprite.isVisible = true;
+            }
         }
 
         public void Deactivate() {
             Active = false;
             _pathVisualizer.ClearPath();
             _dynGraphVisualizer.Clear();
-            _jumpBoostLabel.isVisible = false;
-            _currentConnectionLabel.isVisible = false;
             _inputDirSprite.sprite.isVisible = false;
-            _currentPosSprite.sprite.isVisible = false;
+            foreach (var label in _currentConnectionLabels) {
+                label.isVisible = false;
+            }
+            foreach (var sprite in _currentPosSprites) {
+                sprite.sprite.isVisible = false;
+            }
             ResetPredictionSprites();
         }
     }
