@@ -176,6 +176,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         var sharedGraph = _room.GetCWT().SharedGraph!;
         var headNode = sharedGraph.GetNode(headPos);
         var footNode = sharedGraph.GetNode(footPos);
+        
 
         // correct positions on slopes
         if (headNode is null) {
@@ -216,7 +217,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                                 _currentAirMovement = null;
                                 return Input.DoNothing;
                             }
-                            
+
                             // grab onto pole if its closer to the destination than the next tile along the jump trajectory
                             if (!KeepFalling(headPos)) {
                                 _currentAirMovement = null;
@@ -288,71 +289,31 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
             if (footConnection is null) {
                 return Input.DoNothing;
             }
-            switch (footConnection.Value.Type) {
-                case ConnectionType.Walk walk:
-                    if (AnySolidAtHeadLevel(footPos, footConnection.Value, 4)) {
-                        return new Input(new IVec2(walk.Direction, -1), false);
-                    }
-                    // get down before crawling down into corridor or dropping through platform
-                    if (footConnection.Value.PeekType(1)
-                        is ConnectionType.Crawl({ x: 0, y: -1 })
-                        or ConnectionType.Drop
-                    ) {
-                        return new Input(Consts.IVec2.Down, false);
-                    }
-
-                    return new Input(new IVec2(walk.Direction, 0), false);
-                case ConnectionType.Climb climb: // climbing up onto beam tip, standing on horizontal pole
-                    // drop down to avoid getting stuck on wall or when entering corridor
-                    if (climb.Direction.x != 0 && AnySolidAtHeadLevel(footPos, footConnection.Value, 4)) {
-                        return new Input(climb.Direction with { y = -1 }, false);
-                    }
-                    return new Input(climb.Direction, false);
-                case ConnectionType.Crawl crawl: // should only be triggered when crawling out of or into corridors
-                    return new Input(crawl.Direction, false);
-                case ConnectionType.Jump jump:
-                    if (orientation != Consts.IVec2.Up) {
-                        _waitOneTick = true;
-                        return new Input(Consts.IVec2.Up, false);
-                    }
-
-                    // contact with floor
-                    if (_slugcat.standing) {
-                        _currentAirMovement = new AirMovementInfo(footPos, footConnection.Value, null);
-                        return new Input(new IVec2(jump.Direction, 0), true);
-                    }
-
-                    // wait for contact
-                    return Input.DoNothing;
-                case ConnectionType.Drop:
-                    if (footNode!.Beam
-                        is GraphNode.BeamType.Horizontal
-                        or GraphNode.BeamType.Above
-                    ) {
-                        if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) < 0.5f) {
-                            return new Input(Consts.IVec2.Down, false);
-                        }
-                        return Input.DoNothing;
-                    }
-
-                    if (footNode.Type is NodeType.Floor) {
-                        _currentAirMovement = new AirMovementInfo(footPos, footConnection.Value, null);
-                        return new Input(Consts.IVec2.Down, false);
-                    }
-
-                    if (footNode.Type is NodeType.Corridor) {
-                        var input = new Input(Consts.IVec2.Down, false);
-                        _currentAirMovement = new AirMovementInfo(footPos, footConnection.Value, input);
-                        return input;
-                    }
-
-                    return Input.DoNothing;
-                default: // not implementing other stuff for now
-                    return Input.DoNothing;
-            }
+            return FollowFootConnection(orientation, footPos, footNode, footConnection.Value);
         }
 
-        switch (headConnection.Value.Type) {
+        return FollowHeadConnection(
+            orientation,
+            headPos,
+            footPos,
+            headNode,
+            footNode,
+            headConnection.Value,
+            footConnection
+        );
+    }
+
+    private Input FollowHeadConnection(
+        IVec2 orientation,
+        IVec2 headPos,
+        IVec2 footPos,
+        GraphNode? headNode,
+        GraphNode? footNode,
+        PathConnection headConnection,
+        PathConnection? footConnection
+    ) {
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        switch (headConnection.Type) {
             case ConnectionType.Walk walk: // crawling up out of corridor or from pole, crawling horizontally
                 // climbing up onto platform
                 if (footConnection?.Type is ConnectionType.Climb(IVec2 { x: 0, y: 1 })
@@ -363,7 +324,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
                 // don't get up if you should be staying down
                 if (orientation is IVec2 { x: not 0, y: 0 }
-                    && !AnySolidAtHeadLevel(headPos, headConnection.Value, 4)
+                    && !AnySolidAtHeadLevel(headPos, headConnection, 4)
                 ) {
                     return new Input(new IVec2(walk.Direction, 1), false);
                 }
@@ -377,9 +338,9 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                         if (floorNode?.Type is NodeType.Corridor) {
                             _waitOneTick = true;
                             return new Input(Consts.IVec2.Down, true);
-                        } 
+                        }
                     }
-                    
+
                     if (footConnection?.Type is ConnectionType.Walk nextWalk) {
                         if (_slugcat.bodyMode == Player.BodyModeIndex.ClimbingOnBeam) {
                             // let go of pole
@@ -448,7 +409,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     }
 
                     // get up when hanging from beam
-                    if (!AnySolidAtHeadLevel(headPos, headConnection.Value, 4)) {
+                    if (!AnySolidAtHeadLevel(headPos, headConnection, 4)) {
                         return new Input(climb.Direction with { y = 1 }, false);
                     }
                 }
@@ -470,6 +431,33 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 bool backwards = orientation == crawl.Direction.Inverse();
                 bool doJump = backwards && orientation.y != -1;
                 return new Input(crawl.Direction, doJump);
+            case ConnectionType.SlideOnWall wallSlide:
+                var nextType = headConnection.PeekType(1);
+                if (nextType is ConnectionType.Crawl slideCrawl) {
+                    // switch to crawling
+                    if (slideCrawl.Direction.y == -1) {
+                        return new Input(Consts.IVec2.Down, false);
+                    }
+
+                    // diagonal slide into sideways corridor
+                    return new Input(new IVec2(wallSlide.Direction, 0), false);
+                }
+
+                if (footConnection?.Type is ConnectionType.PathOnly) {
+                    var nextFootPos = footConnection.Value.Next.GridPos;
+                    var nextFootNode = sharedGraph.GetNode(nextFootPos);
+                    var nextFootConnection = footConnection.Value.Next.Connection;
+                    if (nextFootConnection is null) {
+                        return Input.DoNothing;
+                    }
+                    return FollowFootConnection(orientation, nextFootPos, nextFootNode, nextFootConnection.Value);
+                }
+
+                if (_slugcat.animation == Player.AnimationIndex.LedgeGrab) {
+                    return new Input(Consts.IVec2.Down, false);
+                }
+
+                return new Input(new IVec2(wallSlide.Direction, 0), false);
             case ConnectionType.Jump jump:
                 if (orientation != Consts.IVec2.Up) {
                     _waitOneTick = true;
@@ -478,7 +466,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
                 // contact with floor or wall
                 if (_slugcat.standing || _slugcat.bodyChunks[0].contactPoint != Consts.IVec2.Zero) {
-                    _currentAirMovement = new AirMovementInfo(headPos, headConnection.Value, null);
+                    _currentAirMovement = new AirMovementInfo(headPos, headConnection, null);
                     return new Input(new IVec2(jump.Direction, 0), true);
                 }
 
@@ -493,7 +481,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 ) {
                     if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) < 0.5f) {
                         _waitOneTick = true;
-                        _currentAirMovement = new AirMovementInfo(headPos, headConnection.Value, null);
+                        _currentAirMovement = new AirMovementInfo(headPos, headConnection, null);
                         return new Input(Consts.IVec2.Down, false);
                     }
                     return Input.DoNothing;
@@ -506,12 +494,12 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                     || headNode.Beam is GraphNode.BeamType.Cross
                     && _slugcat.animation == Player.AnimationIndex.ClimbOnBeam
                 ) {
-                    _currentAirMovement = new AirMovementInfo(headPos, headConnection.Value, null);
+                    _currentAirMovement = new AirMovementInfo(headPos, headConnection, null);
                     return new Input(Consts.IVec2.Down, true);
                 }
 
                 if (headNode.Type is NodeType.Wall) {
-                    _currentAirMovement = new AirMovementInfo(headPos, headConnection.Value, null);
+                    _currentAirMovement = new AirMovementInfo(headPos, headConnection, null);
                     // prevent getting stuck on ledge
                     if (_slugcat.animation == Player.AnimationIndex.LedgeGrab) {
                         return new Input(Consts.IVec2.Down, false);
@@ -521,7 +509,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
 
                 if (headNode.Type is NodeType.Floor) {
                     var input = new Input(Consts.IVec2.Down, false);
-                    _currentAirMovement = new AirMovementInfo(headPos, headConnection.Value, input);
+                    _currentAirMovement = new AirMovementInfo(headPos, headConnection, input);
                     return input;
                 }
 
@@ -530,13 +518,97 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                 }
 
                 return Input.DoNothing;
-
+            case ConnectionType.PathOnly:
+                if (footConnection is null) {
+                    return Input.DoNothing;
+                }
+                return FollowFootConnection(orientation, footPos, footNode, footConnection.Value);
             default: // implement later
                 return Input.DoNothing;
         }
     }
 
-    struct AirMovementInfo {
+    private Input FollowFootConnection(IVec2 orientation, IVec2 footPos, GraphNode? footNode, PathConnection footConnection) {
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        switch (footConnection.Type) {
+            case ConnectionType.Walk walk:
+                if (AnySolidAtHeadLevel(footPos, footConnection, 4)) {
+                    return new Input(new IVec2(walk.Direction, -1), false);
+                }
+                // get down before crawling down into corridor or dropping through platform
+                if (footConnection.PeekType(1)
+                    is ConnectionType.Crawl({ x: 0, y: -1 })
+                    or ConnectionType.Drop
+                ) {
+                    return new Input(Consts.IVec2.Down, false);
+                }
+
+                return new Input(new IVec2(walk.Direction, 0), false);
+            case ConnectionType.Climb climb: // climbing up onto beam tip, standing on horizontal pole
+                                             // drop down to avoid getting stuck on wall or when entering corridor
+                if (climb.Direction.x != 0 && AnySolidAtHeadLevel(footPos, footConnection, 4)) {
+                    return new Input(climb.Direction with { y = -1 }, false);
+                }
+                return new Input(climb.Direction, false);
+            case ConnectionType.Crawl crawl: // should only be triggered when crawling out of or into corridors
+                return new Input(crawl.Direction, false);
+            case ConnectionType.SlideOnWall wallSlide:
+                // sliding upside down into a side corridor
+                if (footConnection.PeekType(1) is ConnectionType.Crawl(IVec2 { x: not 0, y: 0 })) {
+                    return new Input(new IVec2(wallSlide.Direction, 0), false);
+                }
+                return Input.DoNothing;
+            case ConnectionType.Jump jump:
+                if (orientation != Consts.IVec2.Up) {
+                    _waitOneTick = true;
+                    return new Input(Consts.IVec2.Up, false);
+                }
+
+                // contact with floor
+                if (_slugcat.standing) {
+                    _currentAirMovement = new AirMovementInfo(footPos, footConnection, null);
+                    return new Input(new IVec2(jump.Direction, 0), true);
+                }
+
+                // wait for contact
+                return Input.DoNothing;
+            case ConnectionType.Drop:
+                if (footNode!.Beam
+                    is GraphNode.BeamType.Horizontal
+                    or GraphNode.BeamType.Above
+                ) {
+                    if (Mathf.Abs(_slugcat.mainBodyChunk.vel.x) < 0.5f) {
+                        return new Input(Consts.IVec2.Down, false);
+                    }
+                    return Input.DoNothing;
+                }
+
+                if (footNode.Type is NodeType.Floor) {
+                    _currentAirMovement = new AirMovementInfo(footPos, footConnection, null);
+                    return new Input(Consts.IVec2.Down, false);
+                }
+
+                if (footNode.Type is NodeType.Corridor) {
+                    var input = new Input(Consts.IVec2.Down, false);
+                    _currentAirMovement = new AirMovementInfo(footPos, footConnection, input);
+                    return input;
+                }
+
+                return Input.DoNothing;
+            case ConnectionType.PathOnly:
+                var nextConnection = footConnection.Next.Connection;
+                if (nextConnection is null) {
+                    return Input.DoNothing;
+                }
+                var nextPos = footConnection.Next.GridPos;
+                var nextNode = sharedGraph.GetNode(nextPos);
+                return FollowFootConnection(orientation, nextPos, nextNode, nextConnection.Value);
+            default: // not implementing other stuff for now
+                return Input.DoNothing;
+        }
+    }
+
+    private struct AirMovementInfo {
         public IVec2 StartPos;
         public PathConnection Connection;
         public Input? InputUntilNodeChanged;

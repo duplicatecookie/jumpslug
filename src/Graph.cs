@@ -106,6 +106,9 @@ public record ConnectionType {
     public record Shortcut() : ConnectionType();
     public record Drop() : ConnectionType();
     public record SlideOnWall(int Direction) : ConnectionType();
+    // used for connection that require no movement logic of their own but are necessary for generating continuous paths
+    // movement code should ignore and skip these
+    public record PathOnly() : ConnectionType(); 
 
     private ConnectionType() { }
 
@@ -145,6 +148,7 @@ public record ConnectionType {
             JumpUpToLedge(int dir) => $"JumpUpToLedge({dir})",
             PounceOntoLedge(int dir) => $"PounceOntoLedge({dir})",
             WalkOffEdgeOntoLedge(int dir) => $"WalkOffEdgeOntoLedge({dir})",
+            PathOnly => "PathOnly",
             _ => "Unknown",
         };
     }
@@ -341,8 +345,8 @@ public class SharedGraph {
                     if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor or NodeType.Slope or NodeType.Floor) {
                         ConnectNodes(currentNode, Nodes[x + 1, y + 1]!, new ConnectionType.Walk(1));
                     }
-                    if (aboveNode?.Type is NodeType.Wall(int wallDir)) {
-                        ConnectNodes(aboveNode, currentNode, new ConnectionType.SlideOnWall(wallDir));
+                    if (aboveNode?.Type is NodeType.Wall) {
+                        ConnectNodes(aboveNode, currentNode, new ConnectionType.PathOnly());
                     }
                 }
 
@@ -365,8 +369,8 @@ public class SharedGraph {
                         ConnectNodes(currentNode, upRightNode, new ConnectionType.Walk(1));
                         ConnectNodes(upRightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Left));
                     }
-                    if (aboveNode?.Type is NodeType.Wall(int wallDir)) {
-                        ConnectNodes(aboveNode, currentNode, new ConnectionType.SlideOnWall(wallDir));
+                    if (aboveNode?.Type is NodeType.Wall) {
+                        ConnectNodes(aboveNode, currentNode, new ConnectionType.PathOnly());
                     }
                 }
 
@@ -974,13 +978,18 @@ public class DynamicGraph {
             }
             if (previousIsWall) {
                 if (currentNode.Type is NodeType.Wall) {
-                    if (y - i > 3) { // so slides are still chosed for short distances
+                    if (y - i > 3) { // so slides are still chosen for short distances
                         ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
                     } else {
                         continue;
                     }
-                } else {
+                } else if (currentNode.Type is NodeType.Air) {
                     previousIsWall = false;
+                } else {
+                    if (y - i > 3) {
+                        ConnectNodes(startNode, currentNode, new ConnectionType.Drop(), y - i);
+                    }
+                    break;
                 }
             } else if (currentNode.Type is NodeType.Air) {
                 if (sharedGraph.Nodes[x, i + 1]?.HasVerticalBeam == true) {
