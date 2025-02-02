@@ -149,8 +149,101 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
         }
     }
 
-    bool KeepFalling(IVec2 headPos) {
-        return false; // TODO: implement
+    bool KeepFalling(IVec2 headPos, Vector2 v0) {
+        int x = headPos.x;
+        int y = headPos.y;
+        var sharedGraph = _room.GetCWT().SharedGraph!;
+        if (x < 0 || y < 0 || x >= _room.Width || y >= _room.Height) {
+            return false;
+        }
+
+        // test drop
+        if (v0.x == 0f) {
+            // check above when jumping straight up
+            if (v0.y > 0f) {
+                int maxHeight = y + (int)(0.5f * v0.y * v0.y / _room.gravity / 20) + 1;
+                for (int i = y; i < maxHeight && i < _room.Height; i++) {
+                    if (_room.GetTile(x, i).Terrain is not TileType.Air
+                        || sharedGraph.GetNode(x, i)?.Type is NodeType.Corridor
+                    ) {
+                        break;
+                    }
+                
+                    if (_pathfinder.ClosedNodes[x, i]
+                        && _pathfinder.PathNodePool[x, i]?.PathCost
+                        < _pathfinder.PathNodePool[headPos]?.PathCost
+                    ) { 
+                        return true;
+                    }
+                }
+            }
+            // check below, including when checking above fails
+            for (int i = y - 1; i > 0; i--) {
+                if (_room.GetTile(x, i).Terrain is not TileType.Air
+                    || sharedGraph.GetNode(x, i)?.Type is NodeType.Corridor
+                ) {
+                    break;
+                }
+                
+                if (_pathfinder.ClosedNodes[x, i]
+                    && _pathfinder.PathNodePool[x, i]?.PathCost
+                    < _pathfinder.PathNodePool[headPos]?.PathCost
+                ) { 
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        int direction = v0.x switch {
+            > 0 => 1,
+            < 0 => -1,
+            0 or float.NaN => throw new ArgumentOutOfRangeException(),
+        };
+        int xOffset = (direction + 1) / 2;
+        var pathOffset = RoomHelper.MiddleOfTile(headPos);
+
+        while (true) {
+            float t = (20 * (x + xOffset) - pathOffset.x) / v0.x;
+            float result = DynamicGraph.Parabola(pathOffset.y, v0, _room.gravity, t) / 20;
+            if (result > y + 1) {
+                y++;
+            } else if (result < y) {
+                y--;
+            } else {
+                x += direction;
+                var sideNode = sharedGraph.GetNode(x, y);
+                if (sideNode is not null
+                    && (sideNode.Type is NodeType.Floor
+                        && _room.GetTile(x, y - 1).Terrain == TileType.Solid
+                    || sideNode.Type is NodeType.Slope)
+                ) {
+                    if (_pathfinder.ClosedNodes[x, y]
+                        && _pathfinder.PathNodePool[x, y]?.PathCost
+                        < _pathfinder.PathNodePool[headPos]?.PathCost
+                    ) { 
+                        return true;
+                    }
+
+                    return false;
+                }
+            }
+
+            if (x < 0 || y < 0 || x >= sharedGraph.Width || y >= sharedGraph.Height
+                || _room.Tiles[x, y].Terrain == TileType.Solid
+                || _room.Tiles[x, y].Terrain == TileType.Slope) {
+                break;
+            }
+
+            if (_pathfinder.ClosedNodes[x, y]
+                && _pathfinder.PathNodePool[x, y]?.PathCost
+                < _pathfinder.PathNodePool[headPos]?.PathCost
+            ) { 
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private Input GenerateInputs() {
@@ -556,7 +649,7 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                             }
 
                             // grab onto pole if its closer to the destination than the next tile along the jump trajectory
-                            if (!KeepFalling(headPos)) {
+                            if (!KeepFalling(headPos, _slugcat.mainBodyChunk.vel)) {
                                 _currentAirMovement = null;
                                 return new Input(Consts.IVec2.Up, false);
                             }
@@ -599,7 +692,9 @@ class JumpSlugAI : ArtificialIntelligence, IUseARelationshipTracker {
                             return Input.DoNothing;
                         }
                     } else {
-                        if (headNode.Beam != GraphNode.BeamType.None && !KeepFalling(headPos)) {
+                        if (headNode.Beam != GraphNode.BeamType.None
+                            && !KeepFalling(headPos, _slugcat.mainBodyChunk.vel)
+                        ) {
                             _currentAirMovement = null;
                             return new Input(Consts.IVec2.Up, false);
                         }
