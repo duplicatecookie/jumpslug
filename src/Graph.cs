@@ -242,7 +242,12 @@ public class SharedGraph {
                           && room.Tiles[x + 1, y - 1].Terrain == TileType.Solid
                     ) {
                         Nodes[x, y] = new GraphNode(new NodeType.Floor(), x, y);
-                    } else if (room.Tiles[x, y - 1].Terrain == TileType.Floor) {
+                    } else if (
+                        room.Tiles[x, y - 1].Terrain == TileType.Floor
+                        || room.Tiles[x, y - 1].Terrain == TileType.Air
+                        && room.Tiles[x - 1, y - 1].Terrain == TileType.Solid
+                        && room.Tiles[x + 1, y - 1].Terrain == TileType.Solid
+                    ) {
                         Nodes[x, y] = new GraphNode(new NodeType.Floor(), x, y);
                     } else if ((room.Tiles[x - 1, y].Terrain == TileType.Air
                         || room.Tiles[x - 1, y].Terrain == TileType.Floor)
