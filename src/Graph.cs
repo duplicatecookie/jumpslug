@@ -340,14 +340,21 @@ public class SharedGraph {
                         ConnectNodes(currentNode, rightNode, new ConnectionType.Crawl(Consts.IVec2.Right));
                         ConnectNodes(rightNode, currentNode, new ConnectionType.Crawl(Consts.IVec2.Left));
                     }
-                    if (GetNode(x + 1, y - 1)?.Type is NodeType.Slope) {
-                        var rightDownNode = Nodes[x + 1, y - 1]!;
+                    var rightDownNode = GetNode(x + 1, y - 1);
+                    var onPlatform = GetNode(x, y - 1)?.HasPlatform ?? false;
+                    if (rightDownNode?.Type is NodeType.Slope) {
                         ConnectNodes(currentNode, rightDownNode, new ConnectionType.Walk(1));
                         ConnectNodes(rightDownNode, currentNode, new ConnectionType.Walk(-1));
-                    } else if (GetNode(x + 1, y - 1)?.Type is NodeType.Floor) {
-                        ConnectNodes(Nodes[x + 1, y - 1]!, currentNode, new ConnectionType.Walk(-1));
+                    } else if (!onPlatform && rightDownNode?.Type is NodeType.Floor) {
+                        ConnectNodes(rightDownNode, currentNode, new ConnectionType.Walk(-1));
                     }
-                    if (GetNode(x + 1, y + 1)?.Type is NodeType.Corridor or NodeType.Slope or NodeType.Floor) {
+                    var aboveRightNode = GetNode(x + 1, y + 1);
+                    if (aboveRightNode is not null
+                        && (aboveRightNode.Type is NodeType.Corridor or NodeType.Slope
+                            || !onPlatform
+                            && aboveRightNode.Type is NodeType.Floor
+                            && (rightNode is null || !rightNode.HasPlatform))
+                    ) {
                         ConnectNodes(currentNode, Nodes[x + 1, y + 1]!, new ConnectionType.Walk(1));
                     }
                     if (aboveNode?.Type is NodeType.Wall) {
